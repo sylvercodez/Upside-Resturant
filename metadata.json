@@ -1,0 +1,6 @@
+{
+  "name": "Upside Restaurant & Café",
+  "description": "Premium luxury restaurant and café eCommerce platform with instant ordering, reservation booking, and fine dining hospitality.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
