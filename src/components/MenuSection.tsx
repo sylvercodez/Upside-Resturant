@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Search, Heart, ShoppingBag, Check, Plus, Minus, Settings2 } from "lucide-react";
+import { Search, Heart, ShoppingBag, Check, Plus, Minus, Settings2, ChevronLeft, ChevronRight } from "lucide-react";
 import { CATEGORIES, MENU_ITEMS, MenuItem } from "../data/menu";
 
 interface MenuSectionProps {
@@ -103,14 +103,14 @@ export default function MenuSection({ onAddToCart, favorites, onToggleFavorite, 
     if (item.category === "grills" || item.id.includes("steak") || item.id.includes("salmon")) {
       return (
         <div className="space-y-3">
-          <label className="text-xs uppercase font-mono text-neutral-400 tracking-wider">Steak Temperature / Preference</label>
+          <label className="text-xs uppercase font-mono text-neutral-500 tracking-wider">Steak Temperature / Preference</label>
           <div className="grid grid-cols-2 gap-2">
             {["Medium Rare", "Medium", "Medium Well Done", "Fully Cooked / Well Done"].map((temp) => (
               <button
                 key={temp}
                 onClick={() => setChosenVariant(temp)}
                 className={`px-3 py-2 border text-[11px] font-mono tracking-wider ${
-                  chosenVariant === temp ? "border-amber-500 bg-amber-500/10 text-amber-400" : "border-neutral-800 text-neutral-300"
+                  chosenVariant === temp ? "border-amber-600 bg-amber-500/10 text-amber-700 font-bold" : "border-neutral-200 text-neutral-700 hover:bg-neutral-50"
                 }`}
               >
                 {temp}
@@ -118,14 +118,14 @@ export default function MenuSection({ onAddToCart, favorites, onToggleFavorite, 
             ))}
           </div>
 
-          <label className="text-xs uppercase font-mono text-neutral-400 tracking-wider block mt-4">Choice of Included Side</label>
+          <label className="text-xs uppercase font-mono text-neutral-500 tracking-wider block mt-4">Choice of Included Side</label>
           <div className="grid grid-cols-2 gap-2">
             {["Mashed Potato", "Sweet Yam Fries", "Roasted Potato", "Native Steamed Rice"].map((side) => (
               <button
                 key={side}
                 onClick={() => setCustomItemNotes(`Included Side: ${side}`)}
                 className={`px-3 py-2 border text-[11px] font-mono tracking-wider ${
-                  customItemNotes.includes(side) ? "border-amber-500 bg-amber-500/10 text-amber-400" : "border-neutral-800 text-neutral-300"
+                  customItemNotes.includes(side) ? "border-amber-600 bg-amber-500/10 text-amber-700 font-bold" : "border-neutral-200 text-neutral-700 hover:bg-neutral-50"
                 }`}
               >
                 {side}
@@ -139,14 +139,14 @@ export default function MenuSection({ onAddToCart, favorites, onToggleFavorite, 
     if (item.category === "breakfast" || item.id.includes("breakfast")) {
       return (
         <div className="space-y-3">
-          <label className="text-xs uppercase font-mono text-neutral-400 tracking-wider">How would you like your eggs?</label>
+          <label className="text-xs uppercase font-mono text-neutral-500 tracking-wider">How would you like your eggs?</label>
           <div className="grid grid-cols-2 gap-2">
             {["Scrambled", "Sunny Side Up", "Well Fried / Over Easy", "Soft Eggs"].map((eggStyle) => (
               <button
                 key={eggStyle}
                 onClick={() => setChosenVariant(eggStyle)}
                 className={`px-3 py-2 border text-[11px] font-mono tracking-wider ${
-                  chosenVariant === eggStyle ? "border-amber-500 bg-amber-500/10 text-amber-400" : "border-neutral-800 text-neutral-300"
+                  chosenVariant === eggStyle ? "border-amber-600 bg-amber-500/10 text-amber-700 font-bold" : "border-neutral-200 text-neutral-700 hover:bg-neutral-50"
                 }`}
               >
                 {eggStyle}
@@ -160,7 +160,7 @@ export default function MenuSection({ onAddToCart, favorites, onToggleFavorite, 
     if (item.category === "coffee" || item.id.includes("latte") || item.id.includes("cappuccino")) {
       return (
         <div className="space-y-3">
-          <label className="text-xs uppercase font-mono text-neutral-400 tracking-wider">Select Milk Base</label>
+          <label className="text-xs uppercase font-mono text-neutral-500 tracking-wider">Select Milk Base</label>
           <div className="grid grid-cols-2 gap-2">
             {[
               { name: "Whole Milk", price: 0 },
@@ -172,11 +172,11 @@ export default function MenuSection({ onAddToCart, favorites, onToggleFavorite, 
                 key={milkObj.name}
                 onClick={() => setChosenVariant(milkObj.name)}
                 className={`px-3 py-2 border text-[11px] font-mono tracking-wider text-left flex justify-between items-center ${
-                  chosenVariant === milkObj.name ? "border-amber-500 bg-amber-500/10 text-amber-400" : "border-neutral-800 text-neutral-300"
+                  chosenVariant === milkObj.name ? "border-amber-600 bg-amber-500/10 text-amber-700 font-bold" : "border-neutral-200 text-neutral-700 hover:bg-neutral-50"
                 }`}
               >
                 <span>{milkObj.name}</span>
-                {milkObj.price > 0 && <span className="text-neutral-400">+₦{milkObj.price.toLocaleString()}</span>}
+                {milkObj.price > 0 && <span className="text-neutral-500">+₦{milkObj.price.toLocaleString()}</span>}
               </button>
             ))}
           </div>
@@ -186,12 +186,12 @@ export default function MenuSection({ onAddToCart, favorites, onToggleFavorite, 
 
     return (
       <div className="space-y-3">
-        <label className="text-xs uppercase font-mono text-neutral-400 tracking-wider">Special Culinary Instructions</label>
+        <label className="text-xs uppercase font-mono text-neutral-500 tracking-wider">Special Culinary Instructions</label>
         <textarea
           value={customItemNotes}
           onChange={(e) => setCustomItemNotes(e.target.value)}
           placeholder="E.g., No onions, specify spicy levels, or customize toppings..."
-          className="w-full bg-neutral-900 border border-neutral-800 p-3 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-amber-500 h-24 font-mono"
+          className="w-full bg-neutral-50 border border-neutral-200 p-3 text-xs text-black placeholder-neutral-400 focus:outline-none focus:border-amber-500 h-24 font-mono"
         />
       </div>
     );
@@ -293,17 +293,18 @@ export default function MenuSection({ onAddToCart, favorites, onToggleFavorite, 
         )}
 
         {/* PREMIUM HIGH-CONTRAST GRID SYSTEM */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 py-6" id="menu-items-grid">
           {filteredItems.map((item) => {
             const isLiked = favorites.includes(item.id);
             return (
               <div
                 key={item.id}
                 onClick={() => handleOpenItemDetails(item)}
-                className="group border border-neutral-900/80 bg-neutral-950 hover:bg-neutral-900/20 transition-all duration-300 p-4 relative flex flex-col justify-between cursor-pointer"
+                className="group border border-neutral-900 bg-black hover:bg-neutral-900/40 hover:border-amber-500/30 transition-all duration-305 p-5 relative flex flex-col justify-between cursor-pointer h-full shadow-lg"
+                id={`grid-item-${item.id}`}
               >
                 {/* Image Section */}
-                <div className="relative aspect-[4/3] w-full overflow-hidden bg-neutral-900 mb-4">
+                <div className="relative aspect-[4/3] w-full overflow-hidden bg-black mb-4">
                   {/* Absolute Badge tags */}
                   <div className="absolute top-2.5 left-2.5 z-10 flex flex-col gap-1.5">
                     {item.tags?.map((tg, i) => (
@@ -323,6 +324,7 @@ export default function MenuSection({ onAddToCart, favorites, onToggleFavorite, 
                       onToggleFavorite(item.id);
                     }}
                     className="absolute top-2.5 right-2.5 z-10 p-2 bg-black/80 hover:bg-neutral-900 text-neutral-400 hover:text-rose-500 rounded-full transition-colors cursor-pointer"
+                    id={`btn-favorite-${item.id}`}
                   >
                     <Heart className={`w-4 h-4 ${isLiked ? "fill-rose-500 text-rose-500" : ""}`} />
                   </button>
@@ -330,14 +332,15 @@ export default function MenuSection({ onAddToCart, favorites, onToggleFavorite, 
                   <img
                     src={item.image}
                     alt={item.name}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-all duration-700 opacity-90 group-hover:opacity-100"
+                    className="w-full h-full object-cover group-hover:scale-105 transition-all duration-700 opacity-90 group-hover:opacity-100 grayscale filter brightness-[1.65] contrast-[1.25]"
                     loading="lazy"
+                    referrerPolicy="no-referrer"
                   />
                 </div>
 
                 {/* Content Section */}
                 <div className="space-y-2 flex-grow">
-                  <div className="flex justify-between items-start gap-2">
+                  <div className="flex justify-between items-start gap-2 text-left">
                     <h4 className="text-base text-white font-sans tracking-tight font-light group-hover:text-amber-400 transition-colors">
                       {item.name}
                     </h4>
@@ -346,31 +349,19 @@ export default function MenuSection({ onAddToCart, favorites, onToggleFavorite, 
                     </span>
                   </div>
 
-                  <p className="text-xs text-neutral-400 leading-relaxed tracking-wide font-light">
+                  <p className="text-xs text-neutral-400 leading-relaxed tracking-wide font-light text-left">
                     {item.description}
                   </p>
                 </div>
 
-                {/* Footer Buttons Line */}
-                <div className="flex items-center justify-between gap-3 pt-4 mt-4 border-t border-neutral-900/80">
-                  <span className="text-[10px] text-neutral-500 font-mono tracking-widest uppercase">
-                    Upside Lagos
-                  </span>
-
-                  <div className="flex items-center gap-1.5">
-                    {/* Variant/custom option preview label */}
-                    <span className="text-[9px] text-amber-500/80 font-mono hidden sm:inline mr-1">
-                      Customize
-                    </span>
-                    <button
-                      onClick={(e) => handleQuickAdd(item, e)}
-                      title="Quick Add to Cart (Default Options)"
-                      className="p-2 bg-amber-950/40 border border-amber-500/25 text-amber-400 hover:bg-amber-500 hover:text-black transition-all rounded-none cursor-pointer"
-                    >
-                      <Plus className="w-4.5 h-4.5" />
-                    </button>
-                  </div>
-                </div>
+                {/* Centered Wide Quick Add to Cart Button */}
+                <button
+                  onClick={(e) => handleQuickAdd(item, e)}
+                  className="mt-6 w-full py-3.5 bg-amber-950/20 hover:bg-amber-500 border border-amber-500/20 hover:border-transparent text-amber-400 hover:text-black font-semibold text-xs font-mono tracking-widest uppercase transition-all duration-300 cursor-pointer"
+                  id={`quick-add-${item.id}`}
+                >
+                  Quick Add to Cart
+                </button>
               </div>
             );
           })}
@@ -391,14 +382,14 @@ export default function MenuSection({ onAddToCart, favorites, onToggleFavorite, 
 
       {/* CULINARY VARIATION & EXTRAS DIALOG */}
       {selectedItemForModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="bg-neutral-950 border border-amber-900/40 w-full max-w-lg overflow-y-auto max-h-[90vh]">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+          <div className="bg-white border border-neutral-200 w-full max-w-lg overflow-y-auto max-h-[90vh] text-black">
             {/* Header banner */}
-            <div className="relative h-48 bg-neutral-900">
+            <div className="relative h-48 bg-black">
               <img
                 src={selectedItemForModal.image}
                 alt={selectedItemForModal.name}
-                className="w-full h-full object-cover"
+                className="w-full h-full object-cover grayscale filter brightness-[1.65] contrast-[1.25]"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black to-transparent" />
               <button
@@ -416,10 +407,10 @@ export default function MenuSection({ onAddToCart, favorites, onToggleFavorite, 
             </div>
 
             {/* Form details */}
-            <div className="p-6 space-y-6">
-              <div className="flex justify-between items-center bg-amber-950/20 p-4 border border-amber-900/20">
-                <span className="text-xs uppercase font-mono text-neutral-300">Base Premium Price</span>
-                <span className="text-lg font-mono font-semibold text-amber-400">₦{selectedItemForModal.price.toLocaleString()}</span>
+            <div className="p-6 space-y-6 bg-white text-left">
+              <div className="flex justify-between items-center bg-amber-50 p-4 border border-amber-200/50">
+                <span className="text-xs uppercase font-mono text-neutral-700 font-bold">Base Premium Price</span>
+                <span className="text-lg font-mono font-bold text-amber-600">₦{selectedItemForModal.price.toLocaleString()}</span>
               </div>
 
               {/* Dynamic Option Renderer */}
@@ -427,7 +418,7 @@ export default function MenuSection({ onAddToCart, favorites, onToggleFavorite, 
 
               {/* Extras checkbox layout if available */}
               <div className="space-y-3">
-                <label className="text-xs uppercase font-mono text-neutral-400 tracking-wider block">Add Decadent Extras</label>
+                <label className="text-xs uppercase font-mono text-neutral-500 tracking-wider block font-bold">Add Decadent Extras</label>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                   {[
                     { name: "Extra Syrups / Honey", price: 1500 },
@@ -442,16 +433,16 @@ export default function MenuSection({ onAddToCart, favorites, onToggleFavorite, 
                         key={x.name}
                         onClick={() => handleToggleExtra(x.name)}
                         className={`flex items-center justify-between p-3 border text-xs font-mono select-none ${
-                          hasSelected ? "border-amber-500 bg-amber-500/5 text-amber-400" : "border-neutral-900 text-neutral-400"
+                          hasSelected ? "border-amber-600 bg-amber-500/5 text-amber-700 animate-pulse font-bold" : "border-neutral-200 text-neutral-600 hover:bg-neutral-50"
                         }`}
                       >
                         <div className="flex items-center gap-2">
-                          <div className={`w-3.5 h-3.5 border flex items-center justify-center ${hasSelected ? "border-amber-500 bg-amber-500 text-black" : "border-neutral-700"}`}>
-                            {hasSelected && <Check className="w-2.5 h-2.5" />}
+                          <div className={`w-3.5 h-3.5 border flex items-center justify-center ${hasSelected ? "border-amber-500 bg-amber-500 text-black" : "border-neutral-300"}`}>
+                            {hasSelected && <Check className="w-2.5 h-2.5 text-black" />}
                           </div>
                           <span>{x.name}</span>
                         </div>
-                        <span className="text-neutral-400">+₦{x.price.toLocaleString()}</span>
+                        <span className="text-neutral-500">+₦{x.price.toLocaleString()}</span>
                       </button>
                     );
                   })}
@@ -459,16 +450,16 @@ export default function MenuSection({ onAddToCart, favorites, onToggleFavorite, 
               </div>
 
               {/* Action Trigger */}
-              <div className="pt-2 border-t border-neutral-950 flex flex-col sm:flex-row gap-3">
+              <div className="pt-2 border-t border-neutral-200 flex flex-col sm:flex-row gap-3">
                 <button
                   onClick={() => setSelectedItemForModal(null)}
-                  className="w-full sm:w-1/3 py-3 border border-neutral-800 text-neutral-400 text-xs font-mono tracking-widest uppercase hover:bg-neutral-900"
+                  className="w-full sm:w-1/3 py-3 border border-neutral-200 text-neutral-600 text-xs font-mono tracking-widest uppercase hover:bg-neutral-50"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleConfirmAddToCart}
-                  className="w-full sm:w-2/3 py-3 bg-amber-500 text-black font-semibold text-xs font-mono tracking-widest uppercase hover:bg-amber-400 flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                  className="w-full sm:w-2/3 py-3 bg-black text-white font-semibold text-xs font-mono tracking-widest uppercase hover:bg-neutral-900 flex items-center justify-center gap-2 transition-colors cursor-pointer"
                 >
                   <ShoppingBag className="w-4.5 h-4.5" />
                   <span>Add to Order Bag</span>

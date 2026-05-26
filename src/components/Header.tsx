@@ -69,12 +69,6 @@ export default function Header({
           >
             Guest Reviews
           </button>
-          <button
-            onClick={() => onScrollToElement("loyalty")}
-            className="hover:text-amber-500 transition-colors py-2 relative after:absolute after:bottom-0 after:left-0 after:w-0 after:h-[1px] after:bg-amber-500 hover:after:w-full after:transition-all"
-          >
-            Loyalty Club
-          </button>
         </nav>
 
         {/* Action Widgets */}

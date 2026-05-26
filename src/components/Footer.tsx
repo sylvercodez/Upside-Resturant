@@ -89,11 +89,6 @@ export default function Footer({ onScrollToElement, onOpenReservations }: Footer
                 Sensory Soundscape
               </button>
             </li>
-            <li>
-              <button onClick={() => onScrollToElement("loyalty")} className="hover:text-amber-500 transition-colors">
-                Centurion VIP Club
-              </button>
-            </li>
           </ul>
         </div>
 

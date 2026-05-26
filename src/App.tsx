@@ -5,6 +5,7 @@ import MenuSection from "./components/MenuSection";
 import CartDrawer from "./components/CartDrawer";
 import ReservationSection from "./components/ReservationSection";
 import AboutAndReviews from "./components/AboutAndReviews";
+import HomeReservation from "./components/HomeReservation";
 import Footer from "./components/Footer";
 import BottomNav from "./components/BottomNav";
 import DedicatedMenu from "./components/DedicatedMenu";
@@ -156,7 +157,7 @@ export default function App() {
       <Header
         onOpenCart={() => setIsCartOpen(true)}
         onScrollToElement={handleScrollToElement}
-        onOpenReservations={() => setIsReservationOpen(true)}
+        onOpenReservations={() => handleScrollToElement("home-reservation-section")}
         cartCount={cartTotalQuantity}
         favoritesCount={favorites.length}
       />
@@ -168,7 +169,8 @@ export default function App() {
           <Hero
             onOrderNow={() => handleScrollToElement("menu-fast")}
             onExploreMenu={() => handleScrollToElement("menu-fast")}
-            onBookTable={() => setIsReservationOpen(true)}
+            onBookTable={() => handleScrollToElement("home-reservation-section")}
+            onAddToCart={handleAddToCart}
           />
 
           {/* FAST INSTANT MENU & CULINARY PLATFORM */}
@@ -185,10 +187,13 @@ export default function App() {
           {/* DETAILED BRAND LEGACY & LIVE EVENTS */}
           <AboutAndReviews
             onReadMoreExperience={() => {
-              window.scrollTo({ top: 0 });
-              setActiveView("experience");
+               window.scrollTo({ top: 0 });
+               setActiveView("experience");
             }}
           />
+
+          {/* INLINE DIGITAL TABLE RESERVATION FORM */}
+          <HomeReservation />
         </>
       )}
 
@@ -210,20 +215,20 @@ export default function App() {
             window.scrollTo({ top: 0 });
             setActiveView("landing");
           }}
-          onOpenReservations={() => setIsReservationOpen(true)}
+          onOpenReservations={() => handleScrollToElement("home-reservation-section")}
         />
       )}
 
       {/* LUXURY COMPREHENSIVE FOOTER */}
       <Footer
         onScrollToElement={handleScrollToElement}
-        onOpenReservations={() => setIsReservationOpen(true)}
+        onOpenReservations={() => handleScrollToElement("home-reservation-section")}
       />
 
       {/* MOBILE THUMB NAVIGATION CONTROLS */}
       <BottomNav
         onOpenCart={() => setIsCartOpen(true)}
-        onOpenReservations={() => setIsReservationOpen(true)}
+        onOpenReservations={() => handleScrollToElement("home-reservation-section")}
         onScrollToElement={handleScrollToElement}
         cartCount={cartTotalQuantity}
         favoritesCount={favorites.length}
