@@ -1,20 +1,26 @@
 import React, { useState, useRef } from "react";
 import { Search, Heart, ShoppingBag, Check, Plus, Minus, ArrowLeft, Grid, Sparkles, Filter, Ticket } from "lucide-react";
-import { CATEGORIES, MENU_ITEMS, MenuItem } from "../data/menu";
+import { CATEGORIES, MENU_ITEMS, MenuItem, Category } from "../data/menu";
 
 interface DedicatedMenuProps {
   onBackToLobby: () => void;
   onAddToCart: (item: MenuItem, variant?: string, extras?: string[], notes?: string) => void;
   favorites: string[];
   onToggleFavorite: (id: string) => void;
+  menuItems?: MenuItem[];
+  categories?: Category[];
 }
 
 export default function DedicatedMenu({
   onBackToLobby,
   onAddToCart,
   favorites,
-  onToggleFavorite
+  onToggleFavorite,
+  menuItems,
+  categories
 }: DedicatedMenuProps) {
+  const finalMenuItems = menuItems || MENU_ITEMS;
+  const displayCategories = categories || CATEGORIES;
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [selectedTag, setSelectedTag] = useState<string>("all");
@@ -26,11 +32,11 @@ export default function DedicatedMenu({
   const [customItemNotes, setCustomItemNotes] = useState<string>("");
 
   // Get all unique tags from MENU_ITEMS
-  const allTags = ["all", ...Array.from(new Set(MENU_ITEMS.flatMap(item => item.tags || [])))];
+  const allTags = ["all", ...Array.from(new Set(finalMenuItems.flatMap(item => item.tags || [])))];
 
   // Filter items safely
   const getFilteredItems = () => {
-    let list = MENU_ITEMS;
+    let list = finalMenuItems;
 
     // Filter by general category
     if (selectedCategory !== "all") {
@@ -257,12 +263,12 @@ export default function DedicatedMenu({
               }`}
             >
               <span>[ ] Entire Collection</span>
-              <span className="text-[10px] font-bold">{MENU_ITEMS.length}</span>
+              <span className="text-[10px] font-bold">{finalMenuItems.length}</span>
             </button>
 
-            {CATEGORIES.filter(c => c.id !== "best-sellers").map((cat) => {
+            {displayCategories.filter(c => c.id !== "best-sellers").map((cat) => {
               const isActive = selectedCategory === cat.id;
-              const categoryItemsCount = MENU_ITEMS.filter(it => it.category === cat.id).length;
+              const categoryItemsCount = finalMenuItems.filter(it => it.category === cat.id).length;
               return (
                 <button
                   key={cat.id}
@@ -292,7 +298,7 @@ export default function DedicatedMenu({
               <div>
                 Showing <strong className="text-black">{filteredItems.length}</strong> luxurious entries listed under{" "}
                 <strong className="text-amber-600">
-                  {selectedCategory === "all" ? "All Products" : CATEGORIES.find(c => c.id === selectedCategory)?.name}
+                  {selectedCategory === "all" ? "All Products" : displayCategories.find(c => c.id === selectedCategory)?.name}
                 </strong>
               </div>
               

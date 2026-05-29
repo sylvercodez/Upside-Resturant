@@ -1,15 +1,18 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Search, Heart, ShoppingBag, Check, Plus, Minus, Settings2, ChevronLeft, ChevronRight } from "lucide-react";
-import { CATEGORIES, MENU_ITEMS, MenuItem } from "../data/menu";
+import { CATEGORIES, MENU_ITEMS, MenuItem, Category } from "../data/menu";
 
 interface MenuSectionProps {
   onAddToCart: (item: MenuItem, variant?: string, extras?: string[], notes?: string) => void;
   favorites: string[];
   onToggleFavorite: (id: string) => void;
   onViewAllMenu: () => void;
+  menuItems?: MenuItem[];
+  categories?: Category[];
 }
 
-export default function MenuSection({ onAddToCart, favorites, onToggleFavorite, onViewAllMenu }: MenuSectionProps) {
+export default function MenuSection({ onAddToCart, favorites, onToggleFavorite, onViewAllMenu, menuItems, categories }: MenuSectionProps) {
+  const displayCategories = categories || CATEGORIES;
   const [selectedCategory, setSelectedCategory] = useState<string>("best-sellers");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [selectedItemForModal, setSelectedItemForModal] = useState<MenuItem | null>(null);
@@ -24,7 +27,7 @@ export default function MenuSection({ onAddToCart, favorites, onToggleFavorite, 
 
   // Filter items based on selected category & search query
   const getFilteredItems = () => {
-    let list = MENU_ITEMS;
+    let list = menuItems || MENU_ITEMS;
 
     // Search query match
     if (searchQuery.trim().length > 0) {
@@ -249,7 +252,7 @@ export default function MenuSection({ onAddToCart, favorites, onToggleFavorite, 
               className="flex items-center gap-2 overflow-x-auto no-scrollbar scroll-smooth w-full select-none"
               style={{ scrollbarWidth: "none" }}
             >
-              {CATEGORIES.map((cat) => {
+              {displayCategories.map((cat) => {
                 const isActive = selectedCategory === cat.id;
                 return (
                   <button
@@ -278,7 +281,7 @@ export default function MenuSection({ onAddToCart, favorites, onToggleFavorite, 
           <p className="text-sm text-neutral-800 mt-1">
             {searchQuery
               ? `Search Results matching "${searchQuery}"`
-              : CATEGORIES.find((c) => c.id === selectedCategory)?.description || ""}
+              : displayCategories.find((c) => c.id === selectedCategory)?.description || ""}
           </p>
         </div>
 

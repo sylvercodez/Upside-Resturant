@@ -2,6 +2,10 @@ import React, { useState } from "react";
 import { X, Trash2, Ticket, ArrowRight, ShoppingCart, MessageSquare, Check, CreditCard, Sparkles, Minus, Plus, AlertCircle, HelpCircle } from "lucide-react";
 import { CartItem, CheckoutDetails, PromoCode, AVAILABLE_PROMOS, LAGOS_AREAS } from "../types";
 import { MENU_ITEMS, MenuItem } from "../data/menu";
+import OrderTracker from "./OrderTracker";
+import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
+import { auth, db, handleFirestoreError, OperationType } from "../firebase";
+import { doc, setDoc } from "firebase/firestore";
 
 interface CartDrawerProps {
   isOpen: boolean;
@@ -11,6 +15,9 @@ interface CartDrawerProps {
   onRemoveItem: (itemId: string, variant?: string) => void;
   onClearCart: () => void;
   onAddToCartDirect: (item: MenuItem) => void;
+  currentUser?: any;
+  onAuthClick?: () => void;
+  menuItems?: MenuItem[];
 }
 
 export default function CartDrawer({
@@ -20,12 +27,40 @@ export default function CartDrawer({
   onUpdateQuantity,
   onRemoveItem,
   onClearCart,
-  onAddToCartDirect
+  onAddToCartDirect,
+  currentUser,
+  onAuthClick,
+  menuItems
 }: CartDrawerProps) {
+  const [activeTab, setActiveTab] = useState<"checkout" | "tracker">("checkout");
   const [promoInput, setPromoInput] = useState("");
   const [activePromo, setActivePromo] = useState<PromoCode | null>(null);
   const [promoError, setPromoError] = useState("");
   const [promoSuccess, setPromoSuccess] = useState("");
+
+  const [checkoutPassword, setCheckoutPassword] = useState("");
+  const [registrationMessage, setRegistrationMessage] = useState("");
+
+  // Prepopulate form billing details if a user session is active
+  React.useEffect(() => {
+    if (currentUser) {
+      setFormData((prev) => ({
+        ...prev,
+        customerName: currentUser.displayName || prev.customerName || "",
+        email: currentUser.email || prev.email || ""
+      }));
+    }
+  }, [currentUser]);
+
+  // Auto-switch to tracker tab if open and an active order is present during navigation events
+  React.useEffect(() => {
+    if (isOpen) {
+      const saved = localStorage.getItem("upside_active_order");
+      if (saved) {
+        setActiveTab("tracker");
+      }
+    }
+  }, [isOpen]);
 
   // Checkout steps matching standard React states to ensure absolute code integrity
   const [checkoutStep, setCheckoutStep] = useState<"cart" | "details" | "success">("cart");
@@ -61,7 +96,8 @@ export default function CartDrawer({
   // Curated Upsell Recommendations
   const getUpsellItems = () => {
     const itemIdsInCart = cartItems.map((c) => c.itemId);
-    return MENU_ITEMS.filter((item) => !itemIdsInCart.includes(item.id)).slice(0, 2);
+    const finalMenu = menuItems || MENU_ITEMS;
+    return finalMenu.filter((item) => !itemIdsInCart.includes(item.id)).slice(0, 2);
   };
 
   const upsellRecommendations = getUpsellItems();
@@ -95,10 +131,44 @@ export default function CartDrawer({
     setFormData((prev) => ({ ...prev, type }));
   };
 
+  const handleCheckoutAutoSignup = async () => {
+    if (!currentUser && formData.email && checkoutPassword) {
+      if (checkoutPassword.length < 6) {
+        throw new Error("Password must be at least 6 characters long to register.");
+      }
+      try {
+        setRegistrationMessage("Registering your premium user profile...");
+        const userCredential = await createUserWithEmailAndPassword(auth, formData.email, checkoutPassword);
+        if (formData.customerName) {
+          await updateProfile(userCredential.user, {
+            displayName: formData.customerName
+          });
+        }
+        setRegistrationMessage("Account created successfully!");
+      } catch (err: any) {
+        console.error("Auto checkout signup error:", err);
+        if (err.code === "auth/email-already-in-use") {
+          throw new Error("This email is already associated with an account. Please click the tab above to Log In first, or check the email address.");
+        } else if (err.code === "auth/invalid-email") {
+          throw new Error("The entered email address structure is invalid.");
+        } else {
+          throw new Error(err.message || "Auto-signup failed.");
+        }
+      }
+    }
+  };
+
   // WhatsApp WooCommerce Integration message compiler
-  const triggerWhatsAppOrder = () => {
+  const triggerWhatsAppOrder = async () => {
     if (!formData.customerName || !formData.phone) {
       setCheckoutError("Billing Full Name and Active Phone are required fields.");
+      return;
+    }
+
+    try {
+      await handleCheckoutAutoSignup();
+    } catch (signupErr: any) {
+      setCheckoutError(signupErr.message);
       return;
     }
 
@@ -132,12 +202,37 @@ export default function CartDrawer({
     const encodedText = encodeURIComponent(text);
     const whatsappUrl = `https://wa.me/2349114646767?text=${encodedText}`;
     
+    const currentUserId = auth.currentUser?.uid || "guest";
+    const orderId = `order_${Date.now()}`;
+    const activeOrderPayload = {
+      userId: currentUserId,
+      customerName: formData.customerName,
+      email: formData.email || "guest@example.com",
+      phone: formData.phone,
+      totalPrice: finalTotal,
+      items: cartItems.map(item => ({ name: item.name, quantity: item.quantity, price: item.price })),
+      address: formData.type === "delivery" ? `${formData.address}, ${formData.area}` : "Boutique Self-Pickup",
+      status: "Prepping",
+      timestamp: Date.now(),
+      type: formData.type
+    };
+    localStorage.setItem("upside_active_order", JSON.stringify(activeOrderPayload));
+
+    if (auth.currentUser) {
+      try {
+        await setDoc(doc(db, "orders", orderId), activeOrderPayload);
+      } catch (dbErr) {
+        console.error("Failed to persist order to Firestore:", dbErr);
+      }
+    }
+
     window.open(whatsappUrl, "_blank");
     setCheckoutStep("success");
+    setCheckoutPassword("");
   };
 
   // Secure Paystack checkout simulation
-  const triggerPaystackSimulatedPayment = () => {
+  const triggerPaystackSimulatedPayment = async () => {
     if (!formData.customerName || !formData.email || !formData.phone) {
       setCheckoutError("Customer Name, Email Address, and Phone Number are strictly required to authorize payment.");
       return;
@@ -149,11 +244,44 @@ export default function CartDrawer({
     }
 
     setCheckoutError("");
+
+    try {
+      await handleCheckoutAutoSignup();
+    } catch (signupErr: any) {
+      setCheckoutError(signupErr.message);
+      return;
+    }
+
     setIsProcessingPaystack(true);
+
+    const currentUserId = auth.currentUser?.uid || "guest";
+    const orderId = `order_${Date.now()}`;
+    const activeOrderPayload = {
+      userId: currentUserId,
+      customerName: formData.customerName,
+      email: formData.email || "guest@example.com",
+      phone: formData.phone,
+      totalPrice: finalTotal,
+      items: cartItems.map(item => ({ name: item.name, quantity: item.quantity, price: item.price })),
+      address: formData.type === "delivery" ? `${formData.address}, ${formData.area}` : "Boutique Self-Pickup",
+      status: "Prepping",
+      timestamp: Date.now(),
+      type: formData.type
+    };
+    localStorage.setItem("upside_active_order", JSON.stringify(activeOrderPayload));
+
+    if (auth.currentUser) {
+      try {
+        await setDoc(doc(db, "orders", orderId), activeOrderPayload);
+      } catch (dbErr) {
+        console.error("Failed to persist order to Firestore:", dbErr);
+      }
+    }
 
     setTimeout(() => {
       setIsProcessingPaystack(false);
       setCheckoutStep("success");
+      setCheckoutPassword("");
     }, 2000);
   };
 
@@ -190,11 +318,42 @@ export default function CartDrawer({
           </button>
         </div>
 
+        {/* TAB TOGGLE NAVIGATION (Shown only if not in success step to avoid disruption) */}
+        {checkoutStep !== "success" && (
+          <div className="flex border-b border-neutral-200 bg-neutral-100" id="cart-tabs-header-strip">
+            <button
+              onClick={() => setActiveTab("checkout")}
+              className={`w-1/2 py-3.5 text-xs font-mono uppercase tracking-widest font-extrabold text-center transition-all cursor-pointer ${
+                activeTab === "checkout" 
+                  ? "bg-white text-amber-600 border-b-2 border-b-amber-500 font-extrabold" 
+                  : "text-neutral-500 hover:text-black hover:bg-neutral-50"
+              }`}
+            >
+              🛒 CheckOut Basket
+            </button>
+            <button
+              onClick={() => setActiveTab("tracker")}
+              className={`w-1/2 py-3.5 text-xs font-mono uppercase tracking-widest font-extrabold text-center transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                activeTab === "tracker" 
+                  ? "bg-white text-amber-600 border-b-2 border-b-amber-500 font-extrabold" 
+                  : "text-neutral-500 hover:text-black hover:bg-neutral-50"
+              }`}
+            >
+              <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+              🚚 Track My Order
+            </button>
+          </div>
+        )}
+
         {/* MAIN INTERACTIVE DISPLAY VIEW */}
         <div className="flex-grow overflow-y-auto px-6 py-6 space-y-6 bg-white" id="cart-main-body">
 
-          {/* ================= STEP 1: SHOPPING CART PAGE ================= */}
-          {checkoutStep === "cart" && (
+          {activeTab === "tracker" ? (
+            <OrderTracker onBackToCart={() => setActiveTab("checkout")} />
+          ) : (
+            <>
+              {/* ================= STEP 1: SHOPPING CART PAGE ================= */}
+              {checkoutStep === "cart" && (
             <div className="space-y-6" id="shopping-cart-step-view">
               {cartItems.length === 0 ? (
                 <div className="text-center py-24 space-y-4" id="empty-cart-state">
@@ -473,8 +632,50 @@ export default function CartDrawer({
                           placeholder="E.g., tosin@example.com"
                           className="w-full bg-white border border-neutral-300 text-black font-mono text-xs px-4 py-3 focus:outline-none focus:border-amber-500 transition-all font-semibold rounded-none"
                         />
+                        {currentUser ? (
+                          <span className="text-[10px] text-emerald-600 font-mono font-bold mt-1 block">⭐ Logged in as VIP guest</span>
+                        ) : (
+                          <span className="text-[9px] text-neutral-400 font-mono block mt-1">Not logged in. Join below or proceed as guest.</span>
+                        )}
                       </div>
                     </div>
+
+                    {/* Optional Auto-Signup Block if Guest is not logged in */}
+                    {!currentUser && (
+                      <div className="p-4 bg-amber-500/5 border border-amber-500/10 space-y-2.5 mt-2" id="checkout-auth-conversion-promo">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-mono tracking-widest text-amber-600 uppercase font-bold flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                            🔑 SECURE PREMIUM ACCOUNT CREATION
+                          </span>
+                          <button
+                            type="button"
+                            onClick={onAuthClick}
+                            className="text-[9px] font-mono text-amber-600 hover:text-amber-700 bg-amber-500/10 hover:bg-amber-500/20 px-2.5 py-1 uppercase font-extrabold transition-all cursor-pointer"
+                          >
+                            Sign In / Log In
+                          </button>
+                        </div>
+                        <p className="text-[10px] text-neutral-500 font-sans leading-relaxed">
+                          Provide a private passcode to register your email instantly as a VIP club member, saving order transactions.
+                        </p>
+                        <div className="space-y-1">
+                          <label className="text-[10px] text-neutral-700 font-mono block font-bold">Desired Password (Min. 6 characters)</label>
+                          <input
+                            type="password"
+                            value={checkoutPassword}
+                            onChange={(e) => setCheckoutPassword(e.target.value)}
+                            placeholder="Enter password to auto-create account"
+                            className="w-full bg-white border border-neutral-300 text-black font-mono text-xs px-4 py-2.5 focus:outline-none focus:border-amber-500 transition-all font-semibold rounded-none"
+                          />
+                          {registrationMessage && (
+                            <p className="text-[9px] font-mono text-amber-600 uppercase tracking-wider mt-1 font-bold animate-pulse">
+                              ✨ {registrationMessage}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    )}
 
                     {/* Conditional Delivery Address Details */}
                     {formData.type === "delivery" && (
@@ -731,6 +932,16 @@ export default function CartDrawer({
 
               <button
                 onClick={() => {
+                  setActiveTab("tracker");
+                }}
+                className="px-8 py-4 bg-amber-600 text-white font-bold text-xs tracking-widest font-mono uppercase hover:bg-amber-700 transition-colors cursor-pointer w-full text-center shadow-md mb-3 flex items-center justify-center gap-2 animate-pulse"
+                id="cart-track-live-btn"
+              >
+                <span>🚀 Track Your Live Food Prep</span>
+              </button>
+
+              <button
+                onClick={() => {
                   onClearCart();
                   onClose();
                   setCheckoutStep("cart");
@@ -742,11 +953,13 @@ export default function CartDrawer({
               </button>
             </div>
           )}
+          </>
+          )}
 
         </div>
 
         {/* BOTTOM ORDER FOOTER: CALCULATION PRICING & CALL TO ACTIONS */}
-        {checkoutStep !== "success" && cartItems.length > 0 && (
+        {activeTab === "checkout" && checkoutStep !== "success" && cartItems.length > 0 && (
           <div className="p-6 bg-neutral-50 border-t border-neutral-200 space-y-4" id="cart-drawer-footer">
             
             {/* Simple Subtotal/Pricing display (shown on both Cart & Checkout appropriately representing WooCommerce) */}

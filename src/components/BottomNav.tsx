@@ -7,6 +7,10 @@ interface BottomNavProps {
   onScrollToElement: (elementId: string) => void;
   cartCount: number;
   favoritesCount: number;
+  currentPath?: string;
+  onNavigate?: (path: string) => void;
+  currentUser?: any;
+  onAuthClick?: () => void;
 }
 
 export default function BottomNav({
@@ -14,27 +18,31 @@ export default function BottomNav({
   onOpenReservations,
   onScrollToElement,
   cartCount,
-  favoritesCount
+  favoritesCount,
+  currentPath = "/",
+  onNavigate,
+  currentUser,
+  onAuthClick
 }: BottomNavProps) {
   return (
     <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-black/95 border-t border-amber-900/35 backdrop-blur-md px-4 py-2.5 flex items-center justify-around shadow-2xl">
       
       {/* Home / Lobby Trigger */}
       <button
-        onClick={() => onScrollToElement("hero")}
+        onClick={() => onNavigate ? onNavigate("/") : onScrollToElement("hero")}
         className="flex flex-col items-center justify-center gap-1 text-center group cursor-pointer"
       >
-        <Utensils className="w-5 h-5 text-neutral-400 group-hover:text-amber-500 transition-colors" />
-        <span className="text-[9px] font-mono tracking-wider text-neutral-500 uppercase">Lobby</span>
+        <Utensils className={`w-5 h-5 transition-colors ${currentPath === "/" ? "text-amber-500" : "text-neutral-400 group-hover:text-amber-500"}`} />
+        <span className={`text-[9px] font-mono tracking-wider uppercase ${currentPath === "/" ? "text-amber-500 font-semibold" : "text-neutral-500"}`}>Lobby</span>
       </button>
 
       {/* Menu scroll trigger */}
       <button
-        onClick={() => onScrollToElement("menu-fast")}
+        onClick={() => onNavigate ? onNavigate("/menu") : onScrollToElement("menu-fast")}
         className="flex flex-col items-center justify-center gap-1 text-center group cursor-pointer"
       >
-        <Coffee className="w-5 h-5 text-neutral-400 group-hover:text-amber-500 transition-colors" />
-        <span className="text-[9px] font-mono tracking-wider text-neutral-500 uppercase">Menu</span>
+        <Coffee className={`w-5 h-5 transition-colors ${currentPath === "/menu" ? "text-amber-500" : "text-neutral-400 group-hover:text-amber-500"}`} />
+        <span className={`text-[9px] font-mono tracking-wider uppercase ${currentPath === "/menu" ? "text-amber-500 font-semibold" : "text-neutral-500"}`}>Menu</span>
       </button>
 
       {/* Book table directly */}
@@ -46,18 +54,16 @@ export default function BottomNav({
         <span className="text-[9px] font-mono tracking-wider text-neutral-500 uppercase">Reserve</span>
       </button>
 
-      {/* Favorites list count badge if liked */}
+      {/* Dashboard Trigger */}
       <button
-        onClick={() => onScrollToElement("menu-fast")}
+        onClick={() => currentUser ? (onNavigate && onNavigate("/dashboard")) : (onAuthClick && onAuthClick())}
         className="flex flex-col items-center justify-center gap-1 text-center group cursor-pointer relative"
+        id="mobile-bottomnav-vip-dashboard"
       >
-        <Heart className={`w-5 h-5 ${favoritesCount > 0 ? "text-rose-500 fill-rose-500" : "text-neutral-400"}`} />
-        <span className="text-[9px] font-mono tracking-wider text-neutral-500 uppercase">Favorites</span>
-        {favoritesCount > 0 && (
-          <span className="absolute -top-1 right-2 bg-rose-500 text-white font-sans text-[8px] font-bold w-4 h-4 rounded-full flex items-center justify-center">
-            {favoritesCount}
-          </span>
-        )}
+        <User className={`w-5 h-5 transition-colors ${currentPath === "/dashboard" ? "text-amber-500" : "text-neutral-400 group-hover:text-amber-500"}`} />
+        <span className={`text-[9px] font-mono tracking-wider uppercase ${currentPath === "/dashboard" ? "text-amber-500 font-semibold" : "text-neutral-400"}`}>
+          {currentUser ? "Account" : "Login"}
+        </span>
       </button>
 
       {/* Floating cart bag on the mobile right */}

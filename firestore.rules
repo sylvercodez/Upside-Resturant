@@ -7,7 +7,60 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
-    // App and branding settings: publicly readable, validated writes
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function getUserRole(userId) {
+      return get(/databases/$(database)/documents/users/$(userId)).data.role;
+    }
+
+    function isAdmin() {
+      return isSignedIn() 
+          && (
+            (request.auth.token.keys().hasAll(['email']) && (request.auth.token.email == "tosinotenaike3@gmail.com" || request.auth.token.email == "tobi@gmail.com"))
+            || (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && getUserRole(request.auth.uid) == "admin")
+          );
+    }
+
+    function isSales() {
+      return isSignedIn() 
+          && exists(/databases/$(database)/documents/users/$(request.auth.uid)) 
+          && (getUserRole(request.auth.uid) == "sales" || getUserRole(request.auth.uid) == "admin");
+    }
+
+    function isChef() {
+      return isSignedIn() 
+          && exists(/databases/$(database)/documents/users/$(request.auth.uid)) 
+          && (getUserRole(request.auth.uid) == "chef" || getUserRole(request.auth.uid) == "admin");
+    }
+
+    function isValidOrder(data) {
+      return data.userId is string 
+          && data.userId.size() <= 128
+          && data.customerName is string 
+          && data.customerName.size() <= 200
+          && data.email is string 
+          && data.email.size() <= 150
+          && data.phone is string 
+          && data.phone.size() <= 50
+          && data.totalPrice is number
+          && data.items is list
+          && data.status is string
+          && data.timestamp is int
+          && data.type is string;
+    }
+
+    // App and branding settings: publicly readable, validated writes (Admin-only or system)
     match /settings/{settingId} {
       allow read: if true;
       allow write: if request.resource.data.logoSvg is string 
@@ -18,6 +71,84 @@ service cloud.firestore {
                    && request.resource.data.tagline.size() <= 500
                    && request.resource.data.subText is string
                    && request.resource.data.subText.size() <= 500;
+    }
+
+    // User Profiles Rules
+    match /users/{userId} {
+      // Allow user themselves or admin to get details
+      allow get: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      
+      // Allow only admin to list all users
+      allow list: if isAdmin();
+      
+      // Create profile: enforce signed-in matches target node.
+      // Prevent self-assigned privileged rights (default role 'user', unless bootstrapper or Admin override)
+      allow create: if isSignedIn() 
+                    && request.auth.uid == userId
+                    && (request.resource.data.role == "user" 
+                        || request.resource.data.email == "tosinotenaike3@gmail.com" 
+                        || request.resource.data.email == "tobi@gmail.com"
+                        || isAdmin());
+
+      // Update: user can modify their details as long as role remains untouched. Admin can update anything.
+      allow update: if isSignedIn() 
+                    && (
+                      (request.auth.uid == userId && request.resource.data.role == resource.data.role) 
+                      || (request.auth.uid == userId && (request.resource.data.email == "tosinotenaike3@gmail.com" || request.resource.data.email == "tobi@gmail.com") && request.resource.data.role == "admin")
+                      || isAdmin()
+                    );
+
+      // Admin or owner can delete
+      allow delete: if isAdmin() || (isSignedIn() && request.auth.uid == userId);
+    }
+
+    // Menus Collection Rules
+    match /menus/{menuItemId} {
+      // Menus are publicly readable
+      allow read, list: if true;
+      
+      // Only admin can write custom menus
+      allow write, create, update, delete: if isAdmin();
+    }
+
+    // Categories Collection Rules
+    match /categories/{categoryId} {
+      // Categories are publicly readable
+      allow read, list: if true;
+      
+      // Only admin can create, update, or delete categories
+      allow write, create, update, delete: if isAdmin();
+    }
+
+    // Site Image Assets Collection Rules
+    match /assets/{assetId} {
+      // Assets are publicly readable
+      allow read, list: if true;
+      
+      // Only admin can manage assets
+      allow write, create, update, delete: if isAdmin();
+    }
+
+    // Orders Collection Rules
+    match /orders/{orderId} {
+      // Allow list and get options to owner or sales/admin staff
+      allow get, list: if isSignedIn() && (resource.data.userId == request.auth.uid || isSales());
+      
+      // Allow creation of order if the creator is the owner and the payload conforms to valid Order schemas
+      allow create: if isSignedIn() 
+                    && request.resource.data.userId == request.auth.uid
+                    && isValidId(orderId)
+                    && isValidOrder(request.resource.data);
+
+      // Allow updates to own orders, or admin/sales pipeline updates (like cooking stages)
+      allow update: if isSignedIn()
+                    && (
+                      (resource.data.userId == request.auth.uid && request.resource.data.userId == request.auth.uid && isValidOrder(request.resource.data))
+                      || isSales()
+                    );
+
+      // Admins can delete orders if necessary, standard users cannot
+      allow delete: if isAdmin();
     }
   }
 }

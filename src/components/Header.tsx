@@ -1,5 +1,6 @@
 import React from "react";
-import { ShoppingBag, Phone, MapPin, Calendar, Heart } from "lucide-react";
+import { ShoppingBag, Phone, MapPin, Calendar, Heart, User, LogOut } from "lucide-react";
+import { User as FirebaseUser } from "firebase/auth";
 
 interface HeaderProps {
   onOpenCart: () => void;
@@ -13,6 +14,11 @@ interface HeaderProps {
     tagline: string;
     subText: string;
   } | null;
+  currentPath?: string;
+  onNavigate?: (path: string) => void;
+  currentUser?: FirebaseUser | null;
+  onAuthClick?: () => void;
+  onLogout?: () => void;
 }
 
 export default function Header({
@@ -21,7 +27,12 @@ export default function Header({
   cartCount,
   onOpenReservations,
   favoritesCount,
-  branding
+  branding,
+  currentPath = "/",
+  onNavigate,
+  currentUser,
+  onAuthClick,
+  onLogout
 }: HeaderProps) {
   return (
     <header className="sticky top-0 z-40 bg-black/95 border-b border-yellow-900/30 backdrop-blur-md">
@@ -42,7 +53,13 @@ export default function Header({
       <div className="max-w-7xl mx-auto px-4 md:px-8 h-24 md:h-28 flex items-center justify-between">
         {/* Logo / Premium branding identity */}
         <button
-          onClick={() => onScrollToElement("hero")}
+          onClick={() => {
+            if (onNavigate) {
+              onNavigate("/");
+            } else {
+              onScrollToElement("hero");
+            }
+          }}
           className="flex items-center select-none group text-left cursor-pointer"
         >
           {branding?.logoSvg ? (
@@ -67,22 +84,42 @@ export default function Header({
         </button>
 
         {/* Desktop Links */}
-        <nav className="hidden md:flex items-center gap-8 text-xs tracking-widest text-neutral-300 font-mono uppercase">
+        <nav className="hidden md:flex items-center gap-8 text-xs tracking-widest font-mono uppercase">
           <button
-            onClick={() => onScrollToElement("menu-fast")}
-            className="hover:text-amber-500 transition-colors py-2 relative after:absolute after:bottom-0 after:left-0 after:w-0 after:h-[1px] after:bg-amber-500 hover:after:w-full after:transition-all"
+            onClick={() => onNavigate ? onNavigate("/menu") : onScrollToElement("menu-fast")}
+            className={`transition-colors py-2 relative after:absolute after:bottom-0 after:left-0 after:h-[1px] after:bg-amber-500 after:transition-all ${
+              currentPath === "/menu"
+                ? "text-amber-500 after:w-full"
+                : "text-neutral-300 hover:text-amber-500 after:w-0 hover:after:w-full"
+            }`}
           >
             Our Menu
           </button>
           <button
-            onClick={() => onScrollToElement("experience")}
-            className="hover:text-amber-500 transition-colors py-2 relative after:absolute after:bottom-0 after:left-0 after:w-0 after:h-[1px] after:bg-amber-500 hover:after:w-full after:transition-all"
+            onClick={() => onNavigate ? onNavigate("/experience") : onScrollToElement("experience")}
+            className={`transition-colors py-2 relative after:absolute after:bottom-0 after:left-0 after:h-[1px] after:bg-amber-500 after:transition-all ${
+              currentPath === "/experience"
+                ? "text-amber-500 after:w-full"
+                : "text-neutral-300 hover:text-amber-500 after:w-0 hover:after:w-full"
+            }`}
           >
             The Experience
           </button>
           <button
-            onClick={() => onScrollToElement("reviews")}
-            className="hover:text-amber-500 transition-colors py-2 relative after:absolute after:bottom-0 after:left-0 after:w-0 after:h-[1px] after:bg-amber-500 hover:after:w-full after:transition-all"
+            onClick={() => {
+              if (onNavigate) {
+                onNavigate("/");
+                setTimeout(() => {
+                  const element = document.getElementById("reviews");
+                  if (element) {
+                    element.scrollIntoView({ behavior: "smooth" });
+                  }
+                }, 100);
+              } else {
+                onScrollToElement("reviews");
+              }
+            }}
+            className="text-neutral-300 hover:text-amber-500 transition-colors py-2 relative after:absolute after:bottom-0 after:left-0 after:w-0 after:h-[1px] after:bg-amber-500 hover:after:w-full after:transition-all"
           >
             Guest Reviews
           </button>
@@ -110,6 +147,47 @@ export default function Header({
               <span className="absolute -top-1 -right-1 bg-white text-rose-600 text-[9px] w-4 h-4 rounded-full flex items-center justify-center font-bold shadow-lg">
                 {favoritesCount}
               </span>
+            </button>
+          )}
+
+          {/* Authentic Firebase Authentication Gate */}
+          {currentUser ? (
+            <div className="flex items-center bg-neutral-900/85 border border-neutral-800" id="header-user-status-container">
+              <button 
+                onClick={() => onNavigate ? onNavigate("/dashboard") : (onAuthClick && onAuthClick())}
+                className="flex items-center gap-2 px-3 py-1.5 hover:bg-neutral-800/60 transition-colors text-left cursor-pointer" 
+                id="header-user-status-strip"
+                title="Open Dashboard & Order History"
+              >
+                <div className="w-8 h-8 bg-amber-600 text-white flex items-center justify-center font-mono text-[10px] font-extrabold uppercase shadow-inner">
+                  {currentUser.displayName ? currentUser.displayName.slice(0, 2).toUpperCase() : currentUser.email?.slice(0, 2).toUpperCase() || "AC"}
+                </div>
+                <div className="hidden lg:flex flex-col items-start leading-tight">
+                  <span className="text-[10px] font-bold text-white uppercase tracking-wider max-w-[100px] truncate">
+                    {currentUser.displayName || currentUser.email?.split("@")[0] || "Account"}
+                  </span>
+                  <span className="text-[9px] font-mono text-amber-500 font-semibold uppercase tracking-wider">
+                    Dashboard
+                  </span>
+                </div>
+              </button>
+              <button
+                onClick={onLogout}
+                className="p-3 text-neutral-400 hover:text-amber-500 border-l border-neutral-800 transition-colors cursor-pointer"
+                title="Sign Out of UPSIDE"
+                id="header-logout-btn"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={onAuthClick}
+              className="flex items-center gap-1.5 px-3.5 py-2.5 bg-amber-950/20 border border-amber-900/30 hover:border-amber-500/70 text-amber-400 hover:bg-amber-500 hover:text-black transition-all text-[10px] tracking-widest font-mono uppercase cursor-pointer"
+              id="header-login-btn"
+            >
+              <User className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Join / Log In</span>
             </button>
           )}
 

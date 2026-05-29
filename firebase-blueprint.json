@@ -33,12 +33,164 @@
         "tagline",
         "subText"
       ]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Purchase transaction records placed by guests or authenticated club members",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Unique identifier of the customer in Firebase Authentication"
+        },
+        "customerName": {
+          "type": "string",
+          "description": "Billing full name of the guest"
+        },
+        "email": {
+          "type": "string",
+          "description": "Email address contact"
+        },
+        "phone": {
+          "type": "string",
+          "description": "Active phone line contact"
+        },
+        "totalPrice": {
+          "type": "number",
+          "description": "Total payment price in NGN"
+        },
+        "items": {
+          "type": "array",
+          "description": "List of food items inside the luxury transaction"
+        },
+        "address": {
+          "type": "string",
+          "description": "Physical shipping sanctuary address"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["Prepping", "In Oven", "Out for Delivery", "Delivered"],
+          "description": "Simulated or actual progress prep log status"
+        },
+        "timestamp": {
+          "type": "integer",
+          "description": "Creation unix epoch timestamp in milliseconds"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["delivery", "pickup"],
+          "description": "Fulfillment type selection"
+        }
+      },
+      "required": [
+        "userId",
+        "customerName",
+        "email",
+        "phone",
+        "totalPrice",
+        "items",
+        "status",
+        "timestamp",
+        "type"
+      ]
+    },
+    "User": {
+      "title": "User",
+      "description": "User profile with roles and account states",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Authenticated unique identifier"
+        },
+        "email": {
+          "type": "string",
+          "description": "User email address"
+        },
+        "displayName": {
+          "type": "string",
+          "description": "User display name"
+        },
+        "role": {
+          "type": "string",
+          "enum": ["admin", "sales", "chef", "user"],
+          "description": "Predefined user security clearance role"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["uid", "email", "role"]
+    },
+    "CustomMenu": {
+      "title": "CustomMenu",
+      "description": "Custom user created fine dining menu items",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "price": { "type": "number" },
+        "category": { "type": "string" },
+        "image": { "type": "string" },
+        "tags": { "type": "array" },
+        "specs": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name", "price", "category", "image"]
+    },
+    "Category": {
+      "title": "Category",
+      "description": "Custom dining filters and category definitions",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "icon": { "type": "string" },
+        "deleted": { "type": "boolean" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name", "description"]
+    },
+    "Asset": {
+      "title": "Asset",
+      "description": "Media assets and imagery saved on the site",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "url": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name", "url"]
     }
   },
   "firestore": {
     "settings/{settingId}": {
       "schema": "Setting",
       "description": "Collection of global app system settings, branding, and config"
+    },
+    "orders/{orderId}": {
+      "schema": "Order",
+      "description": "Secure collection storing order transaction paths validated to matching authenticated owner UIDs only"
+    },
+    "users/{userId}": {
+      "schema": "User",
+      "description": "Users tracking profiles storing specific clearance roles like admin, sales, chef, or user."
+    },
+    "menus/{menuId}": {
+      "schema": "CustomMenu",
+      "description": "Menus created and managed by administrators that auto-inject into the live store display"
+    },
+    "categories/{categoryId}": {
+      "schema": "Category",
+      "description": "Dining categories created and managed by administrators to organize menus"
+    },
+    "assets/{assetId}": {
+      "schema": "Asset",
+      "description": "Site-wide image assets stored in Firebase for dynamic media lists"
     }
   }
 }
