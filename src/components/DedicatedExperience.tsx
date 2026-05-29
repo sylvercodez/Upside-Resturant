@@ -37,7 +37,7 @@ export default function DedicatedExperience({
           <img
             src="https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&q=80&w=1200"
             alt="Interior of Upside sanctuary"
-            className="w-full h-full object-cover filter brightness-[1.65] contrast-[1.25] grayscale"
+            className="w-full h-full object-cover"
           />
           <div className="absolute inset-0 bg-gradient-to-t from-white via-white/25 to-transparent shadow-inner" />
           
@@ -93,7 +93,7 @@ export default function DedicatedExperience({
             <img
               src="https://images.unsplash.com/photo-1497515114629-f71d768fd07c?auto=format&fit=crop&q=80&w=600"
               alt="Craft barista pouring"
-              className="w-full h-48 object-cover border border-neutral-200 grayscale filter brightness-[1.65] contrast-[1.25]"
+              className="w-full h-48 object-cover border border-neutral-200"
             />
           </div>
 
@@ -131,7 +131,7 @@ export default function DedicatedExperience({
             <img
               src="https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&q=80&w=600"
               alt="Rich steak display on embers"
-              className="w-full h-48 object-cover border border-neutral-200 grayscale filter brightness-[1.65] contrast-[1.25]"
+              className="w-full h-48 object-cover border border-neutral-200"
             />
           </div>
 
@@ -149,7 +149,7 @@ export default function DedicatedExperience({
               <img
                 src="https://images.unsplash.com/photo-1600891964599-f61ba0e24092?auto=format&fit=crop&q=80&w=600"
                 alt="Finest meats raw details"
-                className="w-full object-cover aspect-square border border-neutral-200 grayscale filter brightness-[1.65] contrast-[1.25]"
+                className="w-full object-cover aspect-square border border-neutral-200"
               />
               <div className="absolute -bottom-4 -right-4 bg-black text-white p-4 font-mono font-bold text-center border border-neutral-800 hidden sm:block">
                 <p className="text-xs uppercase">AGED FOR</p>

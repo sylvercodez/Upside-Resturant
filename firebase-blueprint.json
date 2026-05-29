@@ -1,0 +1,44 @@
+{
+  "entities": {
+    "Setting": {
+      "title": "Setting",
+      "description": "App configuration and branding parameters",
+      "type": "object",
+      "properties": {
+        "logoSvg": {
+          "type": "string",
+          "description": "SVG code or Data URI for the branding logo"
+        },
+        "brandName": {
+          "type": "string",
+          "description": "The brand name text (UPSIDE)"
+        },
+        "tagline": {
+          "type": "string",
+          "description": "The brand tagline (RESTAURANT & CAFÉ)"
+        },
+        "subText": {
+          "type": "string",
+          "description": "Subtext or brand owner (A Brand of Mopheth)"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the branding setting was last updated"
+        }
+      },
+      "required": [
+        "logoSvg",
+        "brandName",
+        "tagline",
+        "subText"
+      ]
+    }
+  },
+  "firestore": {
+    "settings/{settingId}": {
+      "schema": "Setting",
+      "description": "Collection of global app system settings, branding, and config"
+    }
+  }
+}

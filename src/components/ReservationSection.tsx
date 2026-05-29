@@ -52,7 +52,7 @@ export default function ReservationSection({ isOpen, onClose }: ReservationSecti
             <img
               src="https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&q=80&w=1000"
               alt="Luxury Table Settings"
-              className="w-full h-full object-cover opacity-25 grayscale filter brightness-[1.65] contrast-[1.25]"
+              className="w-full h-full object-cover opacity-25"
             />
           </div>
           <div className="relative z-10 space-y-1 text-left">

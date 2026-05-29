@@ -223,7 +223,7 @@ export default function CartDrawer({
                         <img
                           src={item.image}
                           alt={item.name}
-                          className="w-16 h-16 object-cover border border-neutral-200 grayscale filter brightness-[1.65] contrast-[1.25]"
+                          className="w-16 h-16 object-cover border border-neutral-200"
                         />
                         <div className="flex-grow space-y-1">
                           <div className="flex justify-between items-start">
@@ -342,7 +342,7 @@ export default function CartDrawer({
                             className="bg-white border border-neutral-200 p-2.5 flex flex-col justify-between hover:border-amber-600/40 cursor-pointer transition-all duration-300 shadow-sm"
                             id={`upsell-card-${up.id}`}
                           >
-                            <img src={up.image} alt={up.name} className="w-full h-16 object-cover border border-neutral-200 mb-2 grayscale filter brightness-[1.65] contrast-[1.25]" />
+                            <img src={up.image} alt={up.name} className="w-full h-16 object-cover border border-neutral-200 mb-2" />
                             <h5 className="text-[10px] font-mono font-semibold text-neutral-800 truncate uppercase">{up.name}</h5>
                             <div className="flex items-center justify-between mt-2">
                               <span className="text-[10px] text-amber-600 font-mono font-bold">₦{up.price.toLocaleString()}</span>

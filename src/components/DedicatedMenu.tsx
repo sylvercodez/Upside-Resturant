@@ -350,7 +350,7 @@ export default function DedicatedMenu({
                         <img
                           src={item.image}
                           alt={item.name}
-                          className="w-full h-full object-cover group-hover:scale-105 transition-all duration-705 opacity-90 group-hover:opacity-100 grayscale filter brightness-[1.65] contrast-[1.25]"
+                          className="w-full h-full object-cover group-hover:scale-105 transition-all duration-705 opacity-100"
                           loading="lazy"
                         />
                       </div>
@@ -409,7 +409,7 @@ export default function DedicatedMenu({
               <img
                 src={selectedItemForModal.image}
                 alt={selectedItemForModal.name}
-                className="w-full h-full object-cover grayscale filter brightness-[1.65] contrast-[1.25]"
+                className="w-full h-full object-cover"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black to-transparent" />
               <button

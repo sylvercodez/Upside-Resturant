@@ -26,11 +26,11 @@ export default function AboutAndReviews({ onReadMoreExperience }: AboutAndReview
         {/* Left Column: Rich visual story grid (Bento Grid Style) */}
         <div className="lg:col-span-6 grid grid-cols-2 gap-4">
           <div className="space-y-4">
-            <div className="aspect-[3/4] overflow-hidden border border-neutral-900 bg-black">
+            <div className="aspect-[3/4] overflow-hidden border border-neutral-950 bg-neutral-100">
               <img
                 src="https://images.unsplash.com/photo-1497515114629-f71d768fd07c?auto=format&fit=crop&q=80&w=600"
                 alt="Finest latte art pouring"
-                className="w-full h-full object-cover grayscale filter brightness-[1.65] contrast-[1.25] hover:brightness-[1.1] transition-all duration-700"
+                className="w-full h-full object-cover transition-all duration-700"
               />
             </div>
             <div className="bg-neutral-50 border border-neutral-200 p-6 space-y-2 rounded-none shadow-sm">
@@ -50,11 +50,11 @@ export default function AboutAndReviews({ onReadMoreExperience }: AboutAndReview
                 Pioneering fine nightlife dining fused with elite daytime workspace.
               </p>
             </div>
-            <div className="aspect-[3/4] overflow-hidden border border-neutral-900 bg-black">
+            <div className="aspect-[3/4] overflow-hidden border border-neutral-950 bg-neutral-100">
               <img
                 src="https://images.unsplash.com/photo-1600891964599-f61ba0e24092?auto=format&fit=crop&q=80&w=600"
                 alt="Elite flame-grilled steaks"
-                className="w-full h-full object-cover grayscale filter brightness-[1.65] contrast-[1.25] hover:brightness-[1.1] transition-all duration-700"
+                className="w-full h-full object-cover transition-all duration-700"
               />
             </div>
           </div>
@@ -198,12 +198,12 @@ export default function AboutAndReviews({ onReadMoreExperience }: AboutAndReview
           ].map((inst, idx) => (
             <div
               key={idx}
-              className="group relative aspect-square overflow-hidden bg-black border border-neutral-900 cursor-pointer"
+              className="group relative aspect-square overflow-hidden bg-neutral-100 border border-neutral-200 cursor-pointer"
             >
               <img
                 src={inst.img}
                 alt={inst.tag}
-                className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700 grayscale filter brightness-[1.65] contrast-[1.25] group-hover:brightness-[1.2]"
+                className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
               />
               <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-4 text-left">
                 <span className="text-[10px] text-amber-400 font-mono uppercase font-bold tracking-widest">

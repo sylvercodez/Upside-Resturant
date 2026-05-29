@@ -12,9 +12,33 @@ import DedicatedMenu from "./components/DedicatedMenu";
 import DedicatedExperience from "./components/DedicatedExperience";
 import { CartItem } from "./types";
 import { MenuItem } from "./data/menu";
+import { getBranding } from "./firebase";
 
 export default function App() {
   const [activeView, setActiveView] = useState<"landing" | "menu" | "experience">("landing");
+  const [branding, setBranding] = useState<{
+    logoSvg: string;
+    brandName: string;
+    tagline: string;
+    subText: string;
+  } | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    getBranding().then((data) => {
+      if (isMounted && data) {
+        setBranding({
+          logoSvg: data.logoSvg || "",
+          brandName: data.brandName || "UPSIDE",
+          tagline: data.tagline || "RESTAURANT & CAFÉ",
+          subText: data.subText || "A Brand of Mopheth",
+        });
+      }
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
   // Global React Persistent Storage with fallback initialization
   const [cartItems, setCartItems] = useState<CartItem[]>(() => {
     try {
@@ -160,6 +184,7 @@ export default function App() {
         onOpenReservations={() => handleScrollToElement("home-reservation-section")}
         cartCount={cartTotalQuantity}
         favoritesCount={favorites.length}
+        branding={branding}
       />
 
       {/* Conditionally mount Active page context */}
@@ -168,7 +193,10 @@ export default function App() {
           {/* Cinematic Cover Showcase Hero Section */}
           <Hero
             onOrderNow={() => handleScrollToElement("menu-fast")}
-            onExploreMenu={() => handleScrollToElement("menu-fast")}
+            onExploreMenu={() => {
+              window.scrollTo({ top: 0 });
+              setActiveView("menu");
+            }}
             onBookTable={() => handleScrollToElement("home-reservation-section")}
             onAddToCart={handleAddToCart}
           />
@@ -223,6 +251,7 @@ export default function App() {
       <Footer
         onScrollToElement={handleScrollToElement}
         onOpenReservations={() => handleScrollToElement("home-reservation-section")}
+        branding={branding}
       />
 
       {/* MOBILE THUMB NAVIGATION CONTROLS */}

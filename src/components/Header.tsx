@@ -7,6 +7,12 @@ interface HeaderProps {
   cartCount: number;
   onOpenReservations: () => void;
   favoritesCount: number;
+  branding?: {
+    logoSvg: string;
+    brandName: string;
+    tagline: string;
+    subText: string;
+  } | null;
 }
 
 export default function Header({
@@ -14,7 +20,8 @@ export default function Header({
   onScrollToElement,
   cartCount,
   onOpenReservations,
-  favoritesCount
+  favoritesCount,
+  branding
 }: HeaderProps) {
   return (
     <header className="sticky top-0 z-40 bg-black/95 border-b border-yellow-900/30 backdrop-blur-md">
@@ -32,21 +39,31 @@ export default function Header({
       </div>
 
       {/* Main Luxury Navigation Bar */}
-      <div className="max-w-7xl mx-auto px-4 md:px-8 h-20 flex items-center justify-between">
+      <div className="max-w-7xl mx-auto px-4 md:px-8 h-24 md:h-28 flex items-center justify-between">
         {/* Logo / Premium branding identity */}
         <button
           onClick={() => onScrollToElement("hero")}
-          className="flex flex-col items-start select-none group text-left cursor-pointer"
+          className="flex items-center select-none group text-left cursor-pointer"
         >
-          <div className="flex items-center gap-1">
-            <span className="text-xl md:text-2xl font-black text-white tracking-widest font-sans group-hover:text-amber-500 transition-colors uppercase">
-              UPSIDE
-            </span>
-            <span className="w-1.5 h-1.5 bg-amber-500 rounded-full"></span>
-          </div>
-          <span className="text-[9px] font-mono tracking-[0.3em] text-neutral-400 group-hover:text-neutral-200 transition-colors uppercase">
-            RESTAURANT & CAFÉ
-          </span>
+          {branding?.logoSvg ? (
+            <div 
+              className="w-20 h-20 md:w-24 md:h-24 bg-white rounded-md shadow-xl overflow-hidden flex items-center justify-center p-0.5 border border-neutral-200/40 flex-shrink-0 hover:scale-[1.03] transition-transform duration-300"
+              style={{ contentVisibility: "auto" }}
+              dangerouslySetInnerHTML={{ __html: branding.logoSvg }}
+            />
+          ) : (
+            <div className="flex flex-col items-start leading-tight">
+              <div className="flex items-center gap-1">
+                <span className="text-lg md:text-xl font-black text-white tracking-widest font-sans group-hover:text-amber-500 transition-colors uppercase">
+                  UPSIDE
+                </span>
+                <span className="w-1.5 h-1.5 bg-amber-500 rounded-full"></span>
+              </div>
+              <span className="text-[9px] font-mono tracking-[0.3em] text-neutral-400 group-hover:text-neutral-200 transition-colors uppercase">
+                RESTAURANT &amp; CAFÉ
+              </span>
+            </div>
+          )}
         </button>
 
         {/* Desktop Links */}

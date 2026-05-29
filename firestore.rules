@@ -1,0 +1,23 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Default deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // App and branding settings: publicly readable, validated writes
+    match /settings/{settingId} {
+      allow read: if true;
+      allow write: if request.resource.data.logoSvg is string 
+                   && request.resource.data.logoSvg.size() <= 100000
+                   && request.resource.data.brandName is string
+                   && request.resource.data.brandName.size() <= 500
+                   && request.resource.data.tagline is string
+                   && request.resource.data.tagline.size() <= 500
+                   && request.resource.data.subText is string
+                   && request.resource.data.subText.size() <= 500;
+    }
+  }
+}

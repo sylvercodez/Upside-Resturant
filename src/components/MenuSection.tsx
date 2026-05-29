@@ -198,18 +198,18 @@ export default function MenuSection({ onAddToCart, favorites, onToggleFavorite, 
   };
 
   return (
-    <section id="menu-fast" className="bg-black py-20 border-b border-yellow-950/20 px-4 md:px-8">
+    <section id="menu-fast" className="bg-white py-20 border-b border-neutral-200 px-4 md:px-8 text-neutral-900">
       <div className="max-w-7xl mx-auto">
         {/* Dynamic Section Header */}
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-12">
           <div className="space-y-2">
-            <h2 className="text-sm font-mono tracking-[0.3em] text-amber-500 uppercase">
+            <h2 className="text-sm font-mono tracking-[0.3em] text-amber-600 uppercase font-bold">
               Instant Ordering Platform
             </h2>
-            <h3 className="text-3xl md:text-5xl font-sans font-light tracking-tight text-white">
-              The Upside <span className="font-serif italic text-amber-400 font-medium">Boutique Menu</span>
+            <h3 className="text-3xl md:text-5xl font-sans font-extrabold tracking-tight text-neutral-900">
+              The Upside <span className="font-serif italic text-amber-600 font-medium normal-case">Boutique Menu</span>
             </h3>
-            <p className="text-xs text-neutral-400 max-w-md font-mono">
+            <p className="text-xs text-neutral-600 max-w-md font-mono">
               Access curated chef specials, premium single origin beans, and cocktails within seconds. Tap to order.
             </p>
           </div>
@@ -221,13 +221,13 @@ export default function MenuSection({ onAddToCart, favorites, onToggleFavorite, 
               placeholder="Search dishes, cocktails, coffee..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-neutral-950 border border-amber-900/30 text-white placeholder-neutral-500 text-xs py-3.5 pl-10 pr-4 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 font-mono tracking-wider transition-all"
+              className="w-full bg-neutral-50 border border-neutral-300 text-neutral-900 placeholder-neutral-400 text-xs py-3.5 pl-10 pr-4 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500/10 font-mono tracking-wider transition-all"
             />
-            <Search className="w-4 h-4 text-neutral-500 absolute left-3.5 top-3.5" />
+            <Search className="w-4 h-4 text-neutral-400 absolute left-3.5 top-3.5" />
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery("")}
-                className="absolute right-3 top-3 text-[10px] text-amber-500 hover:text-white font-mono cursor-pointer"
+                className="absolute right-3 top-3 text-[10px] text-amber-600 hover:text-amber-800 font-mono cursor-pointer font-bold"
               >
                 Clear
               </button>
@@ -236,10 +236,10 @@ export default function MenuSection({ onAddToCart, favorites, onToggleFavorite, 
         </div>
 
         {/* FAST MENU ACCESS - STICKY CATEGORIES STRIP WITH MOBILE SWIPE */}
-        <div className="sticky top-20 z-30 bg-black/95 py-4 border-y border-neutral-900/80 -mx-4 px-4 overflow-hidden mb-12">
+        <div className="sticky top-20 z-30 bg-white/95 py-4 border-y border-neutral-200 -mx-4 px-4 overflow-hidden mb-12">
           <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
             {/* Scroll Indicator (Mobile only) */}
-            <div className="text-[10px] text-amber-500/50 font-mono tracking-wider animate-pulse whitespace-nowrap lg:hidden">
+            <div className="text-[10px] text-amber-600/75 font-mono tracking-wider animate-pulse whitespace-nowrap lg:hidden">
               Swipe Left/Right &rarr;
             </div>
 
@@ -260,8 +260,8 @@ export default function MenuSection({ onAddToCart, favorites, onToggleFavorite, 
                     }}
                     className={`px-5 py-3 text-xs font-mono tracking-widest uppercase flex items-center gap-2 transition-all whitespace-nowrap cursor-pointer select-none rounded-none border ${
                       isActive
-                        ? "bg-amber-500 text-black border-transparent font-semibold shadow-lg shadow-amber-950/20"
-                        : "bg-neutral-950 text-neutral-400 border-neutral-900 hover:border-amber-900/50 hover:text-white"
+                        ? "bg-amber-500 text-black border-transparent font-semibold shadow-lg shadow-amber-500/10"
+                        : "bg-white text-neutral-600 border-neutral-200 hover:border-amber-500 hover:text-amber-600 hover:bg-amber-50/25"
                     }`}
                   >
                     <span>{cat.name}</span>
@@ -273,9 +273,9 @@ export default function MenuSection({ onAddToCart, favorites, onToggleFavorite, 
         </div>
 
         {/* Category Description Banner */}
-        <div className="bg-neutral-950 border-l-2 border-amber-500 px-6 py-4 mb-10">
-          <p className="text-xs text-neutral-400 font-mono tracking-wider uppercase">Active View</p>
-          <p className="text-sm text-neutral-200 mt-1">
+        <div className="bg-amber-50/50 border-l-2 border-amber-500 px-6 py-4 mb-10">
+          <p className="text-xs text-amber-800 font-mono tracking-wider uppercase font-bold">Active View</p>
+          <p className="text-sm text-neutral-800 mt-1">
             {searchQuery
               ? `Search Results matching "${searchQuery}"`
               : CATEGORIES.find((c) => c.id === selectedCategory)?.description || ""}
@@ -284,9 +284,9 @@ export default function MenuSection({ onAddToCart, favorites, onToggleFavorite, 
 
         {/* Empty Search Response */}
         {filteredItems.length === 0 && (
-          <div className="text-center py-20 border border-dashed border-neutral-900">
+          <div className="text-center py-20 border border-dashed border-neutral-200">
             <p className="text-sm font-mono text-neutral-500 mb-2">No masterfully crafted items match your filter.</p>
-            <p className="text-xs text-amber-400 cursor-pointer" onClick={() => { setSelectedCategory("best-sellers"); setSearchQuery(""); }}>
+            <p className="text-xs text-amber-600 cursor-pointer font-bold" onClick={() => { setSelectedCategory("best-sellers"); setSearchQuery(""); }}>
               Reset search filters to explorer everything &rarr;
             </p>
           </div>
@@ -300,7 +300,7 @@ export default function MenuSection({ onAddToCart, favorites, onToggleFavorite, 
               <div
                 key={item.id}
                 onClick={() => handleOpenItemDetails(item)}
-                className="group border border-neutral-900 bg-black hover:bg-neutral-900/40 hover:border-amber-500/30 transition-all duration-305 p-5 relative flex flex-col justify-between cursor-pointer h-full shadow-lg"
+                className="group border border-neutral-900 bg-black hover:bg-neutral-950 transition-all duration-305 p-5 relative flex flex-col justify-between cursor-pointer h-full shadow-lg"
                 id={`grid-item-${item.id}`}
               >
                 {/* Image Section */}
@@ -332,7 +332,7 @@ export default function MenuSection({ onAddToCart, favorites, onToggleFavorite, 
                   <img
                     src={item.image}
                     alt={item.name}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-all duration-700 opacity-90 group-hover:opacity-100 grayscale filter brightness-[1.65] contrast-[1.25]"
+                    className="w-full h-full object-cover group-hover:scale-105 transition-all duration-700 opacity-100"
                     loading="lazy"
                     referrerPolicy="no-referrer"
                   />
@@ -371,7 +371,7 @@ export default function MenuSection({ onAddToCart, favorites, onToggleFavorite, 
         <div className="mt-16 text-center" id="view-all-menu-catalog-block">
           <button
             onClick={onViewAllMenu}
-            className="px-10 py-4 bg-transparent border border-amber-500 text-amber-400 hover:bg-amber-500 hover:text-black font-semibold text-xs font-mono tracking-widest uppercase transition-all duration-300 cursor-pointer inline-flex items-center gap-3 shadow-xl group border-2"
+            className="px-10 py-4 bg-transparent border border-amber-600 text-amber-600 hover:bg-amber-600 hover:text-white font-semibold text-xs font-mono tracking-widest uppercase transition-all duration-300 cursor-pointer inline-flex items-center gap-3 shadow-xl group border-2"
             id="view-all-dedicated-menu-btn"
           >
             <span>View All Items on Dedicated Menu Page</span>
@@ -389,7 +389,7 @@ export default function MenuSection({ onAddToCart, favorites, onToggleFavorite, 
               <img
                 src={selectedItemForModal.image}
                 alt={selectedItemForModal.name}
-                className="w-full h-full object-cover grayscale filter brightness-[1.65] contrast-[1.25]"
+                className="w-full h-full object-cover"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black to-transparent" />
               <button

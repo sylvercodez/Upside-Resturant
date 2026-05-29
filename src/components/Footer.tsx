@@ -4,22 +4,37 @@ import { Coffee, Shield, Phone, Mail, MapPin, Sparkles, MessageSquare } from "lu
 interface FooterProps {
   onScrollToElement: (elementId: string) => void;
   onOpenReservations: () => void;
+  branding?: {
+    logoSvg: string;
+    brandName: string;
+    tagline: string;
+    subText: string;
+  } | null;
 }
 
-export default function Footer({ onScrollToElement, onOpenReservations }: FooterProps) {
+export default function Footer({ onScrollToElement, onOpenReservations, branding }: FooterProps) {
   return (
     <footer className="bg-neutral-950 text-neutral-400 font-mono text-xs border-t border-amber-900/20 pt-16 pb-24">
       <div className="max-w-7xl mx-auto px-4 md:px-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-12 text-left">
         
         {/* Brand details Column */}
         <div className="space-y-4">
-          <div className="flex flex-col items-start select-none">
-            <span className="text-xl font-bold text-white tracking-widest font-sans uppercase">
-              UPSIDE
-            </span>
-            <span className="text-[9px] font-mono tracking-[0.3em] text-neutral-500 uppercase">
-              RESTAURANT & CAFÉ
-            </span>
+          <div className="flex items-center select-none">
+            {branding?.logoSvg ? (
+              <div 
+                className="w-28 h-28 md:w-32 md:h-32 bg-white rounded-md shadow-2xl overflow-hidden flex items-center justify-center p-1 border border-neutral-200/40 flex-shrink-0"
+                dangerouslySetInnerHTML={{ __html: branding.logoSvg }}
+              />
+            ) : (
+              <div className="flex flex-col items-start leading-tight">
+                <span className="text-lg font-bold text-white tracking-widest font-sans uppercase">
+                  UPSIDE
+                </span>
+                <span className="text-[9px] font-mono tracking-[0.3em] text-neutral-500 uppercase">
+                  RESTAURANT &amp; CAFÉ
+                </span>
+              </div>
+            )}
           </div>
           <p className="text-[11px] text-neutral-400 font-light leading-relaxed">
             Pioneering digital hospitality and Afrobeat luxury dining inside Lekki, Lagos. Combining custom high-roast espresso bar and premium prime grills.
