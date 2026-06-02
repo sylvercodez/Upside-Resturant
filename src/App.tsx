@@ -11,20 +11,20 @@ import BottomNav from "./components/BottomNav";
 import DedicatedMenu from "./components/DedicatedMenu";
 import DedicatedExperience from "./components/DedicatedExperience";
 import DedicatedDashboard from "./components/DedicatedDashboard";
-import AuthModal from "./components/AuthModal";
+import DedicatedAuth from "./components/DedicatedAuth";
 import { CartItem } from "./types";
 import { MenuItem, MENU_ITEMS, Category, CATEGORIES } from "./data/menu";
 import { getBranding, auth, db } from "./firebase";
 import { User, onAuthStateChanged, signOut } from "firebase/auth";
 import { doc, getDoc, setDoc, collection, query, onSnapshot } from "firebase/firestore";
+import { logCustomEvent } from "./utils/analytics";
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [userRole, setUserRole] = useState<string>("user");
   const [allMenuItems, setAllMenuItems] = useState<MenuItem[]>(MENU_ITEMS);
   const [allCategories, setAllCategories] = useState<Category[]>(CATEGORIES);
-  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
-  const [authModalMode, setAuthModalMode] = useState<"signin" | "signup">("signin");
+
 
   useEffect(() => {
     // Build real-time custom menu items observer
@@ -126,16 +126,24 @@ export default function App() {
     if (hash === "#/menu" || path === "/menu") return "/menu";
     if (hash === "#/experience" || path === "/experience") return "/experience";
     if (hash === "#/dashboard" || path === "/dashboard") return "/dashboard";
+    if (hash === "#/auth" || path === "/auth") return "/auth";
     return "/";
   });
 
-  const activeView = currentPath === "/menu" ? "menu" : (currentPath === "/experience" ? "experience" : (currentPath === "/dashboard" ? "dashboard" : "landing"));
+  const activeView = currentPath === "/menu" ? "menu" : (currentPath === "/experience" ? "experience" : (currentPath === "/dashboard" ? "dashboard" : (currentPath === "/auth" ? "auth" : "landing")));
 
   const handleNavigate = (path: string) => {
     window.history.pushState(null, "", path);
     setCurrentPath(path);
     window.scrollTo({ top: 0, behavior: "instant" });
   };
+
+  useEffect(() => {
+    logCustomEvent("page_view", { path: currentPath, view: activeView });
+    if (activeView === "menu") {
+      logCustomEvent("menu_view");
+    }
+  }, [currentPath, activeView]);
 
   useEffect(() => {
     const handlePopState = () => {
@@ -147,6 +155,8 @@ export default function App() {
         setCurrentPath("/experience");
       } else if (hash === "#/dashboard" || path === "/dashboard") {
         setCurrentPath("/dashboard");
+      } else if (hash === "#/auth" || path === "/auth") {
+        setCurrentPath("/auth");
       } else {
         setCurrentPath("/");
       }
@@ -368,7 +378,7 @@ export default function App() {
         currentPath={currentPath}
         onNavigate={handleNavigate}
         currentUser={currentUser}
-        onAuthClick={() => { setAuthModalMode("signin"); setIsAuthModalOpen(true); }}
+        onAuthClick={() => handleNavigate("/auth")}
         onLogout={handleLogout}
       />
 
@@ -442,7 +452,7 @@ export default function App() {
           favorites={favorites}
           onToggleFavorite={handleToggleFavorite}
           onAddToCart={handleAddToCart}
-          onAuthClick={() => { setAuthModalMode("signin"); setIsAuthModalOpen(true); }}
+          onAuthClick={() => handleNavigate("/auth")}
           onLogout={handleLogout}
           onTrackOrder={handleTrackOrder}
           onReorder={handleReorder}
@@ -450,8 +460,16 @@ export default function App() {
         />
       )}
 
+      {activeView === "auth" && (
+        <DedicatedAuth
+          currentUser={currentUser}
+          onBackToLobby={() => handleNavigate("/")}
+          onNavigate={handleNavigate}
+        />
+      )}
+
       {/* LUXURY COMPREHENSIVE FOOTER */}
-      {activeView !== "dashboard" && (
+      {activeView !== "dashboard" && activeView !== "auth" && (
         <Footer
           onScrollToElement={handleScrollToElement}
           onOpenReservations={() => handleScrollToElement("home-reservation-section")}
@@ -469,7 +487,7 @@ export default function App() {
         currentPath={currentPath}
         onNavigate={handleNavigate}
         currentUser={currentUser}
-        onAuthClick={() => { setAuthModalMode("signin"); setIsAuthModalOpen(true); }}
+        onAuthClick={() => handleNavigate("/auth")}
       />
 
       {/* SLIDE-OVER CHECKOUT CART DRAWER */}
@@ -482,7 +500,7 @@ export default function App() {
         onClearCart={handleClearCart}
         onAddToCartDirect={handleAddToCartDirect}
         currentUser={currentUser}
-        onAuthClick={() => { setAuthModalMode("signin"); setIsAuthModalOpen(true); }}
+        onAuthClick={() => handleNavigate("/auth")}
         menuItems={allMenuItems}
       />
 
@@ -492,16 +510,7 @@ export default function App() {
         onClose={() => setIsReservationOpen(false)}
       />
 
-      {/* COMPREHENSIVE AUTH DIALOG */}
-      <AuthModal
-        isOpen={isAuthModalOpen}
-        onClose={() => setIsAuthModalOpen(false)}
-        initialMode={authModalMode}
-        currentUser={currentUser}
-        onLogout={handleLogout}
-        onTrackOrder={handleTrackOrder}
-        onReorder={handleReorder}
-      />
+
     </div>
   );
 }

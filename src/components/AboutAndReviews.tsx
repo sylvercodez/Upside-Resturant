@@ -105,19 +105,19 @@ export default function AboutAndReviews({ onReadMoreExperience }: AboutAndReview
         {/* Right Column: Narrative Copy */}
         <div className="lg:col-span-6 space-y-6 text-left">
           <span className="text-xs font-mono tracking-[0.3em] text-amber-600 uppercase block">
-            The Signature Vibe
+            Best Restaurant in Lagos - The Signature Vibe
           </span>
           <h2 className="text-3xl md:text-5xl font-sans font-light tracking-tight text-neutral-950 leading-tight">
-            Elevating Contemporary <br />
-            <span className="font-serif italic text-amber-600">African Hospitality</span>
+            Elevating Fine Dining &amp; <br />
+            <span className="font-serif italic text-amber-600">Lagos Contemporary Gastronomy</span>
           </h2>
           
-          <div className="space-y-4 text-xs md:text-sm text-neutral-700 font-mono tracking-wide leading-relaxed font-light font-sans">
+          <div className="space-y-4 text-xs md:text-sm text-neutral-700 font-mono tracking-wide leading-relaxed font-light font-sans text-justify">
             <p>
-              Born from a pursuit to bridge premium artisan coffee culture with world-class nocturnal fine dining, <span className="text-neutral-900 font-semibold font-sans">Upside Restaurant & Café</span> has quickly defined the skyline of Lekki’s gourmet arena.
+              Ranked among the <strong className="text-amber-800">best restaurants in Lagos</strong>, <span className="text-neutral-900 font-semibold font-sans">Upside Restaurant &amp; Café</span> is a masterpiece bridging premium artisan coffee roastery with world-class nocturnal fine dining. Strategically situated for guests in Lekki Phase 1, Victoria Island, and Ikoyi, Upside has defined itself as the premier culinary sanctuary for luxury dining in Nigeria.
             </p>
             <p>
-              We pride ourselves on the meticulous curation of dual identity: during sunrise, a quiet sanctuary featuring direct-trade roasts, butter-flaky French pastries, and premium daytime executive boards. During sunset, we transform into an immersive high-contrast culinary experience with live music, artisanal cocktails, and prime-grade meat cuts.
+              We pride ourselves on being a top-tier <strong className="text-neutral-900">fine dining destination in Lekki, Lagos</strong>, meticulous in our dual-concept curation. By day, enjoy a serene coffee shop containing direct-trade roasts, gourmet breakfast pancakes, and workspace environments. By night, we evolve into a high-energy luxury steakhouse featuring prime steaks, live music, and bespoke Lagos mixology.
             </p>
             <p className="italic text-amber-600 border-l border-amber-600 pl-4 py-1">
               &ldquo;No metrics are spared. From the temperature of our espresso groupheads to the aging of our premium ribeye beef cuts.&rdquo;

@@ -1,9 +1,10 @@
 import React, { useState } from "react";
 import { X, Trash2, Ticket, ArrowRight, ShoppingCart, MessageSquare, Check, CreditCard, Sparkles, Minus, Plus, AlertCircle, HelpCircle } from "lucide-react";
 import { CartItem, CheckoutDetails, PromoCode, AVAILABLE_PROMOS, LAGOS_AREAS } from "../types";
+import { logCustomEvent } from "../utils/analytics";
 import { MENU_ITEMS, MenuItem } from "../data/menu";
 import OrderTracker from "./OrderTracker";
-import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
+import { createUserWithEmailAndPassword, updateProfile, signInWithEmailAndPassword } from "firebase/auth";
 import { auth, db, handleFirestoreError, OperationType } from "../firebase";
 import { doc, setDoc } from "firebase/firestore";
 
@@ -55,6 +56,7 @@ export default function CartDrawer({
   // Auto-switch to tracker tab if open and an active order is present during navigation events
   React.useEffect(() => {
     if (isOpen) {
+      logCustomEvent("cart_view", { itemsCount: cartItems.length });
       const saved = localStorage.getItem("upside_active_order");
       if (saved) {
         setActiveTab("tracker");
@@ -148,7 +150,14 @@ export default function CartDrawer({
       } catch (err: any) {
         console.error("Auto checkout signup error:", err);
         if (err.code === "auth/email-already-in-use") {
-          throw new Error("This email is already associated with an account. Please click the tab above to Log In first, or check the email address.");
+          try {
+            setRegistrationMessage("Email already in use. Authenticating account with provided password...");
+            await signInWithEmailAndPassword(auth, formData.email, checkoutPassword);
+            setRegistrationMessage("Authenticated successfully!");
+          } catch (loginErr: any) {
+            console.error("Auto sign-in during checkout failed:", loginErr);
+            throw new Error("This email is already registered. If this is your account, please enter your correct password to login and complete checkout.");
+          }
         } else if (err.code === "auth/invalid-email") {
           throw new Error("The entered email address structure is invalid.");
         } else {
@@ -227,6 +236,12 @@ export default function CartDrawer({
     }
 
     window.open(whatsappUrl, "_blank");
+    logCustomEvent("checkout_success", {
+      price: finalTotal,
+      itemsCount: cartItems.length,
+      type: formData.type || "delivery",
+      method: "whatsapp"
+    });
     setCheckoutStep("success");
     setCheckoutPassword("");
   };
@@ -280,6 +295,12 @@ export default function CartDrawer({
 
     setTimeout(() => {
       setIsProcessingPaystack(false);
+      logCustomEvent("checkout_success", {
+        price: finalTotal,
+        itemsCount: cartItems.length,
+        type: formData.type || "delivery",
+        method: "paystack"
+      });
       setCheckoutStep("success");
       setCheckoutPassword("");
     }, 2000);
@@ -657,7 +678,7 @@ export default function CartDrawer({
                           </button>
                         </div>
                         <p className="text-[10px] text-neutral-500 font-sans leading-relaxed">
-                          Provide a private passcode to register your email instantly as a VIP club member, saving order transactions.
+                          Provide a password to register your email and instantly create your premium account, securely saving your order transactions.
                         </p>
                         <div className="space-y-1">
                           <label className="text-[10px] text-neutral-700 font-mono block font-bold">Desired Password (Min. 6 characters)</label>
@@ -992,7 +1013,13 @@ export default function CartDrawer({
             <div id="footer-actions-control">
               {checkoutStep === "cart" && (
                 <button
-                  onClick={() => setCheckoutStep("details")}
+                  onClick={() => {
+                    setCheckoutStep("details");
+                    logCustomEvent("checkout_attempt", {
+                      itemsCount: cartItems.length,
+                      totalPrice: subtotal - discountAmount
+                    });
+                  }}
                   className="w-full py-4 bg-black text-white font-bold text-xs tracking-widest font-mono uppercase hover:bg-neutral-900 transition-colors flex items-center justify-center gap-2 cursor-pointer transition-all shadow-md"
                   id="proceed-checkout-trigger"
                 >

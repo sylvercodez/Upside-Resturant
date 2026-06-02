@@ -161,5 +161,19 @@ service cloud.firestore {
       // Admins can delete orders if necessary, standard users cannot
       allow delete: if isAdmin();
     }
+
+    // Analytics Events Rules: Anyone can register events, but only administrators can read or query them
+    function isValidAnalyticsEvent(data) {
+      return data.eventType is string 
+          && data.eventType.size() <= 64
+          && data.timestamp is string
+          && data.timestamp.size() <= 64;
+    }
+
+    match /analytics_events/{eventId} {
+      allow create: if isValidId(eventId) && isValidAnalyticsEvent(request.resource.data);
+      allow read, list: if isAdmin();
+      allow update, delete: if false; // Security Invariant: Analytics events are immutable log files
+    }
   }
 }

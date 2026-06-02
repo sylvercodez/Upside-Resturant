@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { User as FirebaseUser } from "firebase/auth";
 import { MenuItem, MENU_ITEMS, CATEGORIES, Category } from "../data/menu";
 import OrderHistory from "./OrderHistory";
+import AdminAnalyticsPanel from "./AdminAnalyticsPanel";
 import { 
   ShieldCheck, 
   MapPin, 
@@ -1030,6 +1031,16 @@ export default function DedicatedDashboard({
                         }`}
                       >
                         📸 Instagram Integration
+                      </button>
+                      <button
+                        onClick={() => setActiveTab("analytics_panel")}
+                        className={`px-6 py-3 text-xs tracking-wider uppercase font-bold text-center transition-all cursor-pointer flex items-center gap-1.5 ${
+                          activeTab === "analytics_panel"
+                            ? "bg-amber-600 text-white"
+                            : "text-neutral-300 hover:text-neutral-200 hover:bg-[#151515]"
+                        }`}
+                      >
+                        📊 Analytics & Conversions
                       </button>
                     </>
                   )}
@@ -2213,6 +2224,10 @@ export default function DedicatedDashboard({
                     </div>
 
                   </div>
+                )}
+
+                {userRole === "admin" && activeTab === "analytics_panel" && (
+                  <AdminAnalyticsPanel />
                 )}
               </div>
             </div>

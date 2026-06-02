@@ -180,6 +180,36 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["id", "media_url"]
+    },
+    "AnalyticsEvent": {
+      "title": "AnalyticsEvent",
+      "description": "User engagement and reservation conversion metric actions logged securely across the system",
+      "type": "object",
+      "properties": {
+        "eventType": {
+          "type": "string",
+          "enum": ["page_view", "menu_view", "reservation_attempt", "reservation_success", "cart_view", "checkout_attempt", "checkout_success"],
+          "description": "The type of metric / engagement logged"
+        },
+        "pathName": {
+          "type": "string",
+          "description": "The current URL pathname or screen locator"
+        },
+        "sessionUid": {
+          "type": "string",
+          "description": "Unique session placeholder to group events anonymously or by individual user ID"
+        },
+        "metadata": {
+          "type": "object",
+          "description": "Optional arbitrary user action details"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO format action date-time"
+        }
+      },
+      "required": ["eventType", "timestamp"]
     }
   },
   "firestore": {
@@ -210,6 +240,10 @@
     "instagram_posts/{postId}": {
       "schema": "InstagramPost",
       "description": "Live feed of culinary snapshots synchronized from the real brand Instagram account via token API proxy"
+    },
+    "analytics_events/{eventId}": {
+      "schema": "AnalyticsEvent",
+      "description": "Central collection housing user engagement log entries and conversion metrics"
     }
   }
 }

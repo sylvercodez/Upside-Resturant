@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { Calendar, Clock, Users, CheckCircle, Shield, Sparkles, Award, MapPin } from "lucide-react";
+import { logCustomEvent } from "../utils/analytics";
 
 export default function HomeReservation() {
   const [success, setSuccess] = useState(false);
@@ -26,10 +27,21 @@ export default function HomeReservation() {
     e.preventDefault();
     setSubmitting(true);
 
+    logCustomEvent("reservation_attempt", {
+      guests: formData.guests,
+      occasion: formData.specialOccasion || "None",
+      seating: formData.seatingArea
+    });
+
     // Simulate high-end digital table routing and SMS verification dispatch
     setTimeout(() => {
       setSubmitting(false);
       setSuccess(true);
+      logCustomEvent("reservation_success", {
+        guests: formData.guests,
+        occasion: formData.specialOccasion || "None",
+        seating: formData.seatingArea
+      });
     }, 1800);
   };
 

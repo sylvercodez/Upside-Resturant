@@ -134,7 +134,7 @@ export default function Footer({ onScrollToElement, onOpenReservations, branding
       <div className="max-w-7xl mx-auto px-4 md:px-8 border-t border-neutral-200 mt-12 pt-8 flex flex-col md:flex-row justify-between items-center gap-4 text-[10px] text-neutral-400 text-center sm:text-left">
         <div>
           <p className="text-neutral-500 font-medium">&copy; 2026 Upside Restaurant &amp; Café. A Brand of Mopheth. All Rights Reserved.</p>
-          <p className="font-light mt-1">Inspired by Lagos Contemporary Gastronomy &amp; Late-Night Rhythms.</p>
+          
         </div>
         <div className="flex gap-6 uppercase tracking-widest text-[9px] text-neutral-500">
           <span className="flex items-center gap-1.5">

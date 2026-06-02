@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Calendar, Clock, Users, CheckCircle, Shield, Award, Sparkles } from "lucide-react";
 import { Reservation } from "../types";
+import { logCustomEvent } from "../utils/analytics";
 
 interface ReservationSectionProps {
   isOpen: boolean;
@@ -34,10 +35,21 @@ export default function ReservationSection({ isOpen, onClose }: ReservationSecti
     e.preventDefault();
     setSubmitting(true);
 
+    logCustomEvent("reservation_attempt", {
+      guests: formData.guests,
+      occasion: formData.specialOccasion || "None",
+      seating: formData.seatingArea
+    });
+
     // Simulate high-end digital table routing and SMS verification dispatch
     setTimeout(() => {
       setSubmitting(false);
       setSuccess(true);
+      logCustomEvent("reservation_success", {
+        guests: formData.guests,
+        occasion: formData.specialOccasion || "None",
+        seating: formData.seatingArea
+      });
     }, 1800);
   };
 
