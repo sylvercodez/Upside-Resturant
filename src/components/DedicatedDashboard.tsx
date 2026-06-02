@@ -118,6 +118,278 @@ export default function DedicatedDashboard({
   const [catFormSuccess, setCatFormSuccess] = useState("");
   const [catFormError, setCatFormError] = useState("");
 
+  // INSTAGRAM FEED INTEGRATION STATES
+  const [instagramToken, setInstagramToken] = useState("");
+  const [instagramUsername, setInstagramUsername] = useState("");
+  const [instagramLastSynced, setInstagramLastSynced] = useState("");
+  const [instagramSyncStatus, setInstagramSyncStatus] = useState("");
+  const [instagramSyncError, setInstagramSyncError] = useState("");
+  const [isInstagramConfigLoading, setIsInstagramConfigLoading] = useState(false);
+  const [isInstagramSyncing, setIsInstagramSyncing] = useState(false);
+
+  // Manual Instagram Post insert form
+  const [manualPostUrl, setManualPostUrl] = useState("");
+  const [manualPostCaption, setManualPostCaption] = useState("");
+  const [manualPostPermalink, setManualPostPermalink] = useState("");
+  const [instagramActionSuccess, setInstagramActionSuccess] = useState("");
+  const [syncedInstagramPosts, setSyncedInstagramPosts] = useState<any[]>([]);
+
+  // Load Instagram configuration
+  useEffect(() => {
+    if (currentUser && userRole === "admin") {
+      const unsub = onSnapshot(doc(db, "settings", "instagram"), (docSnap) => {
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          setInstagramToken(data.accessToken || "");
+          setInstagramUsername(data.username || "");
+          setInstagramLastSynced(data.lastSyncedAt || "");
+        }
+      }, (err) => {
+        console.warn("Could not fetch Instagram config doc:", err);
+      });
+      return () => unsub();
+    }
+  }, [currentUser, userRole]);
+
+  // Load current Instagram posts in database
+  useEffect(() => {
+    if (currentUser && userRole === "admin") {
+      const q = query(collection(db, "instagram_posts"));
+      const unsubscribe = onSnapshot(q, (snapshot) => {
+        const posts: any[] = [];
+        snapshot.forEach((docSnap) => {
+          posts.push({ id: docSnap.id, ...docSnap.data() });
+        });
+        // Sort by createdAt descending
+        posts.sort((a, b) => {
+          const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+          const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+          return timeB - timeA;
+        });
+        setSyncedInstagramPosts(posts);
+      }, (err) => {
+        console.warn("Failed to load synced instagram posts:", err);
+      });
+      return () => unsubscribe();
+    }
+  }, [currentUser, userRole]);
+
+  // Handle popup window handshake response message
+  useEffect(() => {
+    const handleAuthHandshakeMessage = async (event: MessageEvent) => {
+      const origin = event.origin;
+      // Accept messaging from the developer app container or preview domains style
+      if (!origin.endsWith(".run.app") && !origin.includes("localhost")) {
+        return;
+      }
+
+      const data = event.data;
+      if (data && data.type === "INSTAGRAM_AUTH_SUCCESS") {
+        const { accessToken, username } = data;
+        setInstagramSyncError("");
+        setInstagramActionSuccess("Handshake Authorized successfully!");
+        setInstagramSyncStatus("Saving Instagram credentials securely...");
+        setIsInstagramConfigLoading(true);
+
+        try {
+          setInstagramToken(accessToken);
+          setInstagramUsername(username);
+
+          // Update settings document securely in backend
+          await setDoc(doc(db, "settings", "instagram"), {
+            accessToken,
+            username,
+            lastSyncedAt: new Date().toISOString()
+          }, { merge: true });
+
+          setInstagramActionSuccess(`Connected Instagram handle @${username}! Automatically retrieving active feed...`);
+          setInstagramSyncStatus("");
+          
+          // Trigger immediate synchronization with the newly achieved access token!
+          await handleSyncInstagramFeed(accessToken);
+        } catch (err) {
+          console.error("Failed to process authorized handshake token:", err);
+          setInstagramSyncError("Handshake Save Failed: " + (err instanceof Error ? err.message : String(err)));
+          setInstagramSyncStatus("");
+        } finally {
+          setIsInstagramConfigLoading(false);
+        }
+      }
+    };
+
+    window.addEventListener("message", handleAuthHandshakeMessage);
+    return () => window.removeEventListener("message", handleAuthHandshakeMessage);
+  }, [currentUser, userRole, instagramToken]);
+
+  const handleSaveInstagramConfig = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setInstagramSyncError("");
+    setInstagramActionSuccess("");
+    setIsInstagramConfigLoading(true);
+
+    try {
+      await setDoc(doc(db, "settings", "instagram"), {
+        accessToken: instagramToken,
+        username: instagramUsername,
+        lastSyncedAt: instagramLastSynced || ""
+      }, { merge: true });
+      setInstagramActionSuccess("Instagram api credentials saved successfully in Firebase backend settings node!");
+    } catch (err) {
+      setInstagramSyncError("Failed to save settings: " + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setIsInstagramConfigLoading(false);
+    }
+  };
+
+  const handleInstagramConnectHandshake = async () => {
+    setInstagramSyncError("");
+    setInstagramActionSuccess("");
+    setInstagramSyncStatus("Initializing custom handshake gateway sessions...");
+
+    try {
+      const response = await fetch("/api/instagram/auth-url");
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.error || `Failed to start: HTTP ${response.status}`);
+      }
+
+      const { url } = await response.json();
+      const width = 580;
+      const height = 650;
+      const left = window.screen.width / 2 - width / 2;
+      const top = window.screen.height / 2 - height / 2;
+
+      const authWindow = window.open(
+        url,
+        "instagram_handshake_popup",
+        `width=${width},height=${height},left=${left},top=${top},status=no,resizable=yes,scrollbars=yes`
+      );
+
+      if (!authWindow) {
+        throw new Error("Popup was blocked by the browser. Please support popups to complete verification.");
+      }
+
+      setInstagramSyncStatus("Handshake popup active. Waiting for you to verify ownership on Instagram...");
+    } catch (err) {
+      console.error("Instagram popup opening issue:", err);
+      setInstagramSyncError(err instanceof Error ? err.message : String(err));
+      setInstagramSyncStatus("");
+    }
+  };
+
+  const handleSyncInstagramFeed = async (overrideToken?: string) => {
+    const tokenToUse = overrideToken || instagramToken;
+    if (!tokenToUse) {
+      setInstagramSyncError("An Instagram Access Token is required to synchronize the feed.");
+      return;
+    }
+    setInstagramSyncError("");
+    setInstagramActionSuccess("");
+    setIsInstagramSyncing(true);
+    setInstagramSyncStatus("Connecting to Instagram Graph API...");
+
+    try {
+      const fields = "id,caption,media_type,media_url,permalink,thumbnail_url,timestamp";
+      const url = `https://graph.instagram.com/me/media?fields=${fields}&access_token=${tokenToUse}`;
+      
+      const response = await fetch(url);
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.error?.message || `HTTP error! Status: ${response.status}`);
+      }
+
+      const resJson = await response.json();
+      const mediaList = resJson.data || [];
+
+      if (mediaList.length === 0) {
+        setInstagramSyncStatus("No media posts found in your Instagram feed.");
+        setIsInstagramSyncing(false);
+        return;
+      }
+
+      setInstagramSyncStatus(`Fetched ${mediaList.length} items. Saving to Firebase...`);
+
+      // Write each post to collection
+      const batchPromises = mediaList.map(async (item: any) => {
+        const imageUrl = item.media_type === "VIDEO" ? (item.thumbnail_url || item.media_url) : item.media_url;
+        const postDocRef = doc(db, "instagram_posts", item.id);
+        const postData = {
+          id: item.id,
+          caption: item.caption || "Upside Dining Moment",
+          media_url: imageUrl || "",
+          permalink: item.permalink || "https://instagram.com",
+          media_type: item.media_type || "IMAGE",
+          timestamp: item.timestamp || new Date().toISOString(),
+          createdAt: new Date(item.timestamp || Date.now()).toISOString(),
+        };
+        return setDoc(postDocRef, postData);
+      });
+
+      await Promise.all(batchPromises);
+
+      // Update Instagram setting last sync timestamp
+      const syncDateString = new Date().toISOString();
+      await setDoc(doc(db, "settings", "instagram"), {
+        lastSyncedAt: syncDateString
+      }, { merge: true });
+
+      setInstagramLastSynced(syncDateString);
+      setInstagramActionSuccess(`Successfully parsed and synchronized ${mediaList.length} live Instagram feed items!`);
+      setInstagramSyncStatus("");
+    } catch (err) {
+      console.error("Instagram sync failure:", err);
+      setInstagramSyncError("Sync failed: " + (err instanceof Error ? err.message : String(err)));
+      setInstagramSyncStatus("");
+    } finally {
+      setIsInstagramSyncing(false);
+    }
+  };
+
+  const handleAddManualPost = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!manualPostUrl) {
+      setInstagramSyncError("Please provide a valid Image URL.");
+      return;
+    }
+    setInstagramSyncError("");
+    setInstagramActionSuccess("");
+
+    try {
+      const postId = "manual-" + Date.now();
+      const postRef = doc(db, "instagram_posts", postId);
+      await setDoc(postRef, {
+        id: postId,
+        caption: manualPostCaption || "Admin Curated Moment",
+        media_url: manualPostUrl,
+        permalink: manualPostPermalink || "https://instagram.com",
+        media_type: "IMAGE",
+        timestamp: new Date().toISOString(),
+        createdAt: new Date().toISOString()
+      });
+
+      setManualPostUrl("");
+      setManualPostCaption("");
+      setManualPostPermalink("");
+      setInstagramActionSuccess("Custom curated feed moment uploaded and saved successfully!");
+    } catch (err) {
+      setInstagramSyncError("Failed to save post: " + (err instanceof Error ? err.message : String(err)));
+    }
+  };
+
+  const handleDeletePost = async (id: string) => {
+    if (!window.confirm("Are you sure you want to delete this Instagram post from the dynamic website feed?")) {
+      return;
+    }
+    setInstagramSyncError("");
+    setInstagramActionSuccess("");
+    try {
+      await deleteDoc(doc(db, "instagram_posts", id));
+      setInstagramActionSuccess("Post successfully decoupled and removed from live grid.");
+    } catch (err) {
+      setInstagramSyncError("Failed to delete post: " + (err instanceof Error ? err.message : String(err)));
+    }
+  };
+
   // Custom Image observer inside dashboard
   useEffect(() => {
     if (currentUser && userRole === "admin") {
@@ -172,14 +444,44 @@ export default function DedicatedDashboard({
     setImageFormSuccess("");
     const file = e.target.files?.[0];
     if (file) {
-      if (file.size > 1024 * 1024) {
-        setNewImageFormError("File size is too large (max 1MB for Firestore). Please select a smaller or compressed image.");
-        return;
-      }
       const reader = new FileReader();
       reader.onloadend = () => {
-        setNewImageUrl(reader.result as string);
-        setImageFormSuccess("Local image file converted to secure base64 successfully!");
+        const img = new Image();
+        img.onload = () => {
+          // Downscale the image to fit within 800px bounds for rapid, bulletproof loading
+          const maxDim = 800;
+          let width = img.width;
+          let height = img.height;
+          
+          if (width > maxDim || height > maxDim) {
+            if (width > height) {
+              height = Math.round((height * maxDim) / width);
+              width = maxDim;
+            } else {
+              width = Math.round((width * maxDim) / height);
+              height = maxDim;
+            }
+          }
+          
+          const canvas = document.createElement("canvas");
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext("2d");
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, width, height);
+            // Convert to JPEG with high quality compression
+            const compressedBase64 = canvas.toDataURL("image/jpeg", 0.75);
+            setNewImageUrl(compressedBase64);
+            setImageFormSuccess("Local image optimized and converted to secure compressed format successfully!");
+          } else {
+            setNewImageUrl(reader.result as string);
+            setImageFormSuccess("Local image successfully prepared for dynamic save.");
+          }
+        };
+        img.onerror = () => {
+          setNewImageFormError("Could not process local image data.");
+        };
+        img.src = reader.result as string;
       };
       reader.onerror = () => {
         setNewImageFormError("Could not read local file.");
@@ -269,6 +571,17 @@ export default function DedicatedDashboard({
     } catch (err: any) {
       console.error("Save category failed:", err);
       setCatFormError(`Failed to save category to database: ${err.message}`);
+    }
+  };
+
+  const handleUnhideCategory = async (cat: Category) => {
+    if (!window.confirm(`Are you sure you want to unhide/enable Category "${cat.name}"? It will immediately show on the live store.`)) return;
+    try {
+      await deleteDoc(doc(db, "categories", cat.id));
+      setCatFormSuccess(`"${cat.name}" has been enabled/unhidden successfully!`);
+    } catch (err: any) {
+      console.error("Unhide category failed:", err);
+      alert(`Could not unhide category: ${err.message}`);
     }
   };
 
@@ -707,6 +1020,16 @@ export default function DedicatedDashboard({
                         }`}
                       >
                         🖼️ Image Library ({customImages.length + PRESET_IMAGES.length})
+                      </button>
+                      <button
+                        onClick={() => setActiveTab("instagram_panel")}
+                        className={`px-6 py-3 text-xs tracking-wider uppercase font-bold text-center transition-all cursor-pointer flex items-center gap-1.5 ${
+                          activeTab === "instagram_panel"
+                            ? "bg-amber-600 text-white"
+                            : "text-neutral-400 hover:text-neutral-200 hover:bg-[#151515]"
+                        }`}
+                      >
+                        📸 Instagram Integration
                       </button>
                     </>
                   )}
@@ -1442,53 +1765,75 @@ export default function DedicatedDashboard({
                       </div>
 
                       <div className="space-y-2 overflow-y-auto max-h-[500px] no-scrollbar pr-1">
-                        {displayCategories.map((cat) => {
-                          const isStatic = CATEGORIES.some(s => s.id === cat.id);
-                          return (
-                            <div key={cat.id} className="p-3.5 bg-neutral-950/60 border border-neutral-850 flex items-start justify-between gap-3">
-                              <div className="text-left space-y-1 min-w-0">
-                                <div className="flex items-center gap-2 flex-wrap text-left justify-start">
-                                  <span className="text-xs font-bold font-mono text-white tracking-wide uppercase truncate">{cat.name}</span>
-                                  <span className="text-[8px] font-mono text-amber-500 px-1 border border-amber-900/40 bg-amber-950/10">
-                                    {cat.id}
-                                  </span>
-                                  {isStatic ? (
-                                    <span className="text-[8px] font-mono text-neutral-500 uppercase">Static Core</span>
+                        {(() => {
+                          const administeredCategories = [
+                            ...displayCategories,
+                            ...CATEGORIES.filter(staticCat => !displayCategories.some(c => c.id === staticCat.id)).map(staticCat => ({
+                              ...staticCat,
+                              hidden: true
+                            }))
+                          ];
+                          return administeredCategories.map((cat) => {
+                            const isStatic = CATEGORIES.some(s => s.id === cat.id);
+                            const isHidden = (cat as any).hidden;
+                            return (
+                              <div key={cat.id} className={`p-3.5 border flex items-start justify-between gap-3 ${isHidden ? "bg-neutral-950/20 border-neutral-900 opacity-60" : "bg-neutral-950/60 border-neutral-850"}`}>
+                                <div className="text-left space-y-1 min-w-0">
+                                  <div className="flex items-center gap-2 flex-wrap text-left justify-start">
+                                    <span className={`text-xs font-bold font-mono tracking-wide uppercase truncate ${isHidden ? "text-neutral-500 line-through" : "text-white"}`}>{cat.name}</span>
+                                    <span className="text-[8px] font-mono text-amber-500 px-1 border border-amber-900/40 bg-amber-950/10">
+                                      {cat.id}
+                                    </span>
+                                    {isStatic ? (
+                                      <span className="text-[8px] font-mono text-neutral-500 uppercase">Static Core</span>
+                                    ) : (
+                                      <span className="text-[8px] font-mono text-emerald-400 uppercase font-bold">Dynamic Custom</span>
+                                    )}
+                                    {isHidden && (
+                                      <span className="text-[8px] font-mono text-amber-500 uppercase font-bold animate-pulse">Hidden / Disabled</span>
+                                    )}
+                                  </div>
+                                  <p className="text-[10px] text-neutral-400 leading-relaxed font-sans">{cat.description}</p>
+                                  <p className="text-[9px] text-neutral-500 font-mono">Icon representation: <code className="text-amber-500 font-bold">{cat.icon || "Utensils"}</code></p>
+                                </div>
+
+                                <div className="flex items-center gap-2 shrink-0">
+                                  {!isStatic && !isHidden && (
+                                    <button
+                                      onClick={() => {
+                                        setEditingCatId(cat.id);
+                                        setNewCatData({
+                                          id: cat.id,
+                                          name: cat.name,
+                                          description: cat.description || "",
+                                          icon: cat.icon || "Utensils"
+                                        });
+                                      }}
+                                      className="py-1 px-2 border border-neutral-850 text-amber-500 hover:text-amber-400 text-[8px] font-mono uppercase bg-neutral-900 hover:bg-neutral-800 shrink-0"
+                                    >
+                                      Edit
+                                    </button>
+                                  )}
+                                  {isHidden ? (
+                                    <button
+                                      onClick={() => handleUnhideCategory(cat)}
+                                      className="py-1 px-2 border border-emerald-900/40 text-emerald-400 hover:text-white text-[8px] font-mono uppercase bg-emerald-950/20 hover:bg-emerald-900 shrink-0"
+                                    >
+                                      Unhide (Enable)
+                                    </button>
                                   ) : (
-                                    <span className="text-[8px] font-mono text-emerald-400 uppercase font-bold">Dynamic Custom</span>
+                                    <button
+                                      onClick={() => handleDeleteCategory(cat)}
+                                      className="py-1 px-2 border border-red-900/40 text-red-400 hover:text-white text-[8px] font-mono uppercase bg-red-950/20 hover:bg-red-900 shrink-0"
+                                    >
+                                      {isStatic ? "Hide (Disable)" : "Delete"}
+                                    </button>
                                   )}
                                 </div>
-                                <p className="text-[10px] text-neutral-400 leading-relaxed font-sans">{cat.description}</p>
-                                <p className="text-[9px] text-neutral-500 font-mono">Icon representation: <code className="text-amber-500 font-bold">{cat.icon || "Utensils"}</code></p>
                               </div>
-
-                              <div className="flex items-center gap-2 shrink-0">
-                                {!isStatic && (
-                                  <button
-                                    onClick={() => {
-                                      setEditingCatId(cat.id);
-                                      setNewCatData({
-                                        id: cat.id,
-                                        name: cat.name,
-                                        description: cat.description || "",
-                                        icon: cat.icon || "Utensils"
-                                      });
-                                    }}
-                                    className="py-1 px-2 border border-neutral-850 text-amber-500 hover:text-amber-400 text-[8px] font-mono uppercase bg-neutral-900 hover:bg-neutral-800 shrink-0"
-                                  >
-                                    Edit
-                                  </button>
-                                )}
-                                <button
-                                  onClick={() => handleDeleteCategory(cat)}
-                                  className="py-1 px-2 border border-red-900/40 text-red-400 hover:text-white text-[8px] font-mono uppercase bg-red-950/20 hover:bg-red-900 shrink-0"
-                                >
-                                  {isStatic ? "Hide (Disable)" : "Delete"}
-                                </button>
-                              </div>
-                            </div>
-                          );
-                        })}
+                            );
+                          });
+                        })()}
                       </div>
                     </div>
                   </div>
@@ -1628,6 +1973,245 @@ export default function DedicatedDashboard({
                         ))}
                       </div>
                     </div>
+                  </div>
+                )}
+
+                {userRole === "admin" && activeTab === "instagram_panel" && (
+                  <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 text-left" id="dashboard-instagram-control">
+                    
+                    {/* Left side splits: API Config & Hand curations */}
+                    <div className="xl:col-span-5 space-y-6">
+
+                      {/* One-Click Auto Login Handshake Box */}
+                      <div className="bg-gradient-to-br from-amber-600/10 to-transparent border border-amber-600/30 p-6 space-y-4 font-mono">
+                        <div>
+                          <span className="text-[8px] font-mono font-bold uppercase tracking-widest text-amber-400 bg-amber-950/40 px-2 py-0.5 border border-amber-900/60 rounded">
+                            ⚡ Recommended: Live OAuth Handshake
+                          </span>
+                          <h2 className="text-xs font-mono font-bold tracking-widest text-white uppercase mt-2">
+                            📸 Quick Sync Handshake
+                          </h2>
+                          <p className="text-[10px] text-neutral-400 font-sans mt-0.5 leading-relaxed">
+                            Click below to authorize on Instagram. Our secure gateway will negotiate the access token, confirm ownership, and automatically synchronize your dynamic culinary feed into the landing page grid!
+                          </p>
+                        </div>
+
+                        {instagramSyncError && (
+                          <div className="p-3 bg-red-950/20 border border-red-900/30 text-red-300 text-[10px] font-mono">
+                            ⚠️ {instagramSyncError}
+                          </div>
+                        )}
+
+                        {instagramActionSuccess && (
+                          <div className="p-3 bg-emerald-950/20 border border-emerald-900/30 text-emerald-400 text-[10px] font-mono">
+                            ✓ {instagramActionSuccess}
+                          </div>
+                        )}
+
+                        {instagramSyncStatus && (
+                          <div className="p-3 bg-amber-950/20 border border-amber-900/30 text-amber-400 text-[10px] font-mono animate-pulse">
+                            ⚙ {instagramSyncStatus}
+                          </div>
+                        )}
+
+                        <button
+                          type="button"
+                          onClick={handleInstagramConnectHandshake}
+                          disabled={isInstagramConfigLoading || isInstagramSyncing}
+                          className="w-full py-3 bg-amber-600 hover:bg-amber-500 disabled:bg-neutral-800 disabled:text-neutral-500 text-black font-extrabold uppercase tracking-wider text-[10px] transition-all cursor-pointer flex items-center justify-center gap-2 rounded shadow-md shadow-amber-600/10"
+                        >
+                          <span>📸 CONNECT INSTAGRAM ACCOUNT</span>
+                        </button>
+                      </div>
+                      
+                      {/* API Settings Box */}
+                      <div className="bg-[#121212] border border-neutral-850 p-6 space-y-4 font-mono">
+                        <div>
+                          <h2 className="text-xs font-mono font-bold tracking-widest text-amber-500 uppercase">
+                            ⚙️ Advanced Instagram Api Configuration
+                          </h2>
+                          <p className="text-[10px] text-neutral-500 font-sans mt-0.5">
+                            Prefer manual integration? Save custom developer tokens directly to the backend settings node below without popup authorization.
+                          </p>
+                        </div>
+
+                        <form onSubmit={handleSaveInstagramConfig} className="space-y-4 text-xs font-mono">
+                          <div className="space-y-1">
+                            <label className="text-[9px] text-neutral-400 uppercase tracking-widest block font-bold">Instagram Handle Username</label>
+                            <input
+                              type="text"
+                              placeholder="e.g. upsidelagos"
+                              value={instagramUsername}
+                              onChange={(e) => setInstagramUsername(e.target.value)}
+                              className="w-full bg-neutral-950 border border-neutral-850 p-2 text-white focus:outline-none focus:border-amber-500"
+                            />
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="text-[9px] text-neutral-400 uppercase tracking-widest block font-bold">Long-Lived User Access Token</label>
+                            <input
+                              type="password"
+                              placeholder="IGQVJ............"
+                              value={instagramToken}
+                              onChange={(e) => setInstagramToken(e.target.value)}
+                              className="w-full bg-neutral-950 border border-neutral-850 p-2 text-white focus:outline-none focus:border-amber-500 text-[11px]"
+                            />
+                            <p className="text-[8px] text-neutral-500 font-sans mt-1">
+                              Create an App on <a href="https://developers.facebook.com" target="_blank" rel="noreferrer" className="text-amber-500 underline">Meta Developers</a>, add "Instagram Basic Display", and click "Generate Token".
+                            </p>
+                          </div>
+
+                          {instagramLastSynced && (
+                            <div className="text-[9px] text-neutral-400 flex justify-between bg-neutral-950 p-2 border border-neutral-900">
+                              <span>Last API Sync Attempt:</span>
+                              <span className="text-amber-500 font-bold">{new Date(instagramLastSynced).toLocaleString()}</span>
+                            </div>
+                          )}
+
+                          <div className="grid grid-cols-2 gap-3">
+                            <button
+                              type="submit"
+                              disabled={isInstagramConfigLoading}
+                              className="py-2.5 bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 hover:border-amber-500 text-white font-bold uppercase tracking-wider text-[9px] transition-all cursor-pointer"
+                            >
+                              {isInstagramConfigLoading ? "Saving..." : "Save Settings"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleSyncInstagramFeed()}
+                              disabled={isInstagramSyncing}
+                              className="py-2.5 bg-amber-600 hover:bg-amber-700 text-black font-bold uppercase tracking-wider text-[9px] transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                            >
+                              <span>{isInstagramSyncing ? "Syncing..." : "Sync Live Feed"}</span>
+                            </button>
+                          </div>
+                        </form>
+                      </div>
+
+                      {/* Manual Customization Box */}
+                      <div className="bg-[#121212] border border-neutral-850 p-6 space-y-4 font-mono">
+                        <div>
+                          <h2 className="text-xs font-mono font-bold tracking-widest text-amber-500 uppercase">
+                            🎨 Curate Custom Moments (Seeding Tool)
+                          </h2>
+                          <p className="text-[10px] text-neutral-500 font-sans mt-0.5">
+                            Don't have real Instagram token access ready yet? No problem! Manually curate stunning premium moments with elegant local links and captions. They will instantly merge with any live API data in your public landing grid.
+                          </p>
+                        </div>
+
+                        <form onSubmit={handleAddManualPost} className="space-y-4 text-xs font-mono">
+                          <div className="space-y-1">
+                            <label className="text-[9px] text-neutral-400 uppercase tracking-widest block font-bold">Image URL *</label>
+                            <input
+                              type="url"
+                              required
+                              placeholder="https://images.unsplash.com/..."
+                              value={manualPostUrl}
+                              onChange={(e) => setManualPostUrl(e.target.value)}
+                              className="w-full bg-neutral-950 border border-neutral-850 p-2 text-white focus:outline-none focus:border-amber-500 text-[10px]"
+                            />
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="text-[9px] text-neutral-400 uppercase tracking-widest block font-bold">Caption Description</label>
+                            <input
+                              type="text"
+                              placeholder="e.g. Late cocktails in Admiralty Way"
+                              value={manualPostCaption}
+                              onChange={(e) => setManualPostCaption(e.target.value)}
+                              className="w-full bg-neutral-950 border border-neutral-850 p-2 text-white focus:outline-none focus:border-amber-500"
+                            />
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="text-[9px] text-neutral-400 uppercase tracking-widest block font-bold">Instagram Permalink URL</label>
+                            <input
+                              type="url"
+                              placeholder="https://instagram.com/p/..."
+                              value={manualPostPermalink}
+                              onChange={(e) => setManualPostPermalink(e.target.value)}
+                              className="w-full bg-neutral-950 border border-neutral-850 p-2 text-white focus:outline-none focus:border-amber-500 text-[10px]"
+                            />
+                          </div>
+
+                          <button
+                            type="submit"
+                            className="w-full py-2.5 bg-neutral-900 hover:bg-neutral-800 border border-neutral-850 hover:border-amber-500 text-amber-500 font-bold uppercase tracking-wider text-[9px] transition-all cursor-pointer"
+                          >
+                            Add Curated Moment ✓
+                          </button>
+                        </form>
+                      </div>
+
+                    </div>
+
+                    {/* Right side live items manager */}
+                    <div className="xl:col-span-7 bg-[#121212] border border-neutral-850 p-6 space-y-4">
+                      <div>
+                        <h2 className="text-xs font-mono font-bold tracking-widest text-amber-500 uppercase">
+                          Website Live Grid Manager ({syncedInstagramPosts.length})
+                        </h2>
+                        <p className="text-[10px] text-neutral-500 font-sans mt-0.5">
+                          Below are the posts currently active in the front-end Instagram Moments block. Live-synced media and custom seeded moments are rendered with appropriate metadata.
+                        </p>
+                      </div>
+
+                      {syncedInstagramPosts.length === 0 ? (
+                        <div className="text-center py-20 border border-dashed border-neutral-850 text-neutral-500 space-y-2 font-mono">
+                          <p className="text-xs uppercase font-bold tracking-widest text-neutral-400">Website Grid is Unseeded</p>
+                          <p className="text-[10px] max-w-xs mx-auto font-sans leading-relaxed">
+                            No dynamic posts found in Firestore. The landing page grid is currently displaying high-end static fallback presets automatically.
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 overflow-y-auto max-h-[550px] no-scrollbar pr-1 font-mono text-left">
+                          {syncedInstagramPosts.map((post) => {
+                            const isManual = post.id.startsWith("manual-");
+                            return (
+                              <div key={post.id} className="bg-neutral-950/60 border border-neutral-850 p-2 space-y-2 relative group flex flex-col justify-between">
+                                <div className="space-y-2">
+                                  <div className="aspect-square w-full overflow-hidden bg-neutral-900 border border-neutral-800">
+                                    <img
+                                      src={post.media_url}
+                                      alt={post.caption || "Instagram Feed Post"}
+                                      className="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all duration-300"
+                                      referrerPolicy="no-referrer"
+                                    />
+                                  </div>
+                                  <div className="space-y-1 text-left min-w-0">
+                                    <p className="text-[10px] text-neutral-300 leading-tight line-clamp-2 h-7 font-sans">
+                                      {post.caption || "Dining Moment"}
+                                    </p>
+                                    <span className="inline-block text-[8px] px-1 py-0.5 font-bold uppercase rounded mt-1">
+                                      {isManual ? (
+                                        <span className="text-amber-500 bg-amber-950/10 border border-amber-900/30 px-1 py-0.5 rounded">Curated Fallback</span>
+                                      ) : (
+                                        <span className="text-emerald-400 bg-emerald-900/10 border border-emerald-900/20 px-1 py-0.5 rounded">Api Synced</span>
+                                      )}
+                                    </span>
+                                  </div>
+                                </div>
+                                <div className="pt-2 flex gap-1.5 w-full mt-auto">
+                                  <button
+                                    onClick={() => post.permalink && window.open(post.permalink, "_blank")}
+                                    className="flex-1 py-1 px-1 bg-neutral-900 hover:bg-neutral-800 text-amber-500 border border-neutral-800 text-[8px] font-mono uppercase text-center cursor-pointer transition-all shrink-0"
+                                  >
+                                    View Link
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeletePost(post.id)}
+                                    className="py-1 px-1.5 bg-red-950/40 hover:bg-red-900 hover:text-white border border-red-900/30 text-red-400 text-[8px] font-mono uppercase text-center cursor-pointer transition-all shrink-0"
+                                  >
+                                    Delete
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+
                   </div>
                 )}
               </div>

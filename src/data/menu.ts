@@ -438,7 +438,7 @@ export const COMBOS = [
 export const REVIEWS = [
   {
     id: "rev-1",
-    name: "Tolulope Alao",
+    name: "Tolulope. A",
     role: "Lagos Lifestyle Critic",
     rating: 5,
     text: "The Mopheth Burger is an absolutely incredible work of culinary art. Outstanding luxury ambience and insanely fast home delivery. Truly Lagos' premium hospitality destination.",
@@ -446,7 +446,7 @@ export const REVIEWS = [
   },
   {
     id: "rev-2",
-    name: "Chinedu Okafor",
+    name: "Chinedu. O",
     role: "Artisanal Coffee Enthusiast",
     rating: 5,
     text: "World-class baristas. The microfoam on their Flat White is perfection, matching the level of high-end coffee spots in London or Milan. Absolute favorite space in Lekki.",
@@ -454,7 +454,7 @@ export const REVIEWS = [
   },
   {
     id: "rev-3",
-    name: "Funmi Adebayo",
+    name: "Funmi. A",
     role: "Vanguard Event Producer",
     rating: 5,
     text: "We hosted an intimate VIP dinner here and the guests were blown away by the Catfish Pepper Soup and the signature cocktails. Luxury at its most authentic.",

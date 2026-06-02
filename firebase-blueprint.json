@@ -165,6 +165,21 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["id", "name", "url"]
+    },
+    "InstagramPost": {
+      "title": "InstagramPost",
+      "description": "Media item retrieved from the Instagram Basic Display API or custom configured fine art pieces",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "caption": { "type": "string" },
+        "media_url": { "type": "string" },
+        "permalink": { "type": "string" },
+        "media_type": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "media_url"]
     }
   },
   "firestore": {
@@ -191,6 +206,10 @@
     "assets/{assetId}": {
       "schema": "Asset",
       "description": "Site-wide image assets stored in Firebase for dynamic media lists"
+    },
+    "instagram_posts/{postId}": {
+      "schema": "InstagramPost",
+      "description": "Live feed of culinary snapshots synchronized from the real brand Instagram account via token API proxy"
     }
   }
 }

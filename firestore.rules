@@ -61,9 +61,9 @@ service cloud.firestore {
     }
 
     // App and branding settings: publicly readable, validated writes (Admin-only or system)
-    match /settings/{settingId} {
+    match /settings/branding {
       allow read: if true;
-      allow write: if request.resource.data.logoSvg is string 
+      allow write: if isAdmin() && request.resource.data.logoSvg is string 
                    && request.resource.data.logoSvg.size() <= 100000
                    && request.resource.data.brandName is string
                    && request.resource.data.brandName.size() <= 500
@@ -71,6 +71,17 @@ service cloud.firestore {
                    && request.resource.data.tagline.size() <= 500
                    && request.resource.data.subText is string
                    && request.resource.data.subText.size() <= 500;
+    }
+
+    // Instagram settings holding secrets: strictly isolated to admin only
+    match /settings/instagram {
+      allow read, write: if isAdmin();
+    }
+
+    // Instagram posts feed: publicly readable, admin-only writes
+    match /instagram_posts/{postId} {
+      allow read, list: if true;
+      allow write, create, update, delete: if isAdmin();
     }
 
     // User Profiles Rules

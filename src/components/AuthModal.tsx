@@ -263,11 +263,23 @@ export default function AuthModal({
           }
           // Try registration on the fly
           setSuccess(`Initializing secure ${role} credential node...`);
-          const userCred = await createUserWithEmailAndPassword(auth, targetEmail, targetPassword);
-          await updateProfile(userCred.user, {
-            displayName: targetName
-          });
-          setSuccess(`Successfully registered & signed in as ${role === "admin" ? "Administrator" : "VIP Customer"}!`);
+          try {
+            const userCred = await createUserWithEmailAndPassword(auth, targetEmail, targetPassword);
+            await updateProfile(userCred.user, {
+              displayName: targetName
+            });
+            setSuccess(`Successfully registered & signed in as ${role === "admin" ? "Administrator" : "VIP Customer"}!`);
+          } catch (signUpErr: any) {
+            const signUpErrStr = String(signUpErr.code || signUpErr.message || "").toLowerCase();
+            if (signUpErrStr.includes("already-in-use") || signUpErrStr.includes("already-exists")) {
+              // Already exists in auth DB, but the login failed earlier. This means password is custom / already set!
+              setEmail(targetEmail);
+              setMode("signin");
+              throw new Error(`This email (${targetEmail}) is already registered with a customized password. Please enter your password manually above to sign in.`);
+            } else {
+              throw signUpErr;
+            }
+          }
         } else {
           throw signInErr;
         }
