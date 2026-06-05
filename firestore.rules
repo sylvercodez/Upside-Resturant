@@ -27,21 +27,30 @@ service cloud.firestore {
     function isAdmin() {
       return isSignedIn() 
           && (
-            (request.auth.token.keys().hasAll(['email']) && (request.auth.token.email == "tosinotenaike3@gmail.com" || request.auth.token.email == "tobi@gmail.com"))
+            (request.auth.token.email != null && (
+              request.auth.token.email.lower() == "tosinotenaike3@gmail.com" || 
+              request.auth.token.email.lower() == "tobi@gmail.com" ||
+              request.auth.token.email.lower() == "mophethecommerce@gmail.com" ||
+              request.auth.token.email.lower().matches('.*mophethecommerce.*')
+            ))
             || (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && getUserRole(request.auth.uid) == "admin")
           );
     }
 
     function isSales() {
       return isSignedIn() 
-          && exists(/databases/$(database)/documents/users/$(request.auth.uid)) 
-          && (getUserRole(request.auth.uid) == "sales" || getUserRole(request.auth.uid) == "admin");
+          && (
+            isAdmin()
+            || (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && getUserRole(request.auth.uid) == "sales")
+          );
     }
 
     function isChef() {
       return isSignedIn() 
-          && exists(/databases/$(database)/documents/users/$(request.auth.uid)) 
-          && (getUserRole(request.auth.uid) == "chef" || getUserRole(request.auth.uid) == "admin");
+          && (
+            isAdmin()
+            || (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && getUserRole(request.auth.uid) == "chef")
+          );
     }
 
     function isValidOrder(data) {
@@ -75,6 +84,11 @@ service cloud.firestore {
 
     // Instagram settings holding secrets: strictly isolated to admin only
     match /settings/instagram {
+      allow read, write: if isAdmin();
+    }
+
+    // OPay payment integration settings: strictly isolated to admin only to be secure
+    match /settings/opay {
       allow read, write: if isAdmin();
     }
 

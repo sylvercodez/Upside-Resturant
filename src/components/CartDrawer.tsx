@@ -6,7 +6,7 @@ import { MENU_ITEMS, MenuItem } from "../data/menu";
 import OrderTracker from "./OrderTracker";
 import { createUserWithEmailAndPassword, updateProfile, signInWithEmailAndPassword } from "firebase/auth";
 import { auth, db, handleFirestoreError, OperationType } from "../firebase";
-import { doc, setDoc } from "firebase/firestore";
+import { doc, setDoc, updateDoc } from "firebase/firestore";
 
 interface CartDrawerProps {
   isOpen: boolean;
@@ -84,7 +84,69 @@ export default function CartDrawer({
   });
 
   const [isProcessingPaystack, setIsProcessingPaystack] = useState(false);
+  const [isProcessingOpay, setIsProcessingOpay] = useState(false);
   const [checkoutError, setCheckoutError] = useState("");
+
+  // OPay payment success receipt fallbacks
+  const [savedTotalPaid, setSavedTotalPaid] = useState<number | null>(null);
+  const [savedCustomerName, setSavedCustomerName] = useState<string>("");
+  const [savedEmail, setSavedEmail] = useState<string>("");
+  const [savedPhone, setSavedPhone] = useState<string>("");
+  const [savedArea, setSavedArea] = useState<string>("");
+
+  // Auto detect redirect success query reference on mount
+  React.useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const opayRef = params.get("opay_ref");
+    if (opayRef) {
+      console.log("[CART DRAWER] Initializing checkout success screen from callback parameter:", opayRef);
+      setCheckoutStep("success");
+      
+      // Clear url search params cleanly before updating to avoid repeated calls
+      try {
+        const cleanUrl = window.location.protocol + "//" + window.location.host + window.location.pathname;
+        window.history.replaceState({}, document.title, cleanUrl);
+      } catch (historyErr) {
+        console.warn("Could not sweep OPay address query parameters:", historyErr);
+      }
+
+      // Update order payment status in Firestore directly from client side where auth session is valid
+      if (auth.currentUser) {
+        try {
+          updateDoc(doc(db, "orders", opayRef), {
+            paymentStatus: "Paid (OPay)",
+            status: "Prepping",
+            updatedAt: new Date().toISOString()
+          }).then(() => {
+            console.log(`[OPAY CLIENT SUCCESS] Cleanly marked order ${opayRef} as Paid!`);
+          }).catch((err) => {
+            console.error("Failed updating order status in Firestore on success redirect:", err);
+          });
+        } catch (updateErr) {
+          console.error("Failed updating order status in Firestore on success redirect:", updateErr);
+        }
+      }
+    }
+  }, []);
+
+  // Listen for step transitions to populate custom saved stats instantly
+  React.useEffect(() => {
+    if (checkoutStep === "success") {
+      try {
+        const savedOrderRaw = localStorage.getItem("upside_active_order");
+        if (savedOrderRaw) {
+          const parsed = JSON.parse(savedOrderRaw);
+          if (parsed.totalPrice) setSavedTotalPaid(parsed.totalPrice);
+          if (parsed.customerName) setSavedCustomerName(parsed.customerName);
+          if (parsed.email) setSavedEmail(parsed.email);
+          if (parsed.phone) setSavedPhone(parsed.phone);
+          if (parsed.address) setSavedArea(parsed.address);
+        }
+      } catch (err) {
+        console.warn("Failed loading storage states during checkout completion:", err);
+      }
+    }
+  }, [checkoutStep]);
 
   if (!isOpen) return null;
 
@@ -214,6 +276,7 @@ export default function CartDrawer({
     const currentUserId = auth.currentUser?.uid || "guest";
     const orderId = `order_${Date.now()}`;
     const activeOrderPayload = {
+      id: orderId,
       userId: currentUserId,
       customerName: formData.customerName,
       email: formData.email || "guest@example.com",
@@ -246,6 +309,100 @@ export default function CartDrawer({
     setCheckoutPassword("");
   };
 
+  // Secure OPay checkout route handshake
+  const triggerOpayCheckoutPayment = async () => {
+    if (!formData.customerName || !formData.email || !formData.phone) {
+      setCheckoutError("Customer Name, Email Address, and Phone Number are strictly required to authorize payment.");
+      return;
+    }
+
+    if (formData.type === "delivery" && !formData.address) {
+      setCheckoutError("Delivery address is mandatory for checkout routing.");
+      return;
+    }
+
+    setCheckoutError("");
+
+    try {
+      await handleCheckoutAutoSignup();
+    } catch (signupErr: any) {
+      setCheckoutError(signupErr.message);
+      return;
+    }
+
+    setIsProcessingOpay(true);
+
+    const currentUserId = auth.currentUser?.uid || "guest";
+    const orderId = `order_${Date.now()}`;
+    const activeOrderPayload = {
+      id: orderId,
+      userId: currentUserId,
+      customerName: formData.customerName,
+      email: formData.email || "guest@example.com",
+      phone: formData.phone,
+      totalPrice: finalTotal,
+      items: cartItems.map(item => ({ name: item.name, quantity: item.quantity, price: item.price })),
+      address: formData.type === "delivery" ? `${formData.address}, ${formData.area}` : "Boutique Self-Pickup",
+      status: "Prepping",
+      timestamp: Date.now(),
+      type: formData.type
+    };
+
+    // Store details locally prior to checkout redirection to handle success return receipt smoothly
+    localStorage.setItem("upside_active_order", JSON.stringify(activeOrderPayload));
+
+    // Persist order to Firestore directly from client where user is authenticated to bypass back-end sandbox credentials issues
+    if (auth.currentUser) {
+      try {
+        await setDoc(doc(db, "orders", orderId), activeOrderPayload);
+        console.log(`[OPAY CHECKOUT] Pre-saved order reference ${orderId} to cloud Firestore`);
+      } catch (dbErr) {
+        console.error("[OPAY CHECKOUT CLOUD SAVE] Failed to persist order in Firestore prior to redirect:", dbErr);
+      }
+    }
+
+    try {
+      const response = await fetch("/api/opay/create-payment", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          amount: finalTotal,
+          customerName: formData.customerName,
+          email: formData.email,
+          phone: formData.phone,
+          reference: orderId,
+          type: formData.type,
+          address: activeOrderPayload.address,
+          items: activeOrderPayload.items,
+          userId: currentUserId
+        })
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to contact OPay API gateway successfully.");
+      }
+
+      if (data.success && data.cashierUrl) {
+         logCustomEvent("checkout_attempt", {
+           method: "opay",
+           price: finalTotal,
+           reference: orderId
+         });
+         // Redirect user to secure OPay cashier payment page
+         window.location.href = data.cashierUrl;
+      } else {
+        throw new Error("Invalid checkout payload status returned from OPay gateway server.");
+      }
+    } catch (paymentErr: any) {
+      console.error("OPay initiation error:", paymentErr);
+      setCheckoutError(paymentErr.message || "Network transfer crash. Please check admin keys or retry.");
+      setIsProcessingOpay(false);
+    }
+  };
+
   // Secure Paystack checkout simulation
   const triggerPaystackSimulatedPayment = async () => {
     if (!formData.customerName || !formData.email || !formData.phone) {
@@ -272,6 +429,7 @@ export default function CartDrawer({
     const currentUserId = auth.currentUser?.uid || "guest";
     const orderId = `order_${Date.now()}`;
     const activeOrderPayload = {
+      id: orderId,
       userId: currentUserId,
       customerName: formData.customerName,
       email: formData.email || "guest@example.com",
@@ -339,39 +497,10 @@ export default function CartDrawer({
           </button>
         </div>
 
-        {/* TAB TOGGLE NAVIGATION (Shown only if not in success step to avoid disruption) */}
-        {checkoutStep !== "success" && (
-          <div className="flex border-b border-neutral-200 bg-neutral-100" id="cart-tabs-header-strip">
-            <button
-              onClick={() => setActiveTab("checkout")}
-              className={`w-1/2 py-3.5 text-xs font-mono uppercase tracking-widest font-extrabold text-center transition-all cursor-pointer ${
-                activeTab === "checkout" 
-                  ? "bg-white text-amber-600 border-b-2 border-b-amber-500 font-extrabold" 
-                  : "text-neutral-500 hover:text-black hover:bg-neutral-50"
-              }`}
-            >
-              🛒 CheckOut Basket
-            </button>
-            <button
-              onClick={() => setActiveTab("tracker")}
-              className={`w-1/2 py-3.5 text-xs font-mono uppercase tracking-widest font-extrabold text-center transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                activeTab === "tracker" 
-                  ? "bg-white text-amber-600 border-b-2 border-b-amber-500 font-extrabold" 
-                  : "text-neutral-500 hover:text-black hover:bg-neutral-50"
-              }`}
-            >
-              <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-              🚚 Track My Order
-            </button>
-          </div>
-        )}
-
         {/* MAIN INTERACTIVE DISPLAY VIEW */}
         <div className="flex-grow overflow-y-auto px-6 py-6 space-y-6 bg-white" id="cart-main-body">
 
-          {activeTab === "tracker" ? (
-            <OrderTracker onBackToCart={() => setActiveTab("checkout")} />
-          ) : (
+          {true ? (
             <>
               {/* ================= STEP 1: SHOPPING CART PAGE ================= */}
               {checkoutStep === "cart" && (
@@ -870,11 +999,39 @@ export default function CartDrawer({
                       )}
                     </div>
 
+                    {/* Radio 3: Secure OPay checkout */}
+                    <div className="space-y-2 pt-2 border-t border-neutral-200">
+                      <label className="flex items-center gap-2 cursor-pointer text-black text-[11px] font-mono font-bold select-none">
+                        <input
+                          type="radio"
+                          name="checkoutPaymentMethod"
+                          checked={formData.paymentMethod === "opay"}
+                          onChange={() => setFormData({ ...formData, paymentMethod: "opay" })}
+                          className="w-4 h-4 text-amber-600 bg-white border-neutral-300 focus:ring-amber-500 cursor-pointer"
+                        />
+                        <span className="uppercase text-neutral-800">Pay Securely via OPay</span>
+                        <HelpCircle className="w-3.5 h-3.5 text-amber-600 ml-auto" />
+                      </label>
+                      {formData.paymentMethod === "opay" && (
+                        <div className="bg-white border-l-2 border-amber-500 p-3 text-[10.5px] text-neutral-600 leading-relaxed font-mono animate-fadeIn border border-neutral-200">
+                          Directly initiate an official checkout cashier request on OPay's high-speed checkout servers. Make payment safely via internet wallet balance, cards, or instant bank transfers.
+                        </div>
+                      )}
+                    </div>
+
                     {/* Loading feedback simulation if card paystack is active */}
                     {formData.paymentMethod === "paystack" && isProcessingPaystack && (
                       <div className="text-center py-4 space-y-2 border-t border-neutral-250 pt-4" id="paystack-processing-indicator">
                         <div className="w-6 h-6 border-2 border-amber-500 border-t-transparent rounded-full animate-spin mx-auto" />
                         <p className="text-[10px] uppercase tracking-wider font-mono text-amber-600">Contacting Paystack gateway...</p>
+                      </div>
+                    )}
+
+                    {/* Loading feedback if OPay is active */}
+                    {formData.paymentMethod === "opay" && isProcessingOpay && (
+                      <div className="text-center py-4 space-y-2 border-t border-neutral-250 pt-4" id="opay-processing-indicator">
+                        <div className="w-6 h-6 border-2 border-[#ff6b00] border-t-transparent rounded-full animate-spin mx-auto" />
+                        <p className="text-[10px] uppercase tracking-wider font-mono text-[#ff6b00]">Contacting OPay Gateway Cashier...</p>
                       </div>
                     )}
                   </div>
@@ -921,22 +1078,26 @@ export default function CartDrawer({
                 </div>
                 <div className="flex justify-between text-[11px] text-neutral-500">
                   <span>Guest Name:</span>
-                  <span className="text-black font-semibold">{formData.customerName}</span>
+                  <span className="text-black font-semibold">{savedCustomerName || formData.customerName || "Premium Guest"}</span>
                 </div>
-                {formData.email && (
+                {(savedEmail || formData.email) && (
                   <div className="flex justify-between text-[11px] text-neutral-500">
                     <span>Private Email:</span>
-                    <span className="text-black font-semibold">{formData.email}</span>
+                    <span className="text-black font-semibold">{savedEmail || formData.email}</span>
                   </div>
                 )}
-                <div className="flex justify-between text-[11px] text-neutral-500">
-                  <span>Line Contact:</span>
-                  <span className="text-black font-semibold">{formData.phone}</span>
-                </div>
-                <div className="flex justify-between text-[11px] text-neutral-500">
-                  <span>Selected Area:</span>
-                  <span className="text-black font-semibold">{formData.area}</span>
-                </div>
+                {(savedPhone || formData.phone) && (
+                  <div className="flex justify-between text-[11px] text-neutral-500">
+                    <span>Line Contact:</span>
+                    <span className="text-black font-semibold">{savedPhone || formData.phone}</span>
+                  </div>
+                )}
+                {(savedArea || formData.area) && (
+                  <div className="flex justify-between text-[11px] text-neutral-500">
+                    <span>Delivery Address/Area:</span>
+                    <span className="text-black font-semibold">{savedArea || formData.area}</span>
+                  </div>
+                )}
                 <div className="flex justify-between text-[11px] text-neutral-500">
                   <span>Prep Tracker:</span>
                   <span className="text-amber-600 animate-pulse font-bold uppercase">● Prepping Meals</span>
@@ -947,18 +1108,21 @@ export default function CartDrawer({
                 </div>
                 <div className="flex justify-between text-[11px] text-neutral-500 border-t border-neutral-200 pt-2 font-bold text-black animate-pulse">
                   <span>Grand Total Paid:</span>
-                  <span className="text-amber-600">₦{finalTotal.toLocaleString()}</span>
+                  <span className="text-amber-600">₦{(savedTotalPaid !== null ? savedTotalPaid : finalTotal).toLocaleString()}</span>
                 </div>
               </div>
 
               <button
                 onClick={() => {
-                  setActiveTab("tracker");
+                  onClearCart();
+                  onClose();
+                  setCheckoutStep("cart");
+                  window.location.hash = "#/dashboard";
                 }}
-                className="px-8 py-4 bg-amber-600 text-white font-bold text-xs tracking-widest font-mono uppercase hover:bg-amber-700 transition-colors cursor-pointer w-full text-center shadow-md mb-3 flex items-center justify-center gap-2 animate-pulse"
+                className="px-8 py-4 bg-amber-600 text-white font-bold text-xs tracking-widest font-mono uppercase hover:bg-amber-700 transition-colors cursor-pointer w-full text-center shadow-md mb-3 flex items-center justify-center gap-2"
                 id="cart-track-live-btn"
               >
-                <span>🚀 Track Your Live Food Prep</span>
+                <span>🚀 Open Dashboard Order Tracker</span>
               </button>
 
               <button
@@ -975,7 +1139,7 @@ export default function CartDrawer({
             </div>
           )}
           </>
-          )}
+          ) : null}
 
         </div>
 
@@ -1046,6 +1210,16 @@ export default function CartDrawer({
                     >
                       <CreditCard className="w-4 h-4" />
                       <span>Place Order (₦{finalTotal.toLocaleString()})</span>
+                    </button>
+                  ) : formData.paymentMethod === "opay" ? (
+                    <button
+                      onClick={triggerOpayCheckoutPayment}
+                      disabled={isProcessingOpay}
+                      className="w-2/3 py-4 bg-[#ff6b00] hover:bg-[#e05e00] text-white font-bold text-xs tracking-widest font-mono uppercase transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-40 select-none shadow-md"
+                      id="place-order-opay-btn"
+                    >
+                      <HelpCircle className="w-4 h-4" />
+                      <span>{isProcessingOpay ? "Directing..." : `Pay via OPay (₦${finalTotal.toLocaleString()})`}</span>
                     </button>
                   ) : (
                     <button

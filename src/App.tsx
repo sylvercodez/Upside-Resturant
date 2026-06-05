@@ -74,7 +74,11 @@ export default function App() {
       if (user) {
         const userRef = doc(db, "users", user.uid);
         const emailLower = (user.email || "").toLowerCase().trim();
-        const isAdminEmail = emailLower === "tosinotenaike3@gmail.com" || emailLower === "tobi@gmail.com";
+        const isAdminEmail = 
+          emailLower === "tosinotenaike3@gmail.com" || 
+          emailLower === "tobi@gmail.com" || 
+          emailLower === "mophethecommerce@gmail.com" ||
+          emailLower.includes("mophethecommerce");
         const targetRole = isAdminEmail ? "admin" : "user";
         
         try {
@@ -230,6 +234,23 @@ export default function App() {
       console.warn("Storage syncing error", e);
     }
   }, [favorites]);
+
+  // Detect returning OPay reference callback triggers
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const opayRef = params.get("opay_ref");
+      if (opayRef) {
+        console.log("[UPSIDE FLOW] Caught return OPay URL reference parameter:", opayRef);
+        // Clean sweep cart items
+        setCartItems([]);
+        // Slide open the cart drawer to exhibit order success summary directly
+        setIsCartOpen(true);
+      }
+    } catch (err) {
+      console.warn("OPay redirect catcher crash inside App:", err);
+    }
+  }, []);
 
   // SCROLL ANCHORING MECHANISMS
   const handleScrollToElement = (elementId: string) => {

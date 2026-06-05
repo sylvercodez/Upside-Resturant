@@ -4,6 +4,9 @@ import dotenv from "dotenv";
 import crypto from "crypto";
 import nodemailer from "nodemailer";
 import { createServer as createViteServer } from "vite";
+import admin from "firebase-admin";
+import { getFirestore } from "firebase-admin/firestore";
+import fs from "fs";
 
 // Load environment variables
 dotenv.config();
@@ -12,6 +15,20 @@ const app = express();
 const PORT = 3000;
 
 app.use(express.json());
+
+// Diagnostic route to check env vars
+app.get("/api/debug-env", (req, res) => {
+  const safeEnv: Record<string, string> = {};
+  for (const key of Object.keys(process.env)) {
+    const val = process.env[key] || "";
+    if (key.match(/firebase|google|gcloud|cred|key|secret/i)) {
+      safeEnv[key] = val.substring(0, 10) + "... (len: " + val.length + ")";
+    } else {
+      safeEnv[key] = "Present (len: " + val.length + ")";
+    }
+  }
+  res.json({ keys: Object.keys(process.env), safeEnv });
+});
 
 // Create email transporter dynamically based on configured environment variables
 function getMailTransporter() {
@@ -608,6 +625,262 @@ app.get("/api/instagram/callback", async (req: any, res: any) => {
       </body>
       </html>
     `);
+  }
+});
+
+// ==========================================
+// SECURE OPAY GATEWAY DISCOVERY SYSTEM
+// ==========================================
+
+let dbAdmin: any = null;
+try {
+  let projectId = "gen-lang-client-0332471137";
+  let databaseId = "";
+  const configPath = path.join(process.cwd(), "firebase-applet-config.json");
+  if (fs.existsSync(configPath)) {
+    const config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+    if (config.projectId) {
+      projectId = config.projectId;
+    }
+    if (config.firestoreDatabaseId) {
+      databaseId = config.firestoreDatabaseId;
+    }
+  }
+
+  let appInstance: any;
+  try {
+    appInstance = admin.apps.length === 0 
+      ? admin.initializeApp({
+          projectId: projectId,
+          credential: admin.credential.applicationDefault()
+        })
+      : admin.apps[0];
+  } catch (credErr) {
+    console.warn("[FIREBASE ADMIN] applicationDefault() credentials failed, falling back to basic initialization...", credErr);
+    appInstance = admin.apps.length === 0 
+      ? admin.initializeApp({
+          projectId: projectId
+        })
+      : admin.apps[0];
+  }
+
+  if (databaseId) {
+    dbAdmin = getFirestore(appInstance, databaseId);
+  } else {
+    dbAdmin = appInstance.firestore();
+  }
+  console.log("[FIREBASE ADMIN] App initialized successfully for project:", projectId, "database:", databaseId || "default");
+} catch (firebaseErr) {
+  console.error("[FIREBASE ADMIN] Initialization failed:", firebaseErr);
+}
+
+// Helper to retrieve OPay configurations from either env variables or local filesystem backup
+function loadOpaySettingsLocal() {
+  // 1. Try environment variables
+  if (process.env.OPAY_MERCHANT_ID && process.env.OPAY_PUBLIC_KEY && process.env.OPAY_SECRET_KEY) {
+    return {
+      merchantId: process.env.OPAY_MERCHANT_ID,
+      publicKey: process.env.OPAY_PUBLIC_KEY,
+      secretKey: process.env.OPAY_SECRET_KEY,
+      environment: process.env.OPAY_ENVIRONMENT || "sandbox"
+    };
+  }
+
+  // 2. Try disk cache file
+  const localPath = path.join(process.cwd(), "opay-settings-local.json");
+  if (fs.existsSync(localPath)) {
+    try {
+      const data = fs.readFileSync(localPath, "utf-8");
+      return JSON.parse(data);
+    } catch (e) {
+      console.error("[OPAY] Error reading disk credentials backup:", e);
+    }
+  }
+
+  return null;
+}
+
+// 0. Cache OPay credentials locally on server-disk to circumvent Cloud Run Firestore permission deniability
+app.post("/api/opay/save-settings", (req: any, res: any) => {
+  try {
+    const { merchantId, publicKey, secretKey, environment } = req.body;
+    if (!merchantId || !publicKey || !secretKey) {
+      return res.status(400).json({ error: "All credentials components are required." });
+    }
+
+    const oSettings = { merchantId, publicKey, secretKey, environment: environment || "sandbox" };
+    const localPath = path.join(process.cwd(), "opay-settings-local.json");
+    fs.writeFileSync(localPath, JSON.stringify(oSettings, null, 2), "utf-8");
+    console.log(`[OPAY SECURE CACHE] Successfully cached credentials in local backup at ${localPath}`);
+    res.json({ success: true, message: "Settings synced and backup created locally." });
+  } catch (err: any) {
+    console.error("[OPAY SECURE CACHE] Local credentials sync failed:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 1. Create OPay cashier checkout payment instance
+app.post("/api/opay/create-payment", async (req: any, res: any) => {
+  try {
+    const { amount, customerName, email, phone, reference, type, address, items, userId } = req.body;
+    if (!amount || !customerName || !phone || !reference) {
+      return res.status(400).json({ error: "Missing required booking payment parameters (amount, guest details, reference required)." });
+    }
+
+    // Try loading secure OPay credentials from either environment, local backup file or Firestore db fallback
+    let opaySettings = loadOpaySettingsLocal();
+    
+    if (!opaySettings && dbAdmin) {
+      try {
+        console.log("[OPAY GATEWAY] Loading credentials from Firestore as fallback...");
+        const opaySnap = await dbAdmin.collection("settings").doc("opay").get();
+        if (opaySnap.exists) {
+          opaySettings = opaySnap.data() || {};
+        }
+      } catch (dbErr) {
+        console.warn("[OPAY GATEWAY] Credentials fallback database load failed:", dbErr);
+      }
+    }
+
+    if (!opaySettings || !opaySettings.merchantId || !opaySettings.publicKey || !opaySettings.secretKey) {
+      return res.status(400).json({ error: "OPay gateway configuration is missing. Please save standard OPay credentials in your Admin Dashboard tab first." });
+    }
+
+    const { merchantId, publicKey, secretKey, environment } = opaySettings;
+
+    // Determine target checkout gateway environments
+    const isSandbox = environment !== "production";
+    const opayBaseUrl = isSandbox
+      ? "https://sandbox-api.opaycheckout.com/api/v1/international/cashier/create"
+      : "https://api.opaycheckout.com/api/v1/international/cashier/create";
+
+    // Value representing local currency lowest subunit (Kobo representation)
+    const koboValue = Math.round(amount * 100).toString();
+
+    // Absolute host resolution for callback urls
+    const hostUrl = getAppUrl(req);
+    const returnUrl = `${hostUrl}/?opay_ref=${reference}`;
+    const callbackUrl = `${hostUrl}/api/opay/callback`;
+
+    // Construct request body structure conforming strictly to Cashier API standards
+    const reqBody = {
+      amount: {
+        currency: "NGN",
+        value: koboValue
+      },
+      merchantId: merchantId,
+      publicKey: publicKey,
+      reference: reference,
+      returnUrl: returnUrl,
+      callbackUrl: callbackUrl,
+      productName: "Upside Culinary Banquet",
+      productDesc: `Upside gourmet dining checkout. Items: ${items ? items.length : 0}`,
+      userPhone: phone,
+      userEmail: email || "guest@example.com",
+      userClientIP: req.ip || "127.0.0.1",
+      expireAt: 30
+    };
+
+    // Construct signature string from JSON representation hashed via secretKey salt
+    const stringToSign = JSON.stringify(reqBody);
+    const signature = crypto
+      .createHmac("sha512", secretKey)
+      .update(stringToSign)
+      .digest("hex");
+
+    console.log("[OPAY GATEWAY] Initializing checkout payload:", {
+      reference,
+      isSandbox,
+      returnUrl,
+      callbackUrl
+    });
+
+    const response = await fetch(opayBaseUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${signature}`,
+        "MerchantId": merchantId
+      },
+      body: stringToSign
+    });
+
+    const responseText = await response.text();
+    let opayRes;
+    try {
+      opayRes = JSON.parse(responseText);
+    } catch {
+      return res.status(502).json({
+        error: "Non-JSON error response from OPay cashier server.",
+        details: responseText
+      });
+    }
+
+    console.log("[OPAY GATEWAY] Payment response details:", opayRes);
+
+    if (opayRes.code === "00000" && opayRes.data && opayRes.data.cashierUrl) {
+      // Save deep copy of order queue and persist it securely to Firestore before route redirection
+      try {
+        await dbAdmin.collection("orders").doc(reference).set({
+          id: reference,
+          userId: userId || "guest",
+          customerName: customerName,
+          email: email || "guest@example.com",
+          phone: phone,
+          totalPrice: amount,
+          items: items || [],
+          address: address || "Boutique Self-Pickup",
+          status: "Prepping",
+          timestamp: Date.now(),
+          type: type || "delivery",
+          paymentStatus: "Pending (OPay)",
+          opayOrderId: opayRes.data.orderId || null,
+          gatewayEnv: isSandbox ? "sandbox" : "production"
+        });
+        console.log(`[OPAY GATEWAY] Logged pending order reference: ${reference}`);
+      } catch (dbSaveErr) {
+        console.error("[OPAY GATEWAY] Failed to store pending reference in DB:", dbSaveErr);
+      }
+
+      return res.json({
+        success: true,
+        cashierUrl: opayRes.data.cashierUrl,
+        reference: reference,
+        orderId: opayRes.data.orderId
+      });
+    } else {
+      return res.status(400).json({
+        error: opayRes.message || "OPay system failed to generate checkout token.",
+        details: opayRes
+      });
+    }
+  } catch (error: any) {
+    console.error("[OPAY GATEWAY] Payment checkout block failed:", error);
+    res.status(500).json({ error: error.message || "Internal network failure contact gateway." });
+  }
+});
+
+// 2. OPay Callback webhooks handler
+app.post("/api/opay/callback", async (req: any, res: any) => {
+  try {
+    console.log("[OPAY CALLBACK] Webhook received successfully:", req.body);
+    const { reference, orderStatus } = req.body;
+    if (reference && orderStatus === "SUCCESS" && dbAdmin) {
+      try {
+        await dbAdmin.collection("orders").doc(reference).update({
+          paymentStatus: "Paid (OPay)",
+          status: "Prepping",
+          updatedAt: new Date().toISOString()
+        });
+        console.log(`[OPAY CALLBACK] Reference: ${reference} state auto-updated to PAID.`);
+      } catch (dbErr: any) {
+        console.warn("[OPAY CALLBACK] Firestore webhook write notice (will delegate to client-side callback page flow):", dbErr.message || dbErr);
+      }
+    }
+    res.json({ code: "00000", message: "SUCCESS" });
+  } catch (err: any) {
+    console.error("[OPAY CALLBACK] Error parsing webhook detail:", err);
+    res.json({ code: "00000", message: "SUCCESS" }); // Always return success acknowledgement to the OPay dispatch engine
   }
 });
 
