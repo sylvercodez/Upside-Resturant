@@ -100,8 +100,9 @@ service cloud.firestore {
 
     // User Profiles Rules
     match /users/{userId} {
-      // Allow user themselves or admin to get details
-      allow get: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      // Allow user themselves to get details
+      allow get: if isSignedIn() && request.auth.uid == userId;
+      allow get: if isAdmin();
       
       // Allow only admin to list all users
       allow list: if isAdmin();
@@ -111,20 +112,26 @@ service cloud.firestore {
       allow create: if isSignedIn() 
                     && request.auth.uid == userId
                     && (request.resource.data.role == "user" 
-                        || request.resource.data.email == "tosinotenaike3@gmail.com" 
-                        || request.resource.data.email == "tobi@gmail.com"
+                        || (request.resource.data.keys().hasAll(['email']) && (request.resource.data.email == "tosinotenaike3@gmail.com" || request.resource.data.email == "tobi@gmail.com"))
                         || isAdmin());
 
-      // Update: user can modify their details as long as role remains untouched. Admin can update anything.
+      // Update: user can modify their details as long as role remains untouched.
       allow update: if isSignedIn() 
-                    && (
-                      (request.auth.uid == userId && request.resource.data.role == resource.data.role) 
-                      || (request.auth.uid == userId && (request.resource.data.email == "tosinotenaike3@gmail.com" || request.resource.data.email == "tobi@gmail.com") && request.resource.data.role == "admin")
-                      || isAdmin()
-                    );
+                    && request.auth.uid == userId 
+                    && request.resource.data.role == resource.data.role;
+
+      // Allow bootstrap admin update
+      allow update: if isSignedIn() 
+                    && request.auth.uid == userId 
+                    && (request.resource.data.keys().hasAll(['email']) && (request.resource.data.email == "tosinotenaike3@gmail.com" || request.resource.data.email == "tobi@gmail.com"))
+                    && request.resource.data.role == "admin";
+
+      // Admin can update anything
+      allow update: if isAdmin();
 
       // Admin or owner can delete
-      allow delete: if isAdmin() || (isSignedIn() && request.auth.uid == userId);
+      allow delete: if isSignedIn() && request.auth.uid == userId;
+      allow delete: if isAdmin();
     }
 
     // Menus Collection Rules
@@ -152,6 +159,36 @@ service cloud.firestore {
       
       // Only admin can manage assets
       allow write, create, update, delete: if isAdmin();
+    }
+
+    // Payments Collection Rules: Validate payment document structures
+    function isValidPayment(data) {
+      return data.orderId is string
+          && data.orderId.size() <= 128
+          && data.userId is string
+          && data.userId.size() <= 128
+          && data.amount is number
+          && data.currency is string
+          && data.currency.size() <= 10
+          && data.paymentMethod is string
+          && data.paymentMethod.size() <= 50
+          && data.transactionReference is string
+          && data.transactionReference.size() <= 128
+          && data.paymentStatus is string
+          && data.paymentStatus.size() <= 50;
+    }
+
+    match /payments/{paymentId} {
+      allow get, list: if isSignedIn() && (resource.data.userId == request.auth.uid || isSales());
+      allow create: if isSignedIn() 
+                    && request.resource.data.userId == request.auth.uid 
+                    && isValidId(paymentId)
+                    && isValidPayment(request.resource.data);
+      allow update: if isSignedIn() 
+                    && (
+                      (resource.data.userId == request.auth.uid && request.resource.data.userId == request.auth.uid && isValidPayment(request.resource.data))
+                      || isSales()
+                    );
     }
 
     // Orders Collection Rules

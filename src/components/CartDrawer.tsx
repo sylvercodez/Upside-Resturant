@@ -6,7 +6,7 @@ import { MENU_ITEMS, MenuItem } from "../data/menu";
 import OrderTracker from "./OrderTracker";
 import { createUserWithEmailAndPassword, updateProfile, signInWithEmailAndPassword } from "firebase/auth";
 import { auth, db, handleFirestoreError, OperationType } from "../firebase";
-import { doc, setDoc, updateDoc } from "firebase/firestore";
+import { doc, setDoc, updateDoc, serverTimestamp } from "firebase/firestore";
 
 interface CartDrawerProps {
   isOpen: boolean;
@@ -94,37 +94,126 @@ export default function CartDrawer({
   const [savedPhone, setSavedPhone] = useState<string>("");
   const [savedArea, setSavedArea] = useState<string>("");
 
+  const [pollingStatus, setPollingStatus] = useState<"not_polling" | "polling" | "passed" | "failed" | "cancelled" | "expired" | "timeout">("not_polling");
+  const [pollingError, setPollingError] = useState("");
+  const [oppRef, setOppRef] = useState("");
+
+  const pollPaymentVerification = async (ref: string) => {
+    let attempts = 0;
+    const maxAttempts = 15; // 45 seconds total
+
+    const checkStatus = async () => {
+      try {
+        const response = await fetch("/api/opay/verify-payment", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ reference: ref })
+        });
+        const data = await response.json();
+        console.log("[OPay Verification Polling]", data);
+        if (data.paymentStatus === "PAID") {
+          setPollingStatus("passed");
+          setCheckoutStep("success");
+          onClearCart();
+          
+          // Hydrate success state and synchronize database status securely on Frontend
+          try {
+            await updateDoc(doc(db, "orders", ref), {
+              orderStatus: "paid",
+              paymentStatus: "paid",
+              updatedAt: new Date().toISOString()
+            });
+            await updateDoc(doc(db, "payments", ref), {
+              paymentStatus: "PAID",
+              updatedAt: serverTimestamp()
+            });
+            console.log("[FRONTEND SYNCHRONIZATION] Live order & payment status synced as PAID in client-side Firestore! Ref:", ref);
+          } catch (syncErr) {
+            console.warn("[FRONTEND SYNCHRONIZATION] Could not sync PAID state directly in Client Firestore:", syncErr);
+          }
+
+          try {
+            const savedOrderRaw = localStorage.getItem("upside_active_order");
+            if (savedOrderRaw) {
+              const parsed = JSON.parse(savedOrderRaw);
+              if (parsed.totalPrice) setSavedTotalPaid(parsed.totalPrice);
+              if (parsed.customerName) setSavedCustomerName(parsed.customerName);
+              if (parsed.email) setSavedEmail(parsed.email);
+              if (parsed.phone) setSavedPhone(parsed.phone);
+              if (parsed.address) setSavedArea(parsed.address);
+            }
+          } catch (stErr) {
+            console.warn("Could not load backup order on payment verification passed:", stErr);
+          }
+          return true; // ends loop
+        } else if (data.paymentStatus === "FAILED" || data.paymentStatus === "CANCELLED" || data.paymentStatus === "EXPIRED") {
+          setPollingStatus(data.paymentStatus.toLowerCase() as any);
+          
+          // Synchronize failure statuses securely on Frontend
+          try {
+            await updateDoc(doc(db, "orders", ref), {
+              paymentStatus: data.paymentStatus.toLowerCase(),
+              updatedAt: new Date().toISOString()
+            });
+            await updateDoc(doc(db, "payments", ref), {
+              paymentStatus: data.paymentStatus,
+              updatedAt: serverTimestamp()
+            });
+            console.log(`[FRONTEND SYNCHRONIZATION] Live order & payment status synced to ${data.paymentStatus} in client-side Firestore! Ref:`, ref);
+          } catch (syncErr) {
+            console.warn(`[FRONTEND SYNCHRONIZATION] Could not sync ${data.paymentStatus} state directly in Client Firestore:`, syncErr);
+          }
+
+          if (data.paymentStatus === "FAILED") {
+            setPollingError("OPay processed this transaction, but the payment failed. Please check your bank or card balance and try again.");
+          } else if (data.paymentStatus === "CANCELLED") {
+            setPollingError("The payment transaction was cancelled. If this was a mistake, you can easily retry below.");
+          } else {
+            setPollingError("The checkout session expired. Please start a fresh checkout transaction.");
+          }
+          return true; // ends loop
+        }
+      } catch (pollErr) {
+        console.warn("Retrying status lookup after error:", pollErr);
+      }
+      return false;
+    };
+
+    // First attempt immediately
+    const isDone = await checkStatus();
+    if (isDone) return;
+
+    const intervalId = setInterval(async () => {
+      attempts++;
+      const isDoneNow = await checkStatus();
+      if (isDoneNow || attempts >= maxAttempts) {
+        clearInterval(intervalId);
+        if (attempts >= maxAttempts && !isDoneNow) {
+          setPollingStatus("timeout");
+          setPollingError("We are currently waiting for OPay to confirm your payment. If you've been debited, your order will automatically be processed once OPay sends confirmations. Otherwise, you can retry placing the order below.");
+        }
+      }
+    }, 3000);
+  };
+
   // Auto detect redirect success query reference on mount
   React.useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const opayRef = params.get("opay_ref");
     if (opayRef) {
       console.log("[CART DRAWER] Initializing checkout success screen from callback parameter:", opayRef);
-      setCheckoutStep("success");
+      setOppRef(opayRef);
+      setPollingStatus("polling");
+      pollPaymentVerification(opayRef);
       
-      // Clear url search params cleanly before updating to avoid repeated calls
+      // Clear url search params cleanly
       try {
         const cleanUrl = window.location.protocol + "//" + window.location.host + window.location.pathname;
         window.history.replaceState({}, document.title, cleanUrl);
       } catch (historyErr) {
         console.warn("Could not sweep OPay address query parameters:", historyErr);
-      }
-
-      // Update order payment status in Firestore directly from client side where auth session is valid
-      if (auth.currentUser) {
-        try {
-          updateDoc(doc(db, "orders", opayRef), {
-            paymentStatus: "Paid (OPay)",
-            status: "Prepping",
-            updatedAt: new Date().toISOString()
-          }).then(() => {
-            console.log(`[OPAY CLIENT SUCCESS] Cleanly marked order ${opayRef} as Paid!`);
-          }).catch((err) => {
-            console.error("Failed updating order status in Firestore on success redirect:", err);
-          });
-        } catch (updateErr) {
-          console.error("Failed updating order status in Firestore on success redirect:", updateErr);
-        }
       }
     }
   }, []);
@@ -351,14 +440,36 @@ export default function CartDrawer({
     // Store details locally prior to checkout redirection to handle success return receipt smoothly
     localStorage.setItem("upside_active_order", JSON.stringify(activeOrderPayload));
 
-    // Persist order to Firestore directly from client where user is authenticated to bypass back-end sandbox credentials issues
-    if (auth.currentUser) {
-      try {
-        await setDoc(doc(db, "orders", orderId), activeOrderPayload);
-        console.log(`[OPAY CHECKOUT] Pre-saved order reference ${orderId} to cloud Firestore`);
-      } catch (dbErr) {
-        console.error("[OPAY CHECKOUT CLOUD SAVE] Failed to persist order in Firestore prior to redirect:", dbErr);
-      }
+    // Dynamic self-healing double-write initialization using client credentials on Frontend.
+    // This pre-hydrates Firestore with the exact order schema under the active authenticated session,
+    // avoiding server-side IAM permissions issues securely.
+    try {
+      await setDoc(doc(db, "orders", orderId), {
+        id: orderId,
+        userId: currentUserId,
+        customerName: formData.customerName,
+        email: formData.email || "guest@example.com",
+        phone: formData.phone,
+        totalPrice: finalTotal,
+        items: activeOrderPayload.items,
+        address: activeOrderPayload.address,
+        status: "Prepping", // needed for isValidOrder rules
+        timestamp: Date.now(),
+        type: formData.type
+      });
+
+      await setDoc(doc(db, "payments", orderId), {
+        orderId: orderId,
+        userId: currentUserId,
+        amount: finalTotal,
+        currency: "NGN",
+        paymentMethod: "OPay",
+        transactionReference: orderId,
+        paymentStatus: "PENDING"
+      });
+      console.log("[FRONTEND SYNCHRONIZATION] Pre-persisted order & payment documents successfully! Ref:", orderId);
+    } catch (fsErr: any) {
+      console.warn("[FRONTEND SYNCHRONIZATION] Could not pre-persist Firestore order/payment records:", fsErr.message || fsErr);
     }
 
     try {
@@ -497,10 +608,94 @@ export default function CartDrawer({
           </button>
         </div>
 
+        {/* TAB TOGGLE NAVIGATION (Shown only if not in success step to avoid disruption) */}
+        {checkoutStep !== "success" && (
+          <div className="flex border-b border-neutral-200 bg-neutral-100" id="cart-tabs-header-strip">
+            <button
+              onClick={() => setActiveTab("checkout")}
+              className={`w-1/2 py-3.5 text-xs font-mono uppercase tracking-widest font-extrabold text-center transition-all cursor-pointer ${
+                activeTab === "checkout" 
+                  ? "bg-white text-amber-600 border-b-2 border-b-amber-500 font-extrabold" 
+                  : "text-neutral-500 hover:text-black hover:bg-neutral-50"
+              }`}
+            >
+              🛒 CheckOut Basket
+            </button>
+            <button
+              onClick={() => setActiveTab("tracker")}
+              className={`w-1/2 py-3.5 text-xs font-mono uppercase tracking-widest font-extrabold text-center transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                activeTab === "tracker" 
+                  ? "bg-white text-amber-600 border-b-2 border-b-amber-500 font-extrabold" 
+                  : "text-neutral-500 hover:text-black hover:bg-neutral-50"
+              }`}
+            >
+              <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+              🚚 Track My Order
+            </button>
+          </div>
+        )}
+
         {/* MAIN INTERACTIVE DISPLAY VIEW */}
         <div className="flex-grow overflow-y-auto px-6 py-6 space-y-6 bg-white" id="cart-main-body">
 
-          {true ? (
+          {activeTab === "tracker" ? (
+            <OrderTracker onBackToCart={() => setActiveTab("checkout")} />
+          ) : pollingStatus === "polling" ? (
+            <div className="flex flex-col items-center justify-center p-8 py-16 text-center space-y-6 animate-fade-in" id="opay-polling-screen">
+              <div className="relative flex items-center justify-center">
+                <span className="absolute inline-flex h-20 w-20 animate-ping rounded-full bg-amber-100 opacity-75"></span>
+                <div className="relative w-16 h-16 border-4 border-neutral-100 border-t-amber-600 rounded-full animate-spin animate-duration-1000"></div>
+                <CreditCard className="absolute w-6 h-6 text-amber-600 animate-pulse" />
+              </div>
+              <div className="space-y-2">
+                <h3 className="font-sans font-semibold text-lg text-neutral-900 tracking-tight block">Verifying Payment</h3>
+                <p className="font-sans text-xs text-neutral-500 max-w-sm mx-auto leading-relaxed block">
+                  We are securely communicating with the OPay Business Payment Gateway to verify your transaction status. Please do not close or reload this drawer...
+                </p>
+              </div>
+              <div className="bg-neutral-50 border border-neutral-200 rounded-lg p-3 w-full max-w-xs text-xs font-mono text-neutral-400 block">
+                Ref: {oppRef}
+              </div>
+            </div>
+          ) : (pollingStatus === "failed" || pollingStatus === "cancelled" || pollingStatus === "expired" || pollingStatus === "timeout") ? (
+            <div className="flex flex-col items-center justify-center p-8 py-16 text-center space-y-6 animate-fade-in" id="opay-error-screen">
+              <div className="w-12 h-12 rounded-full bg-rose-50 flex items-center justify-center">
+                <AlertCircle className="w-6 h-6 text-rose-600" />
+              </div>
+              <div className="space-y-2">
+                <h3 className="font-sans font-extrabold text-lg text-neutral-900 tracking-tight block">Payment Unsuccessful</h3>
+                <p className="font-sans text-xs text-neutral-500 max-w-sm mx-auto leading-relaxed block">
+                  {pollingError}
+                </p>
+              </div>
+              <div className="flex flex-col space-y-3 w-full max-w-xs">
+                <button
+                  onClick={() => {
+                    setPollingStatus("not_polling");
+                    setPollingError("");
+                    setCheckoutStep("details");
+                    setFormData(prev => ({
+                      ...prev,
+                      paymentMethod: "opay"
+                    }));
+                  }}
+                  className="w-full bg-neutral-900 text-white font-sans text-xs font-bold py-3 px-4 rounded-lg hover:bg-neutral-850 transition shadow-sm flex items-center justify-center space-x-2 cursor-pointer uppercase tracking-wider"
+                >
+                  <span>Modify / Retry with OPay</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setPollingStatus("not_polling");
+                    setPollingError("");
+                    setCheckoutStep("details");
+                  }}
+                  className="w-full bg-white border border-neutral-200 text-neutral-700 font-sans text-xs font-bold py-2.5 px-4 rounded-lg hover:bg-neutral-50 transition cursor-pointer uppercase tracking-wider"
+                >
+                  Choose Another Method
+                </button>
+              </div>
+            </div>
+          ) : (
             <>
               {/* ================= STEP 1: SHOPPING CART PAGE ================= */}
               {checkoutStep === "cart" && (
@@ -1114,15 +1309,12 @@ export default function CartDrawer({
 
               <button
                 onClick={() => {
-                  onClearCart();
-                  onClose();
-                  setCheckoutStep("cart");
-                  window.location.hash = "#/dashboard";
+                  setActiveTab("tracker");
                 }}
-                className="px-8 py-4 bg-amber-600 text-white font-bold text-xs tracking-widest font-mono uppercase hover:bg-amber-700 transition-colors cursor-pointer w-full text-center shadow-md mb-3 flex items-center justify-center gap-2"
+                className="px-8 py-4 bg-amber-600 text-white font-bold text-xs tracking-widest font-mono uppercase hover:bg-amber-700 transition-colors cursor-pointer w-full text-center shadow-md mb-3 flex items-center justify-center gap-2 animate-pulse"
                 id="cart-track-live-btn"
               >
-                <span>🚀 Open Dashboard Order Tracker</span>
+                <span>🚀 Track Your Live Food Prep</span>
               </button>
 
               <button
@@ -1139,7 +1331,7 @@ export default function CartDrawer({
             </div>
           )}
           </>
-          ) : null}
+          )}
 
         </div>
 

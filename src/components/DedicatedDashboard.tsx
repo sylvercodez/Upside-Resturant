@@ -201,10 +201,28 @@ export default function DedicatedDashboard({
       const unsub = onSnapshot(doc(db, "settings", "opay"), (docSnap) => {
         if (docSnap.exists()) {
           const data = docSnap.data();
-          setOpayMerchantId(data.merchantId || "");
-          setOpayPublicKey(data.publicKey || "");
-          setOpaySecretKey(data.secretKey || "");
-          setOpayEnvironment(data.environment || "sandbox");
+          const mId = data.merchantId || "";
+          const pKey = data.publicKey || "";
+          const sKey = data.secretKey || "";
+          const env = data.environment || "sandbox";
+
+          setOpayMerchantId(mId);
+          setOpayPublicKey(pKey);
+          setOpaySecretKey(sKey);
+          setOpayEnvironment(env);
+
+          // If valid credentials exist in the admin's Firestore document, automatically sync them to .env on load!
+          if (mId && pKey && sKey) {
+            fetch("/api/opay/convert-to-env", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ merchantId: mId, publicKey: pKey, secretKey: sKey, environment: env })
+            }).then(() => {
+              console.log("[AUTO-CONVERT-TO-ENV] Loaded and synchronized OPay credentials with .env on backend process.");
+            }).catch(syncErr => {
+              console.warn("[AUTO-CONVERT-TO-ENV] Onload environment sync failed:", syncErr);
+            });
+          }
         }
       }, (err) => {
         console.warn("Could not fetch OPay config doc:", err);
@@ -220,38 +238,37 @@ export default function DedicatedDashboard({
     setIsOpayLoading(true);
 
     try {
+      const cleanMId = opayMerchantId.trim();
+      const cleanPKey = opayPublicKey.trim();
+      const cleanSKey = opaySecretKey.trim();
+
       await setDoc(doc(db, "settings", "opay"), {
-        merchantId: opayMerchantId.trim(),
-        publicKey: opayPublicKey.trim(),
-        secretKey: opaySecretKey.trim(),
+        merchantId: cleanMId,
+        publicKey: cleanPKey,
+        secretKey: cleanSKey,
         environment: opayEnvironment,
         updatedAt: new Date().toISOString(),
         updatedBy: currentUser?.email || "admin"
       }, { merge: true });
 
-      // Sync and cache configurations securely on the node backend disk to circumvent Cloud Run permission limits
+      // On successful database write, automatically replicate/convert these values to server env securely!
       try {
-        const syncResponse = await fetch("/api/opay/save-settings", {
+        await fetch("/api/opay/convert-to-env", {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json"
-          },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            merchantId: opayMerchantId.trim(),
-            publicKey: opayPublicKey.trim(),
-            secretKey: opaySecretKey.trim(),
+            merchantId: cleanMId,
+            publicKey: cleanPKey,
+            secretKey: cleanSKey,
             environment: opayEnvironment
           })
         });
-        if (!syncResponse.ok) {
-          const syncData = await syncResponse.json();
-          console.warn("[OPAY SECURE CACHE] Sync warning:", syncData.error);
-        }
-      } catch (syncErr) {
-        console.warn("[OPAY SECURE CACHE] Failed to reach localized caching sync endpoint:", syncErr);
+        console.log("[AUTO-CONVERT-TO-ENV] Successfully synchronized manual update with server-side environment!");
+      } catch (envSyncErr) {
+        console.warn("[AUTO-CONVERT-TO-ENV] Manual sync failed:", envSyncErr);
       }
 
-      setOpayActionSuccess("OPay payment credentials configured and saved successfully across cloud and backend repositories!");
+      setOpayActionSuccess("OPay payment credentials configured and saved successfully!");
     } catch (err: any) {
       console.error("Failed to save OPay configuration:", err);
       setOpayActionError(err.message || "Failed to save secure gateway configurations.");

@@ -215,7 +215,9 @@ export default function App() {
     }
   });
 
-  const [isCartOpen, setIsCartOpen] = useState(false);
+  const [isCartOpen, setIsCartOpen] = useState(() => {
+    return typeof window !== "undefined" && new URLSearchParams(window.location.search).has("opay_ref");
+  });
   const [isReservationOpen, setIsReservationOpen] = useState(false);
 
   // Sync state modifications safely with LocalStorage

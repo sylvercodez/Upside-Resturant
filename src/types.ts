@@ -30,7 +30,7 @@ export interface CheckoutDetails {
   type: "delivery" | "pickup";
   address: string;
   area: string;
-  paymentMethod: "paystack" | "whatsapp" | "cash";
+  paymentMethod: "paystack" | "whatsapp" | "cash" | "opay";
   promoCode: string;
   customNotes?: string;
 }
