@@ -61,6 +61,35 @@ export function generateSignature(paramContent: string, timestamp: string, secre
 }
 
 /**
+ * Recursively keys-sorted object for OPay API signature calculation.
+ */
+export function sortOpayObject(value: any): any {
+  if (value === null || value === undefined) {
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return value.map(sortOpayObject);
+  } else if (typeof value === "object") {
+    return Object.keys(value)
+      .sort()
+      .reduce((obj: any, key: string) => {
+        obj[key] = sortOpayObject(value[key]);
+        return obj;
+      }, {});
+  }
+  return value;
+}
+
+/**
+ * Generates standard recursive-sorted JSON payload HMAC-SHA512 signature for OPay API status calls.
+ */
+export function generateOpayApiSignature(payload: any, secretKey: string): string {
+  const sorted = sortOpayObject(payload);
+  const serialized = JSON.stringify(sorted);
+  return crypto.createHmac("sha512", secretKey).update(serialized).digest("hex");
+}
+
+/**
  * Verifies if a callback or webhook payload signature is authentic.
  */
 export function verifyWebhookSignature(paramContent: string, timestamp: string, clientAuthKey: string, secretKey: string): boolean {

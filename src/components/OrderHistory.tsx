@@ -209,16 +209,36 @@ export default function OrderHistory({ onReorderClick, onTrackClick }: OrderHist
                   <div className="space-y-1.5" id={`order-expansion-${order.id}-dishes`}>
                     <p className="text-[9px] text-neutral-500 uppercase tracking-widest font-bold">Dish Selection</p>
                     <div className="space-y-1 text-[11px] text-neutral-300">
-                      {order.items.map((item, idx) => (
-                        <div key={idx} className="flex justify-between items-center bg-[#181818] px-2 py-1.5">
-                          <span>
-                            {item.quantity}x <span className="text-white font-sans">{item.name}</span>
-                          </span>
-                          <span className="text-[10px] text-amber-500">
-                            ₦{(item.price * item.quantity).toLocaleString()}
-                          </span>
-                        </div>
-                      ))}
+                      {(() => {
+                        const items = order.items;
+                        let itemsArray: any[] = [];
+                        if (items) {
+                          if (Array.isArray(items)) {
+                            itemsArray = items;
+                          } else if (typeof items === "string") {
+                            try {
+                              const parsed = JSON.parse(items);
+                              if (Array.isArray(parsed)) {
+                                itemsArray = parsed;
+                              } else if (parsed && typeof parsed === "object") {
+                                itemsArray = Object.values(parsed);
+                              }
+                            } catch (_) {}
+                          } else if (typeof items === "object") {
+                            itemsArray = Object.values(items);
+                          }
+                        }
+                        return itemsArray.map((item: any, idx: number) => (
+                          <div key={idx} className="flex justify-between items-center bg-[#181818] px-2 py-1.5">
+                            <span>
+                              {(item?.quantity || 1)}x <span className="text-white font-sans">{item?.name || "Gourmet Dish"}</span>
+                            </span>
+                            <span className="text-[10px] text-amber-500">
+                              ₦{((item?.price || 5000) * (item?.quantity || 1)).toLocaleString()}
+                            </span>
+                          </div>
+                        ));
+                      })()}
                     </div>
                   </div>
 

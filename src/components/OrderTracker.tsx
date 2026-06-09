@@ -322,12 +322,32 @@ export default function OrderTracker({ onBackToCart, orderId }: OrderTrackerProp
 
             {/* order item summary lines */}
             <div className="bg-neutral-950 p-2.5 space-y-1.5">
-              {activeOrder.items?.map((item: any, idx: number) => (
-                <div key={idx} className="flex justify-between items-center text-[11px] text-neutral-300">
-                  <span className="font-mono">{item.name} <strong className="text-amber-500">×{item.quantity}</strong></span>
-                  <span className="font-mono">₦{((item.price || 5000) * item.quantity).toLocaleString()}</span>
-                </div>
-              ))}
+              {(() => {
+                const items = activeOrder.items;
+                let itemsArray: any[] = [];
+                if (items) {
+                  if (Array.isArray(items)) {
+                    itemsArray = items;
+                  } else if (typeof items === "string") {
+                    try {
+                      const parsed = JSON.parse(items);
+                      if (Array.isArray(parsed)) {
+                        itemsArray = parsed;
+                      } else if (parsed && typeof parsed === "object") {
+                        itemsArray = Object.values(parsed);
+                      }
+                    } catch (_) {}
+                  } else if (typeof items === "object") {
+                    itemsArray = Object.values(items);
+                  }
+                }
+                return itemsArray.map((item: any, idx: number) => (
+                  <div key={idx} className="flex justify-between items-center text-[11px] text-neutral-300">
+                    <span className="font-mono">{item?.name || "Gourmet Dish"} <strong className="text-amber-500">×{item?.quantity || 1}</strong></span>
+                    <span className="font-mono">₦{((item?.price || 5000) * (item?.quantity || 1)).toLocaleString()}</span>
+                  </div>
+                ));
+              })()}
               <div className="border-t border-neutral-850 mt-2 pt-1.5 flex justify-between items-center text-[11px] font-mono text-amber-500 uppercase">
                 <span>Total Package:</span>
                 <span>₦{activeOrder.totalPrice?.toLocaleString() || "12,000"}</span>

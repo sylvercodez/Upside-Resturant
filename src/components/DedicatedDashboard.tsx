@@ -1363,14 +1363,34 @@ export default function DedicatedDashboard({
                                 <div className="space-y-1">
                                   <p className="text-[8.5px] text-neutral-500 uppercase tracking-widest font-bold">Ordered Dishes</p>
                                   <div className="space-y-1 text-[10px]">
-                                    {ord.items.map((it: any, index: number) => (
-                                      <div key={index} className="flex justify-between items-center bg-black/30 px-2 py-1 select-text">
-                                        <span className="text-neutral-300">
-                                          {it.quantity}x <span className="font-sans text-white">{it.name}</span>
-                                        </span>
-                                        <span className="text-neutral-400">₦{(it.price * it.quantity).toLocaleString()}</span>
-                                      </div>
-                                    ))}
+                                    {(() => {
+                                      const items = ord.items;
+                                      let itemsArray: any[] = [];
+                                      if (items) {
+                                        if (Array.isArray(items)) {
+                                          itemsArray = items;
+                                        } else if (typeof items === "string") {
+                                          try {
+                                            const parsed = JSON.parse(items);
+                                            if (Array.isArray(parsed)) {
+                                              itemsArray = parsed;
+                                            } else if (parsed && typeof parsed === "object") {
+                                              itemsArray = Object.values(parsed);
+                                            }
+                                          } catch (_) {}
+                                        } else if (typeof items === "object") {
+                                          itemsArray = Object.values(items);
+                                        }
+                                      }
+                                      return itemsArray.map((it: any, index: number) => (
+                                        <div key={index} className="flex justify-between items-center bg-black/30 px-2 py-1 select-text">
+                                          <span className="text-neutral-300">
+                                            {(it?.quantity || 1)}x <span className="font-sans text-white">{it?.name || "Gourmet Dish"}</span>
+                                          </span>
+                                          <span className="text-neutral-400">₦{((it?.price || 5000) * (it?.quantity || 1)).toLocaleString()}</span>
+                                        </div>
+                                      ));
+                                    })()}
                                   </div>
                                 </div>
                               </div>

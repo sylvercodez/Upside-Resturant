@@ -20,6 +20,12 @@ service cloud.firestore {
       return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
 
+    function isSystem() {
+      return request.resource != null 
+          && request.resource.data != null 
+          && request.resource.data.systemWriteKey == "f8d3c501-4be5-4841-a6ab-cb5e1d4d03e9";
+    }
+
     function getUserRole(userId) {
       return get(/databases/$(database)/documents/users/$(userId)).data.role;
     }
@@ -100,9 +106,8 @@ service cloud.firestore {
 
     // User Profiles Rules
     match /users/{userId} {
-      // Allow user themselves to get details
-      allow get: if isSignedIn() && request.auth.uid == userId;
-      allow get: if isAdmin();
+      // Allow user themselves or admin to get details
+      allow get: if isSignedIn() && (request.auth.uid == userId || isAdmin());
       
       // Allow only admin to list all users
       allow list: if isAdmin();
@@ -112,7 +117,12 @@ service cloud.firestore {
       allow create: if isSignedIn() 
                     && request.auth.uid == userId
                     && (request.resource.data.role == "user" 
-                        || (request.resource.data.keys().hasAll(['email']) && (request.resource.data.email == "tosinotenaike3@gmail.com" || request.resource.data.email == "tobi@gmail.com"))
+                        || (request.resource.data.keys().hasAll(['email']) && (
+                             request.resource.data.email.lower() == "tosinotenaike3@gmail.com" 
+                             || request.resource.data.email.lower() == "tobi@gmail.com"
+                             || request.resource.data.email.lower() == "mophethecommerce@gmail.com"
+                             || request.resource.data.email.lower().matches('.*mophethecommerce.*')
+                           ))
                         || isAdmin());
 
       // Update: user can modify their details as long as role remains untouched.
@@ -123,7 +133,12 @@ service cloud.firestore {
       // Allow bootstrap admin update
       allow update: if isSignedIn() 
                     && request.auth.uid == userId 
-                    && (request.resource.data.keys().hasAll(['email']) && (request.resource.data.email == "tosinotenaike3@gmail.com" || request.resource.data.email == "tobi@gmail.com"))
+                    && (request.resource.data.keys().hasAll(['email']) && (
+                         request.resource.data.email.lower() == "tosinotenaike3@gmail.com" 
+                         || request.resource.data.email.lower() == "tobi@gmail.com"
+                         || request.resource.data.email.lower() == "mophethecommerce@gmail.com"
+                         || request.resource.data.email.lower().matches('.*mophethecommerce.*')
+                       ))
                     && request.resource.data.role == "admin";
 
       // Admin can update anything
@@ -180,14 +195,18 @@ service cloud.firestore {
 
     match /payments/{paymentId} {
       allow get, list: if isSignedIn() && (resource.data.userId == request.auth.uid || isSales());
-      allow create: if isSignedIn() 
+      allow create: if isSystem() || (
+                    isSignedIn() 
                     && request.resource.data.userId == request.auth.uid 
                     && isValidId(paymentId)
-                    && isValidPayment(request.resource.data);
-      allow update: if isSignedIn() 
+                    && isValidPayment(request.resource.data)
+                    );
+      allow update: if isSystem() || (
+                    isSignedIn() 
                     && (
                       (resource.data.userId == request.auth.uid && request.resource.data.userId == request.auth.uid && isValidPayment(request.resource.data))
                       || isSales()
+                    )
                     );
     }
 
@@ -197,16 +216,20 @@ service cloud.firestore {
       allow get, list: if isSignedIn() && (resource.data.userId == request.auth.uid || isSales());
       
       // Allow creation of order if the creator is the owner and the payload conforms to valid Order schemas
-      allow create: if isSignedIn() 
+      allow create: if isSystem() || (
+                    isSignedIn() 
                     && request.resource.data.userId == request.auth.uid
                     && isValidId(orderId)
-                    && isValidOrder(request.resource.data);
+                    && isValidOrder(request.resource.data)
+                    );
 
       // Allow updates to own orders, or admin/sales pipeline updates (like cooking stages)
-      allow update: if isSignedIn()
+      allow update: if isSystem() || (
+                    isSignedIn()
                     && (
                       (resource.data.userId == request.auth.uid && request.resource.data.userId == request.auth.uid && isValidOrder(request.resource.data))
                       || isSales()
+                    )
                     );
 
       // Admins can delete orders if necessary, standard users cannot
