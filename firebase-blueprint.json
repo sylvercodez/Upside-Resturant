@@ -210,9 +210,41 @@
         }
       },
       "required": ["eventType", "timestamp"]
+    },
+    "ShippingArea": {
+      "title": "ShippingArea",
+      "description": "Shipping regions with corresponding delivery fees inside Lagos state",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier of the shipping area matching name slug"
+        },
+        "name": {
+          "type": "string",
+          "description": "The name of the Lagos location"
+        },
+        "fee": {
+          "type": "number",
+          "description": "The custom delivery fee in NGN"
+        },
+        "isMainland": {
+          "type": "boolean",
+          "description": "Whether the location belongs to Lagos Mainland"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "name", "fee"]
     }
   },
   "firestore": {
+    "shipping_areas/{areaId}": {
+      "schema": "ShippingArea",
+      "description": "Shipping regions with corresponding delivery fees inside Lagos State"
+    },
     "settings/{settingId}": {
       "schema": "Setting",
       "description": "Collection of global app system settings, branding, and config"

@@ -228,7 +228,7 @@ export default function ReservationSection({ isOpen, onClose }: ReservationSecti
                 <Shield className="w-4 h-4 text-neutral-400 flex-shrink-0 mt-0.5" />
                 <p>
                   By submitting this request, you acknowledge that holding times are exactly 15 minutes past target slot. 
-                  VIP lounges carry variable minimum spends matching live Afrobeat artist schedules. Email confirmation will instantly propagate.
+                  Specialized lounge spaces may carry variable booking conditions matching live Afrobeat artist schedules. Email confirmation will instantly propagate.
                 </p>
               </div>
 

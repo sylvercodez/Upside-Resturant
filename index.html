@@ -6,6 +6,9 @@
     
     <!-- Primed Local SEO Page Title targeting rank 1-3 in Lagos -->
     <title>Upside Restaurant &amp; Café | Best Fine Dining &amp; Luxury Restaurant in Lagos</title>
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#b45309" />
+    <link rel="apple-touch-icon" href="https://images.unsplash.com/photo-1514933651103-005eec06c04b?auto=format&fit=crop&q=80&w=192" />
     
     <!-- Primary SEO Meta Tags -->
     <meta name="description" content="Savor premium contemporary fine dining, artisanal café craft, and immersive luxury ambiance at Upside Restaurant &amp; Café in Lekki, Lagos. Top-rated choice for gourmet food, romantic dinners, and specialty cocktails." />
@@ -94,5 +97,25 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+    <script>
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then((registrations) => {
+          for (let registration of registrations) {
+            registration.unregister().then((success) => {
+              if (success) console.log('ServiceWorker unregistered successfully.');
+            });
+          }
+        });
+      }
+      if ('caches' in window) {
+        caches.keys().then((keys) => {
+          keys.forEach((key) => {
+            caches.delete(key).then((success) => {
+              if (success) console.log('Cleared cache:', key);
+            });
+          });
+        });
+      }
+    </script>
   </body>
 </html>

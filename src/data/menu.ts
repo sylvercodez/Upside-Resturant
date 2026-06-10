@@ -457,7 +457,7 @@ export const REVIEWS = [
     name: "Funmi. A",
     role: "Vanguard Event Producer",
     rating: 5,
-    text: "We hosted an intimate VIP dinner here and the guests were blown away by the Catfish Pepper Soup and the signature cocktails. Luxury at its most authentic.",
+    text: "We hosted an intimate private dinner here and the guests were blown away by the Catfish Pepper Soup and the signature cocktails. Luxury at its most authentic.",
     date: "May 2026"
   }
 ];

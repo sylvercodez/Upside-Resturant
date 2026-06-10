@@ -265,19 +265,46 @@ export default function DedicatedAuth({
     }
   };
 
-  const handleInstantBypass = async (role: "admin" | "vip") => {
+  const handleInstantBypass = async (role: "admin" | "chef" | "user") => {
     setError("");
     setSuccess("");
     setLoading(true);
     
-    const targetEmail = role === "admin" ? "tosinotenaike3@gmail.com" : "vipmember@gmail.com";
-    const targetPassword = role === "admin" ? "admin123456" : "member123456";
-    const targetName = role === "admin" ? "Tosin Otenaike" : "Elite VIP Member";
+    let targetEmail = "";
+    let targetPassword = "";
+    let targetName = "";
+    
+    if (role === "admin") {
+      targetEmail = "tosinotenaike3@gmail.com";
+      targetPassword = "admin123456";
+      targetName = "Tosin Otenaike";
+    } else if (role === "chef") {
+      targetEmail = "chefmonitor@gmail.com";
+      targetPassword = "chef123456";
+      targetName = "Master Chef Executive";
+    } else {
+      targetEmail = "democlient@gmail.com";
+      targetPassword = "client123456";
+      targetName = "Lobby Demo Client";
+    }
     
     try {
       try {
-        await signInWithEmailAndPassword(auth, targetEmail, targetPassword);
-        setSuccess(`Successfully signed in as ${role === "admin" ? "Administrator" : "VIP Customer"}!`);
+        const userCred = await signInWithEmailAndPassword(auth, targetEmail, targetPassword);
+        // Sync/verify role database node
+        try {
+          const userRef = doc(db, "users", userCred.user.uid);
+          await setDoc(userRef, {
+            uid: userCred.user.uid,
+            email: targetEmail,
+            displayName: targetName,
+            role: role,
+            createdAt: new Date().toISOString()
+          }, { merge: true });
+        } catch (dbErr) {
+          console.warn("Could not sync sandbox role on sign-in:", dbErr);
+        }
+        setSuccess(`Successfully signed in as ${role === "admin" ? "Administrator" : role === "chef" ? "Master Chef" : "Demo Client"}!`);
       } catch (signInErr: any) {
         const errStr = String(signInErr.code || signInErr.message || "").toLowerCase();
         if (errStr.includes("user-not-found") || errStr.includes("invalid-credential") || errStr.includes("invalid-credentials") || errStr.includes("wrong-password")) {
@@ -292,7 +319,20 @@ export default function DedicatedAuth({
             await updateProfile(userCred.user, {
               displayName: targetName
             });
-            setSuccess(`Successfully registered & signed in as ${role === "admin" ? "Administrator" : "VIP Customer"}!`);
+            // Sync role to database
+            try {
+              const userRef = doc(db, "users", userCred.user.uid);
+              await setDoc(userRef, {
+                uid: userCred.user.uid,
+                email: targetEmail,
+                displayName: targetName,
+                role: role,
+                createdAt: new Date().toISOString()
+              });
+            } catch (dbErr) {
+              console.warn("Could not write sandbox role to Firestore:", dbErr);
+            }
+            setSuccess(`Successfully registered & signed in as ${role === "admin" ? "Administrator" : role === "chef" ? "Master Chef" : "Demo Client"}!`);
           } catch (signUpErr: any) {
             const signUpErrStr = String(signUpErr.code || signUpErr.message || "").toLowerCase();
             if (signUpErrStr.includes("already-in-use") || signUpErrStr.includes("already-exists")) {
@@ -692,24 +732,33 @@ export default function DedicatedAuth({
                   </span>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2 text-center">
+                <div className="grid grid-cols-3 gap-2 text-center">
                   <button
                     type="button"
                     onClick={() => handleInstantBypass("admin")}
                     disabled={loading}
-                    className="py-2.5 px-2 bg-amber-50 hover:bg-amber-100/70 border border-amber-200 text-amber-800 text-[10px] font-mono tracking-wider uppercase transition-all duration-300 rounded cursor-pointer flex flex-col justify-center items-center gap-1 hover:shadow-md"
+                    className="py-2 px-1.5 bg-amber-50 hover:bg-amber-100/70 border border-amber-200 text-amber-800 text-[10px] font-mono tracking-wider uppercase transition-all duration-300 rounded cursor-pointer flex flex-col justify-center items-center gap-1 hover:shadow-sm"
                   >
-                    <span className="font-bold">🔑 Admin Gate</span>
-                    <span className="text-[7.5px] text-neutral-500 font-sans tracking-tight leading-none truncate w-full">tosinotenaike3@gmail.com</span>
+                    <span className="font-bold">🔑 Admin</span>
+                    <span className="text-[7px] text-neutral-500 font-mono tracking-tight leading-none truncate w-full">tosinotenaike3...</span>
                   </button>
                   <button
                     type="button"
-                    onClick={() => handleInstantBypass("vip")}
+                    onClick={() => handleInstantBypass("chef")}
                     disabled={loading}
-                    className="py-2.5 px-2 bg-neutral-50 hover:bg-neutral-100 border border-neutral-200 text-neutral-800 text-[10px] font-mono tracking-wider uppercase transition-all duration-300 rounded cursor-pointer flex flex-col justify-center items-center gap-1 hover:shadow-md"
+                    className="py-2 px-1.5 bg-[#fff7ed] hover:bg-[#ffedd5]/70 border border-[#fed7aa] text-[#9a3412] text-[10px] font-mono tracking-wider uppercase transition-all duration-300 rounded cursor-pointer flex flex-col justify-center items-center gap-1 hover:shadow-sm"
                   >
-                    <span className="font-bold">⭐ VIP Member</span>
-                    <span className="text-[7.5px] text-neutral-500 font-sans tracking-tight leading-none truncate w-full font-sans">vipmember@gmail.com</span>
+                    <span className="font-bold">🍳 Chef</span>
+                    <span className="text-[7px] text-neutral-500 font-mono tracking-tight leading-none truncate w-full">chefmonitor...</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleInstantBypass("user")}
+                    disabled={loading}
+                    className="py-2 px-1.5 bg-neutral-50 hover:bg-neutral-100 border border-neutral-200 text-neutral-800 text-[10px] font-mono tracking-wider uppercase transition-all duration-300 rounded cursor-pointer flex flex-col justify-center items-center gap-1 hover:shadow-sm"
+                  >
+                    <span className="font-bold">👤 Client</span>
+                    <span className="text-[7px] text-neutral-500 font-mono tracking-tight leading-none truncate w-full">democlient...</span>
                   </button>
                 </div>
 

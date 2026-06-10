@@ -12,7 +12,7 @@ import DedicatedMenu from "./components/DedicatedMenu";
 import DedicatedExperience from "./components/DedicatedExperience";
 import DedicatedDashboard from "./components/DedicatedDashboard";
 import DedicatedAuth from "./components/DedicatedAuth";
-import { CartItem } from "./types";
+import { CartItem, ShippingLocation, LAGOS_AREAS } from "./types";
 import { MenuItem, MENU_ITEMS, Category, CATEGORIES } from "./data/menu";
 import { getBranding, auth, db } from "./firebase";
 import { User, onAuthStateChanged, signOut } from "firebase/auth";
@@ -24,6 +24,7 @@ export default function App() {
   const [userRole, setUserRole] = useState<string>("user");
   const [allMenuItems, setAllMenuItems] = useState<MenuItem[]>(MENU_ITEMS);
   const [allCategories, setAllCategories] = useState<Category[]>(CATEGORIES);
+  const [shippingLocations, setShippingLocations] = useState<ShippingLocation[]>(LAGOS_AREAS);
 
 
   useEffect(() => {
@@ -69,6 +70,29 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    // Build real-time custom shipping areas observer
+    const q = query(collection(db, "shipping_areas"));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const customAreas: ShippingLocation[] = [];
+      snapshot.forEach((docSnap) => {
+        customAreas.push({ id: docSnap.id, ...docSnap.data() } as ShippingLocation);
+      });
+      
+      // Filter out deleted
+      const nonDeletedCustom = customAreas.filter(item => !item.deleted);
+      const deletedCustomIds = new Set(customAreas.filter(item => item.deleted).map(item => item.id));
+      
+      const customIds = new Set(nonDeletedCustom.map(item => item.id));
+      const filteredStatic = LAGOS_AREAS.filter(item => !customIds.has(item.id) && !deletedCustomIds.has(item.id));
+      
+      setShippingLocations([...filteredStatic, ...nonDeletedCustom]);
+    }, (err) => {
+      console.error("Shipping areas loading snap error:", err);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setCurrentUser(user);
       if (user) {
@@ -82,28 +106,30 @@ export default function App() {
         const targetRole = isAdminEmail ? "admin" : "user";
         
         try {
-          const snap = await getDoc(userRef);
-          if (snap.exists()) {
-            const currentRoleInDb = snap.data().role || "user";
-            if (isAdminEmail && currentRoleInDb !== "admin") {
-              // Auto-correct any legacy record that existed before setting role to admin
-              try {
-                await setDoc(userRef, { role: "admin" }, { merge: true });
-              } catch (writeErr) {
-                console.warn("Could not sync admin role to users collection:", writeErr);
-              }
+          if (isAdminEmail) {
+            setUserRole("admin");
+            // Quietly ensure DB has the admin role synchronized
+            try {
+              await setDoc(userRef, { role: "admin" }, { merge: true });
+            } catch (dbErr) {
+              console.warn("Auto-syncing admin role failed, proceeding with local admin state:", dbErr);
             }
-            setUserRole(targetRole);
           } else {
-            const initialProfile = {
-              uid: user.uid,
-              email: user.email || "",
-              displayName: user.displayName || user.email?.split("@")[0] || "User",
-              role: targetRole,
-              createdAt: new Date().toISOString()
-            };
-            await setDoc(userRef, initialProfile);
-            setUserRole(targetRole);
+            const snap = await getDoc(userRef);
+            if (snap.exists()) {
+              const currentRoleInDb = snap.data().role || "user";
+              setUserRole(currentRoleInDb);
+            } else {
+              const initialProfile = {
+                uid: user.uid,
+                email: user.email || "",
+                displayName: user.displayName || user.email?.split("@")[0] || "User",
+                role: targetRole,
+                createdAt: new Date().toISOString()
+              };
+              await setDoc(userRef, initialProfile);
+              setUserRole(targetRole);
+            }
           }
         } catch (e) {
           console.error("Failed to map / sync user role with db, checking bootstrap:", e);
@@ -131,10 +157,11 @@ export default function App() {
     if (hash === "#/experience" || path === "/experience") return "/experience";
     if (hash === "#/dashboard" || path === "/dashboard") return "/dashboard";
     if (hash === "#/auth" || path === "/auth") return "/auth";
+    if (hash === "#/cart" || path === "/cart") return "/cart";
     return "/";
   });
 
-  const activeView = currentPath === "/menu" ? "menu" : (currentPath === "/experience" ? "experience" : (currentPath === "/dashboard" ? "dashboard" : (currentPath === "/auth" ? "auth" : "landing")));
+  const activeView = currentPath === "/menu" ? "menu" : (currentPath === "/experience" ? "experience" : (currentPath === "/dashboard" ? "dashboard" : (currentPath === "/auth" ? "auth" : (currentPath === "/cart" ? "cart" : "landing"))));
 
   const handleNavigate = (path: string) => {
     window.history.pushState(null, "", path);
@@ -161,6 +188,8 @@ export default function App() {
         setCurrentPath("/dashboard");
       } else if (hash === "#/auth" || path === "/auth") {
         setCurrentPath("/auth");
+      } else if (hash === "#/cart" || path === "/cart") {
+        setCurrentPath("/cart");
       } else {
         setCurrentPath("/");
       }
@@ -308,8 +337,8 @@ export default function App() {
       }
     });
 
-    // Automatically trigger cart slide-over on add to simulate modern app feedback
-    setIsCartOpen(true);
+    // Automatically navigate to standalone cart page on add to simulate modern app feedback
+    handleNavigate("/cart");
   };
 
   // Direct upsell click adder helper
@@ -317,9 +346,28 @@ export default function App() {
     handleAddToCart(item);
   };
 
-  // Reorder past items from VIP Order History into the active basket
-  const handleReorder = (items: { name: string, quantity: number, price: number }[]) => {
-    items.forEach((pastItem) => {
+  // Reorder past items from Order History into the active basket
+  const handleReorder = (itemsInput: any) => {
+    let items: any[] = [];
+    if (Array.isArray(itemsInput)) {
+      items = itemsInput;
+    } else if (itemsInput && typeof itemsInput === "object") {
+      items = Object.values(itemsInput);
+    } else if (typeof itemsInput === "string") {
+      try {
+        const parsed = JSON.parse(itemsInput);
+        if (Array.isArray(parsed)) {
+          items = parsed;
+        } else if (parsed && typeof parsed === "object") {
+          items = Object.values(parsed);
+        }
+      } catch {
+        items = [];
+      }
+    }
+
+    items.forEach((pastItem: any) => {
+      if (!pastItem || !pastItem.name) return;
       const menuItem = MENU_ITEMS.find((m) => m.name.toLowerCase() === pastItem.name.toLowerCase());
       if (menuItem) {
         setCartItems((prev) => {
@@ -343,13 +391,13 @@ export default function App() {
         });
       }
     });
-    setIsCartOpen(true);
+    handleNavigate("/cart");
   };
 
   // Track simulated order status by copying to localStorage and focusing tracker tab
   const handleTrackOrder = (order: any) => {
     localStorage.setItem("upside_active_order", JSON.stringify(order));
-    setIsCartOpen(true);
+    handleNavigate("/dashboard");
   };
 
   // MANAGE ORDER QUANTITIES
@@ -392,7 +440,7 @@ export default function App() {
     <div className="bg-black min-h-screen text-white select-none selection:bg-amber-500 selection:text-black antialiased">
       {/* Luxury Navigation Header */}
       <Header
-        onOpenCart={() => setIsCartOpen(true)}
+        onOpenCart={() => handleNavigate("/cart")}
         onScrollToElement={handleScrollToElement}
         onOpenReservations={() => handleScrollToElement("home-reservation-section")}
         cartCount={cartTotalQuantity}
@@ -480,6 +528,7 @@ export default function App() {
           onTrackOrder={handleTrackOrder}
           onReorder={handleReorder}
           categories={allCategories}
+          shippingLocations={shippingLocations}
         />
       )}
 
@@ -491,8 +540,27 @@ export default function App() {
         />
       )}
 
+      {activeView === "cart" && (
+        <div className="bg-neutral-50 min-h-screen pt-28 pb-12 px-4 text-neutral-900 font-sans" id="dedicated-cart-page">
+          <CartDrawer
+            isOpen={true}
+            onClose={() => handleNavigate("/")}
+            cartItems={cartItems}
+            onUpdateQuantity={handleUpdateQuantity}
+            onRemoveItem={handleRemoveItem}
+            onClearCart={handleClearCart}
+            onAddToCartDirect={handleAddToCartDirect}
+            currentUser={currentUser}
+            onAuthClick={() => handleNavigate("/auth")}
+            menuItems={allMenuItems}
+            isPage={true}
+            shippingLocations={shippingLocations}
+          />
+        </div>
+      )}
+
       {/* LUXURY COMPREHENSIVE FOOTER */}
-      {activeView !== "dashboard" && activeView !== "auth" && (
+      {activeView !== "dashboard" && activeView !== "auth" && activeView !== "cart" && (
         <Footer
           onScrollToElement={handleScrollToElement}
           onOpenReservations={() => handleScrollToElement("home-reservation-section")}
@@ -502,7 +570,7 @@ export default function App() {
 
       {/* MOBILE THUMB NAVIGATION CONTROLS */}
       <BottomNav
-        onOpenCart={() => setIsCartOpen(true)}
+        onOpenCart={() => handleNavigate("/cart")}
         onOpenReservations={() => handleScrollToElement("home-reservation-section")}
         onScrollToElement={handleScrollToElement}
         cartCount={cartTotalQuantity}
@@ -511,20 +579,6 @@ export default function App() {
         onNavigate={handleNavigate}
         currentUser={currentUser}
         onAuthClick={() => handleNavigate("/auth")}
-      />
-
-      {/* SLIDE-OVER CHECKOUT CART DRAWER */}
-      <CartDrawer
-        isOpen={isCartOpen}
-        onClose={() => setIsCartOpen(false)}
-        cartItems={cartItems}
-        onUpdateQuantity={handleUpdateQuantity}
-        onRemoveItem={handleRemoveItem}
-        onClearCart={handleClearCart}
-        onAddToCartDirect={handleAddToCartDirect}
-        currentUser={currentUser}
-        onAuthClick={() => handleNavigate("/auth")}
-        menuItems={allMenuItems}
       />
 
       {/* TABLE RESERVATION ALLOCATION DIALOG */}

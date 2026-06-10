@@ -254,7 +254,7 @@ export default function HomeReservation() {
                   <div className="flex items-start gap-2.5 text-neutral-500 font-mono text-[10px] leading-relaxed pt-2">
                     <Shield className="w-4 h-4 text-amber-500/80 flex-shrink-0 mt-0.5" />
                     <p>
-                      Bespoke VIP accommodations carry dynamic minimum spend limits during live saxophone & acoustic evenings. Confirmation notification dispatches inside SMS channels instantly.
+                      Gourmet accommodations and specialized seating arrangements may involve custom reservations during live saxophone & acoustic evenings. Confirmation notification dispatches inside SMS channels instantly.
                     </p>
                   </div>
 

@@ -167,6 +167,12 @@ service cloud.firestore {
       allow write, create, update, delete: if isAdmin();
     }
 
+    // Shipping Areas Collection Rules
+    match /shipping_areas/{areaId} {
+      allow read, list: if true;
+      allow write, create, update, delete: if isAdmin();
+    }
+
     // Site Image Assets Collection Rules
     match /assets/{assetId} {
       // Assets are publicly readable

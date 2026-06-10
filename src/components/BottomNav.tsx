@@ -58,7 +58,7 @@ export default function BottomNav({
       <button
         onClick={() => currentUser ? (onNavigate && onNavigate("/dashboard")) : (onAuthClick && onAuthClick())}
         className="flex flex-col items-center justify-center gap-1 text-center group cursor-pointer relative"
-        id="mobile-bottomnav-vip-dashboard"
+        id="mobile-bottomnav-account-dashboard"
       >
         <User className={`w-5 h-5 transition-colors ${currentPath === "/dashboard" ? "text-amber-500" : "text-neutral-400 group-hover:text-amber-500"}`} />
         <span className={`text-[9px] font-mono tracking-wider uppercase ${currentPath === "/dashboard" ? "text-amber-500 font-semibold" : "text-neutral-400"}`}>

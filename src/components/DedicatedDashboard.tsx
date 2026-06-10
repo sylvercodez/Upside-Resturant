@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 import { collection, query, updateDoc, doc, onSnapshot, setDoc, deleteDoc } from "firebase/firestore";
 import { db, handleFirestoreError, OperationType } from "../firebase";
+import { ShippingLocation } from "../types";
 
 interface DedicatedDashboardProps {
   currentUser: FirebaseUser | null;
@@ -44,6 +45,7 @@ interface DedicatedDashboardProps {
   onTrackOrder?: (order: any) => void;
   onReorder?: (items: any[]) => void;
   categories?: Category[];
+  shippingLocations?: ShippingLocation[];
 }
 
 const PRESET_IMAGES = [
@@ -69,7 +71,8 @@ export default function DedicatedDashboard({
   onLogout,
   onTrackOrder,
   onReorder,
-  categories
+  categories,
+  shippingLocations = []
 }: DedicatedDashboardProps) {
   const finalMenuItems = menuItems || MENU_ITEMS;
   const displayCategories = categories || CATEGORIES;
@@ -932,7 +935,11 @@ export default function DedicatedDashboard({
   // Filtration logic for global orders pipeline
   const filteredOrders = allOrders.filter(ord => {
     // Stage check
-    if (selectedOrderTab !== "all" && ord.status !== selectedOrderTab) return false;
+    let currentStatus = ord.status || "Prepping";
+    if (currentStatus === "paid" || currentStatus === "pending") {
+      currentStatus = "Prepping";
+    }
+    if (selectedOrderTab !== "all" && currentStatus !== selectedOrderTab) return false;
     
     // Search check
     if (!ordersSearchText.trim()) return true;
@@ -945,10 +952,10 @@ export default function DedicatedDashboard({
   });
 
   return (
-    <div className="bg-[#0b0b0b] min-h-screen text-white pb-24" id="dedicated-dashboard-spa">
+    <div className="bg-white min-h-screen text-neutral-900 pb-24" id="dedicated-dashboard-spa">
       {/* Visual Ambient Banner */}
-      <div className="relative h-64 w-full overflow-hidden bg-neutral-900 border-b border-neutral-800">
-        <div className="absolute inset-0 bg-gradient-to-t from-[#0b0b0b] via-[#0b0b0b]/40 to-black/60 z-10" />
+      <div className="relative h-64 w-full overflow-hidden bg-neutral-900 border-b border-neutral-200">
+        <div className="absolute inset-0 bg-gradient-to-t from-white via-white/40 to-black/60 z-10" />
         
         {/* Decorative image */}
         <img 
@@ -961,7 +968,7 @@ export default function DedicatedDashboard({
         <div className="absolute top-10 left-6 md:left-12 z-20">
           <button
             onClick={onBackToLobby}
-            className="flex items-center gap-2 px-3 py-1.5 bg-black/85 border border-neutral-850 hover:border-amber-500/50 text-neutral-400 hover:text-amber-500 transition-all font-mono text-[9px] uppercase tracking-widest cursor-pointer"
+            className="flex items-center gap-2 px-3 py-1.5 bg-black/85 border border-neutral-800 hover:border-amber-500/50 text-neutral-450 hover:text-amber-500 transition-all font-mono text-[9px] uppercase tracking-widest cursor-pointer"
             id="dashboard-back-lobby-btn"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
@@ -973,13 +980,13 @@ export default function DedicatedDashboard({
         <div className="absolute bottom-6 left-6 md:left-12 z-20 text-left">
           {currentUser && (
             <div className="space-y-1">
-              <span className="text-[10px] tracking-[0.3em] text-amber-500 font-mono font-bold uppercase block">
+              <span className="text-[10px] tracking-[0.3em] text-amber-600 font-mono font-bold uppercase block">
                 {userRole.toUpperCase()} OPERATIONS PORTAL
               </span>
-              <h1 className="text-2xl md:text-3xl font-extrabold font-mono text-white tracking-wide uppercase">
+              <h1 className="text-2xl md:text-3xl font-extrabold font-mono text-neutral-950 tracking-wide uppercase">
                 Welcome back, {currentUser.displayName || currentUser.email?.split("@")[0] || "Staff Member"}
               </h1>
-              <p className="text-xs text-neutral-400 font-mono">
+              <p className="text-xs text-neutral-800 font-mono">
                 {userRole === "admin" && "Total system clearance. You can manage user roles and add menu options dynamically."}
                 {userRole === "sales" && "Review user orders, transition cook pipelines, and handle client dispatch stages."}
                 {userRole === "chef" && "Elite kitchen monitor tracker. Review and update cooking preparations."}
@@ -997,43 +1004,43 @@ export default function DedicatedDashboard({
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" id="account-metrics-dashboard-grid">
               
               {/* Metric 1 */}
-              <div className="bg-[#121212] border border-neutral-850 p-5 flex flex-col justify-between text-left relative overflow-hidden group transition-all">
-                <div className="absolute top-4 right-4 text-neutral-850">
+              <div className="bg-neutral-55 border border-neutral-200 p-5 flex flex-col justify-between text-left relative overflow-hidden group transition-all">
+                <div className="absolute top-4 right-4 text-neutral-300">
                   <UserIcon className="w-8 h-8" />
                 </div>
                 <span className="text-[9px] font-mono tracking-widest text-neutral-500 uppercase block">Profile Clearance</span>
-                <span className="text-sm font-bold font-mono text-amber-500 uppercase mt-4 block">{userRole}</span>
-                <span className="text-[9px] font-mono text-neutral-400 mt-1 block">Account authority level</span>
+                <span className="text-sm font-bold font-mono text-amber-600 uppercase mt-4 block">{userRole}</span>
+                <span className="text-[9px] font-mono text-neutral-500 mt-1 block">Account authority level</span>
               </div>
 
               {/* Metric 2 */}
-              <div className="bg-[#121212] border border-neutral-850 p-5 flex flex-col justify-between text-left relative overflow-hidden group transition-all">
-                <div className="absolute top-4 right-4 text-neutral-850">
+              <div className="bg-neutral-55 border border-neutral-200 p-5 flex flex-col justify-between text-left relative overflow-hidden group transition-all">
+                <div className="absolute top-4 right-4 text-neutral-300">
                   <ShoppingBag className="w-8 h-8" />
                 </div>
                 <span className="text-[9px] font-mono tracking-widest text-neutral-500 uppercase block">Wishlist Bookmarks</span>
-                <span className="text-2xl font-black font-mono text-white mt-4 block">{favorites.length} <span className="text-xs font-normal text-neutral-400">ITEM(S)</span></span>
-                <span className="text-[9px] font-mono text-neutral-400 mt-1 block">Custom personal choices</span>
+                <span className="text-2xl font-black font-mono text-neutral-900 mt-4 block">{favorites.length} <span className="text-xs font-normal text-neutral-500">ITEM(S)</span></span>
+                <span className="text-[9px] font-mono text-neutral-500 mt-1 block">Custom personal choices</span>
               </div>
 
               {/* Metric 3 */}
-              <div className="bg-[#121212] border border-neutral-850 p-5 flex flex-col justify-between text-left relative overflow-hidden group transition-all">
-                <div className="absolute top-4 right-4 text-neutral-850">
+              <div className="bg-neutral-55 border border-neutral-200 p-5 flex flex-col justify-between text-left relative overflow-hidden group transition-all">
+                <div className="absolute top-4 right-4 text-neutral-300">
                   <Utensils className="w-8 h-8" />
                 </div>
                 <span className="text-[9px] font-mono tracking-widest text-neutral-500 uppercase block">Preferred Taste</span>
-                <span className="text-sm font-bold font-mono text-amber-500 uppercase truncate mt-4 block">{getFavCategory()}</span>
-                <span className="text-[9px] font-mono text-neutral-400 mt-1 block">Most wishlisted category</span>
+                <span className="text-sm font-bold font-mono text-amber-600 uppercase truncate mt-4 block">{getFavCategory()}</span>
+                <span className="text-[9px] font-mono text-neutral-500 mt-1 block">Most wishlisted category</span>
               </div>
 
               {/* Metric 4 */}
-              <div className="bg-[#121212] border border-neutral-850 p-5 flex flex-col justify-between text-left relative overflow-hidden group transition-all">
-                <div className="absolute top-4 right-4 text-neutral-850">
+              <div className="bg-neutral-55 border border-neutral-200 p-5 flex flex-col justify-between text-left relative overflow-hidden group transition-all">
+                <div className="absolute top-4 right-4 text-neutral-300">
                   <Compass className="w-8 h-8" />
                 </div>
                 <span className="text-[9px] font-mono tracking-widest text-neutral-500 uppercase block">Database Network</span>
-                <span className="text-xs font-bold font-mono text-emerald-400 uppercase mt-4 block">Connected Live</span>
-                <span className="text-[9px] font-mono text-neutral-450 mt-1 block">Zero delay client syncs</span>
+                <span className="text-xs font-bold font-mono text-emerald-600 uppercase mt-4 block">Connected Live</span>
+                <span className="text-[9px] font-mono text-neutral-500 mt-1 block">Zero delay client syncs</span>
               </div>
             </div>
 
@@ -1044,14 +1051,14 @@ export default function DedicatedDashboard({
               <div className="lg:col-span-12 space-y-6">
                 
                 {/* Visual Premium Unified Tab Switcher Navigation */}
-                <div className="flex flex-wrap gap-1 border-b border-neutral-850 bg-neutral-900/40 p-1 font-mono">
+                <div className="flex flex-wrap gap-1 border-b border-neutral-200 bg-neutral-150 p-1 font-mono">
                   {/* Standard Tabs */}
                   <button
                     onClick={() => setActiveTab("history")}
                     className={`px-6 py-3 text-xs tracking-wider uppercase font-bold text-center transition-all cursor-pointer flex items-center gap-1.5 ${
                       activeTab === "history"
                         ? "bg-amber-600 text-white"
-                        : "text-neutral-500 hover:text-neutral-300 hover:bg-[#151515]"
+                        : "text-neutral-600 hover:text-neutral-900 hover:bg-neutral-200"
                     }`}
                   >
                     📜 My Orders ({userRole === "user" ? "Client" : "Personal"})
@@ -1061,7 +1068,7 @@ export default function DedicatedDashboard({
                     className={`px-6 py-3 text-xs tracking-wider uppercase font-bold text-center transition-all cursor-pointer flex items-center gap-1.5 ${
                       activeTab === "wishlist"
                         ? "bg-amber-600 text-white"
-                        : "text-neutral-500 hover:text-neutral-300 hover:bg-[#151515]"
+                        : "text-neutral-600 hover:text-neutral-900 hover:bg-neutral-200"
                     }`}
                   >
                     💖 Wishlist ({favorites.length})
@@ -1071,7 +1078,7 @@ export default function DedicatedDashboard({
                     className={`px-6 py-3 text-xs tracking-wider uppercase font-bold text-center transition-all cursor-pointer flex items-center gap-1.5 ${
                       activeTab === "tracker"
                         ? "bg-amber-600 text-white"
-                        : "text-neutral-500 hover:text-neutral-300 hover:bg-[#151515]"
+                        : "text-neutral-600 hover:text-neutral-900 hover:bg-neutral-200"
                     }`}
                   >
                     🚚 Order Tracker
@@ -1084,7 +1091,7 @@ export default function DedicatedDashboard({
                       className={`px-6 py-3 text-xs tracking-wider uppercase font-bold text-center transition-all cursor-pointer flex items-center gap-1.5 ${
                         activeTab === "orders_pipeline"
                           ? "bg-amber-600 text-white border-l-2 border-amber-400"
-                          : "text-amber-500 hover:text-amber-400 hover:bg-amber-950/10"
+                          : "text-amber-600 hover:text-amber-500 hover:bg-amber-100"
                       }`}
                     >
                       🛍️ Orders Pipeline ({allOrders.length})
@@ -1099,7 +1106,7 @@ export default function DedicatedDashboard({
                         className={`px-6 py-3 text-xs tracking-wider uppercase font-bold text-center transition-all cursor-pointer flex items-center gap-1.5 ${
                           activeTab === "users_panel"
                             ? "bg-amber-600 text-white"
-                            : "text-neutral-400 hover:text-neutral-200 hover:bg-[#151515]"
+                            : "text-neutral-600 hover:text-neutral-900 hover:bg-neutral-200"
                         }`}
                       >
                         👥 User Directory ({allUsers.length})
@@ -1109,7 +1116,7 @@ export default function DedicatedDashboard({
                         className={`px-6 py-3 text-xs tracking-wider uppercase font-bold text-center transition-all cursor-pointer flex items-center gap-1.5 ${
                           activeTab === "menus_panel"
                             ? "bg-amber-600 text-white"
-                            : "text-neutral-400 hover:text-neutral-200 hover:bg-[#151515]"
+                            : "text-neutral-600 hover:text-neutral-900 hover:bg-neutral-200"
                         }`}
                       >
                         🍜 Dynamic Menu Manager
@@ -1119,7 +1126,7 @@ export default function DedicatedDashboard({
                         className={`px-6 py-3 text-xs tracking-wider uppercase font-bold text-center transition-all cursor-pointer flex items-center gap-1.5 ${
                           activeTab === "categories_panel"
                             ? "bg-amber-600 text-white"
-                            : "text-neutral-400 hover:text-neutral-200 hover:bg-[#151515]"
+                            : "text-neutral-600 hover:text-neutral-900 hover:bg-neutral-200"
                         }`}
                       >
                         📂 Category Manager
@@ -1129,7 +1136,7 @@ export default function DedicatedDashboard({
                         className={`px-6 py-3 text-xs tracking-wider uppercase font-bold text-center transition-all cursor-pointer flex items-center gap-1.5 ${
                           activeTab === "images_panel"
                             ? "bg-amber-600 text-white"
-                            : "text-neutral-400 hover:text-neutral-200 hover:bg-[#151515]"
+                            : "text-neutral-600 hover:text-neutral-900 hover:bg-neutral-200"
                         }`}
                       >
                         🖼️ Image Library ({customImages.length + PRESET_IMAGES.length})
@@ -1139,7 +1146,7 @@ export default function DedicatedDashboard({
                         className={`px-6 py-3 text-xs tracking-wider uppercase font-bold text-center transition-all cursor-pointer flex items-center gap-1.5 ${
                           activeTab === "instagram_panel"
                             ? "bg-amber-600 text-white"
-                            : "text-neutral-400 hover:text-neutral-200 hover:bg-[#151515]"
+                            : "text-neutral-600 hover:text-neutral-900 hover:bg-neutral-200"
                         }`}
                       >
                         📸 Instagram Integration
@@ -1149,17 +1156,28 @@ export default function DedicatedDashboard({
                         className={`px-6 py-3 text-xs tracking-wider uppercase font-bold text-center transition-all cursor-pointer flex items-center gap-1.5 ${
                           activeTab === "opay_panel"
                             ? "bg-amber-600 text-white"
-                            : "text-neutral-400 hover:text-neutral-200 hover:bg-[#151515]"
+                            : "text-neutral-600 hover:text-neutral-900 hover:bg-neutral-200"
                         }`}
                       >
                         💳 OPay Gateway Settings
+                      </button>
+                      <button
+                        onClick={() => setActiveTab("shipping_panel")}
+                        className={`px-6 py-3 text-xs tracking-wider uppercase font-bold text-center transition-all cursor-pointer flex items-center gap-1.5 ${
+                          activeTab === "shipping_panel"
+                            ? "bg-amber-600 text-white"
+                            : "text-neutral-600 hover:text-neutral-900 hover:bg-neutral-200"
+                        }`}
+                        id="tab-btn-shipping-manager"
+                      >
+                        🚚 Delivery Locations
                       </button>
                       <button
                         onClick={() => setActiveTab("analytics_panel")}
                         className={`px-6 py-3 text-xs tracking-wider uppercase font-bold text-center transition-all cursor-pointer flex items-center gap-1.5 ${
                           activeTab === "analytics_panel"
                             ? "bg-amber-600 text-white"
-                            : "text-neutral-300 hover:text-neutral-200 hover:bg-[#151515]"
+                            : "text-neutral-600 hover:text-neutral-900 hover:bg-neutral-200"
                         }`}
                       >
                         📊 Analytics & Conversions
@@ -1170,7 +1188,7 @@ export default function DedicatedDashboard({
 
                 {/* TAB 1: USER ORDER HISTORY */}
                 {activeTab === "history" && (
-                  <div className="bg-[#121212] border border-neutral-850 p-6 space-y-4" id="dashboard-history-tab">
+                  <div className="bg-white border border-neutral-200 p-6 space-y-4" id="dashboard-history-tab">
                     <OrderHistory 
                       onTrackClick={(order) => {
                         setTrackedOrderId(order.id);
@@ -1323,6 +1341,11 @@ export default function DedicatedDashboard({
                             minute: "2-digit"
                           });
 
+                          let ordStatus = ord.status || "Prepping";
+                          if (ordStatus === "paid" || ordStatus === "pending") {
+                            ordStatus = "Prepping";
+                          }
+
                           return (
                             <div 
                               key={ord.id} 
@@ -1338,7 +1361,7 @@ export default function DedicatedDashboard({
                                     {formattedDate}
                                   </span>
                                   <span className="px-2 py-0.5 bg-neutral-900 text-amber-500 font-mono text-[9px] uppercase tracking-wider font-extrabold border border-neutral-800">
-                                    {ord.status.toUpperCase()}
+                                    {ordStatus.toUpperCase()}
                                   </span>
                                   <span className="text-[9px] text-neutral-500 uppercase">
                                     {ord.type}
@@ -1408,10 +1431,10 @@ export default function DedicatedDashboard({
                                   {/* Multi Action buttons for fast logistic clicks */}
                                   <div className="flex flex-col gap-1 text-[9px] uppercase font-bold tracking-wider">
                                     <button
-                                      disabled={ord.status === "Prepping"}
+                                      disabled={ordStatus === "Prepping"}
                                       onClick={() => handleSetOrderStatus(ord.id, "Prepping")}
                                       className={`py-1.5 px-2.5 text-center border cursor-pointer ${
-                                        ord.status === "Prepping" 
+                                        ordStatus === "Prepping" 
                                           ? "bg-amber-600/15 text-amber-500 border-amber-500/20" 
                                           : "bg-neutral-900 border-neutral-800 text-neutral-400 hover:text-white"
                                       }`}
@@ -1419,10 +1442,10 @@ export default function DedicatedDashboard({
                                       Prepping
                                     </button>
                                     <button
-                                      disabled={ord.status === "In Oven"}
+                                      disabled={ordStatus === "In Oven"}
                                       onClick={() => handleSetOrderStatus(ord.id, "In Oven")}
                                       className={`py-1.5 px-2.5 text-center border cursor-pointer ${
-                                        ord.status === "In Oven" 
+                                        ordStatus === "In Oven" 
                                           ? "bg-amber-600/15 text-amber-500 border-amber-500/20" 
                                           : "bg-neutral-900 border-neutral-800 text-neutral-400 hover:text-white"
                                       }`}
@@ -1430,10 +1453,10 @@ export default function DedicatedDashboard({
                                       In Oven
                                     </button>
                                     <button
-                                      disabled={ord.status === "Out for Delivery"}
+                                      disabled={ordStatus === "Out for Delivery"}
                                       onClick={() => handleSetOrderStatus(ord.id, "Out for Delivery")}
                                       className={`py-1.5 px-2.5 text-center border cursor-pointer ${
-                                        ord.status === "Out for Delivery" 
+                                        ordStatus === "Out for Delivery" 
                                           ? "bg-amber-600/15 text-amber-500 border-amber-500/20" 
                                           : "bg-neutral-900 border-neutral-800 text-neutral-400 hover:text-white"
                                       }`}
@@ -1441,10 +1464,10 @@ export default function DedicatedDashboard({
                                       Out for Delivery
                                     </button>
                                     <button
-                                      disabled={ord.status === "Delivered"}
+                                      disabled={ordStatus === "Delivered"}
                                       onClick={() => handleSetOrderStatus(ord.id, "Delivered")}
                                       className={`py-1.5 px-2.5 text-center border cursor-pointer ${
-                                        ord.status === "Delivered" 
+                                        ordStatus === "Delivered" 
                                           ? "bg-emerald-600/15 text-emerald-400 border-emerald-500/25 font-extrabold" 
                                           : "bg-neutral-900 border-neutral-800 text-neutral-400 hover:text-emerald-400"
                                       }`}
@@ -2528,6 +2551,185 @@ export default function DedicatedDashboard({
                             </button>
                           </div>
                         </form>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {userRole === "admin" && activeTab === "shipping_panel" && (
+                  <div className="bg-[#121212] border border-neutral-850 p-6 space-y-6 text-left" id="dashboard-shipping-tab">
+                    <div className="flex flex-col gap-1.5 border-b border-neutral-800 pb-4">
+                      <h2 className="text-lg font-bold font-mono text-white tracking-wider uppercase flex items-center gap-2 animate-fadeIn">
+                        🚚 Lagos Delivery Locations & Fees
+                      </h2>
+                      <p className="text-[11px] text-neutral-400 font-sans leading-relaxed">
+                        Customize where you operate in Lagos State. Standard guidelines state operations are restricted only to Lagos Island areas and specific places on the Mainland.
+                      </p>
+                    </div>
+
+                    {/* Quick alert banner for mainland guidelines */}
+                    <div className="bg-amber-900/10 border border-amber-800/30 p-3 text-[11px] font-mono text-amber-500/90 leading-relaxed flex items-start gap-2">
+                      <span className="text-sm">⚠️</span>
+                      <div>
+                        <span className="font-bold">Operational Scope Info:</span> We only operate in Lagos Island neighborhoods (Ikoyi, V.I., Lekki, Banana Island) and designated Mainland neighborhoods (Ikeja, Gbagada, etc.) to ensure rapid gourmet express delivery.
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                      {/* Left: Add / Edit Option Form */}
+                      <div className="lg:col-span-4 bg-black border border-neutral-850 p-4 space-y-4 rounded">
+                        <h3 className="text-xs font-mono font-bold text-amber-500 uppercase tracking-widest border-b border-neutral-850 pb-2">
+                          Add / Edit Location
+                        </h3>
+
+                        <form className="space-y-4 text-xs font-mono" onSubmit={async (e) => {
+                          e.preventDefault();
+                          const target = e.currentTarget;
+                          const name = (target.elements.namedItem("locationName") as HTMLInputElement).value.trim();
+                          const fee = Number((target.elements.namedItem("locationFee") as HTMLInputElement).value);
+                          const isMainland = (target.elements.namedItem("locationType") as HTMLSelectElement).value === "mainland";
+
+                          if (!name || isNaN(fee) || fee < 0) {
+                            alert("Please provide a valid location name and positive delivery fee.");
+                            return;
+                          }
+
+                          // Slugify name for consistent id
+                          const id = name.toLowerCase().replace(/[^a-z0-9]/g, "-").replace(/-+/g, "-").trim();
+                          if (!id) return;
+
+                          try {
+                            const docRef = doc(db, "shipping_areas", id);
+                            await setDoc(docRef, {
+                              id,
+                              name,
+                              fee,
+                              isMainland,
+                              deleted: false,
+                              createdAt: new Date().toISOString()
+                            });
+                            target.reset();
+                          } catch (err) {
+                            console.error("Failed saving delivery location:", err);
+                            alert("Failed to save delivery location. Please ensure you are logged in with Admin privileges.");
+                          }
+                        }}>
+                          <div className="space-y-1">
+                            <label className="text-[10px] text-neutral-400 uppercase">Neighborhood Name *</label>
+                            <input
+                              type="text"
+                              name="locationName"
+                              required
+                              placeholder="E.g., Surulere, Yaba, Victoria Island"
+                              className="w-full bg-neutral-900 border border-neutral-800 text-white font-mono text-xs px-3 py-2 focus:outline-none focus:border-amber-500 transition-all rounded"
+                            />
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="text-[10px] text-neutral-400 uppercase">Delivery Fee (₦) *</label>
+                            <input
+                              type="number"
+                              name="locationFee"
+                              required
+                              placeholder="E.g., 4000"
+                              className="w-full bg-neutral-900 border border-neutral-800 text-white font-mono text-xs px-3 py-2 focus:outline-none focus:border-amber-500 transition-all rounded"
+                            />
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="text-[10px] text-neutral-400 uppercase">Region classification *</label>
+                            <select
+                              name="locationType"
+                              className="w-full bg-neutral-900 border border-neutral-800 text-white font-mono text-xs px-3 py-2 focus:outline-none focus:border-amber-500 transition-all rounded"
+                            >
+                              <option value="island">🏝️ Lagos Island</option>
+                              <option value="mainland">🏢 Lagos Mainland</option>
+                            </select>
+                          </div>
+
+                          <button
+                            type="submit"
+                            className="w-full py-2.5 bg-amber-600 hover:bg-amber-500 text-black font-extrabold uppercase tracking-wider text-[10px] transition-all rounded cursor-pointer"
+                          >
+                            ✓ Save Location Options
+                          </button>
+                        </form>
+                      </div>
+
+                      {/* Right: Existing Locations List with dynamically loaded state */}
+                      <div className="lg:col-span-8 bg-black/40 border border-neutral-850 p-4 space-y-4 rounded">
+                        <div className="flex justify-between items-center border-b border-neutral-850 pb-2">
+                          <h3 className="text-xs font-mono font-bold text-neutral-300 uppercase tracking-widest">
+                            Available Shipping Options ({shippingLocations.length})
+                          </h3>
+                        </div>
+
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left border-collapse font-mono text-xs">
+                            <thead>
+                              <tr className="border-b border-neutral-800 text-[10px] text-neutral-400 uppercase">
+                                <th className="pb-2 font-bold tracking-wider">Neighborhood</th>
+                                <th className="pb-2 font-bold tracking-wider">Zone</th>
+                                <th className="pb-2 font-bold tracking-wider text-right">Delivery Fee</th>
+                                <th className="pb-2 font-bold tracking-wider text-right">Manage</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {shippingLocations.map((locItem) => {
+                                return (
+                                  <tr key={locItem.id} className="border-b border-neutral-900/60 hover:bg-neutral-900/30">
+                                    <td className="py-3 font-semibold text-white">{locItem.name}</td>
+                                    <td className="py-3">
+                                      <span className={`px-2 py-0.5 rounded text-[9px] uppercase font-bold ${
+                                        locItem.isMainland 
+                                          ? "bg-blue-900/20 text-blue-400 border border-blue-800/30" 
+                                          : "bg-teal-900/20 text-teal-400 border border-teal-800/30"
+                                      }`}>
+                                        {locItem.isMainland ? "🏢 Mainland" : "🏝️ Island"}
+                                      </span>
+                                    </td>
+                                    <td className="py-3 text-right font-bold text-amber-500">
+                                      ₦{locItem.fee.toLocaleString()}
+                                    </td>
+                                    <td className="py-3 text-right">
+                                      <button
+                                        onClick={async () => {
+                                          if (confirm(`Are you sure you want to remove ${locItem.name} from shipping locations?`)) {
+                                            try {
+                                              // Mark as deleted in Firestore
+                                              const docRef = doc(db, "shipping_areas", locItem.id);
+                                              await setDoc(docRef, {
+                                                id: locItem.id,
+                                                name: locItem.name,
+                                                fee: locItem.fee,
+                                                isMainland: locItem.isMainland || false,
+                                                deleted: true,
+                                                createdAt: new Date().toISOString()
+                                              });
+                                            } catch (err) {
+                                              console.error("Failed to remove shipping area:", err);
+                                              alert("Could not remove shipping location. Ensure you have admin access.");
+                                            }
+                                          }
+                                        }}
+                                        className="py-1 px-2.5 bg-red-950 hover:bg-red-900 text-red-500 hover:text-red-400 text-[9px] uppercase font-bold transition-all rounded border border-red-900/50 cursor-pointer"
+                                      >
+                                        Delete
+                                      </button>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                              {shippingLocations.length === 0 && (
+                                <tr>
+                                  <td colSpan={4} className="py-8 text-center text-neutral-500 text-xs">
+                                    No shipping locations populated. Restoring system defaults...
+                                  </td>
+                                </tr>
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
                       </div>
                     </div>
                   </div>

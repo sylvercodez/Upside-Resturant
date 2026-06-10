@@ -181,8 +181,16 @@ export default function AdminAnalyticsPanel() {
 
   // Filter orders based on date range selected by user
   const dateFilteredOrders = orders.filter((ord) => {
-    if (!ord.timestamp) return false;
-    const orderTime = Number(ord.timestamp);
+    if (!ord.timestamp && !ord.createdAt) return false;
+    let orderTime = 0;
+    if (typeof ord.timestamp === "number") {
+      orderTime = ord.timestamp;
+    } else if (typeof ord.timestamp === "string") {
+      orderTime = new Date(ord.timestamp).getTime() || 0;
+    } else if (ord.createdAt) {
+      orderTime = new Date(ord.createdAt).getTime() || 0;
+    }
+    if (!orderTime) return false;
     const now = new Date().getTime();
 
     if (dateRangePreset === "today") {
@@ -261,8 +269,16 @@ export default function AdminAnalyticsPanel() {
   // ================= RECHARTS: Daily Revenue Trend Calculation =================
   const revenueMap: Record<string, { date: string; revenue: number; ordersCount: number; timestamp: number }> = {};
   dateFilteredOrders.forEach((ord) => {
-    if (!ord.timestamp) return;
-    const d = new Date(Number(ord.timestamp));
+    let orderTime = 0;
+    if (typeof ord.timestamp === "number") {
+      orderTime = ord.timestamp;
+    } else if (typeof ord.timestamp === "string") {
+      orderTime = new Date(ord.timestamp).getTime() || 0;
+    } else if (ord.createdAt) {
+      orderTime = new Date(ord.createdAt).getTime() || 0;
+    }
+    if (!orderTime) return;
+    const d = new Date(orderTime);
     const dateKey = d.toLocaleDateString("en-GB", {
       day: "2-digit",
       month: "short"
@@ -287,8 +303,25 @@ export default function AdminAnalyticsPanel() {
   // ================= RECHARTS: Popular Food Items Sold Calculation =================
   const itemsMap: Record<string, { name: string; quantity: number; revenue: number }> = {};
   dateFilteredOrders.forEach((ord) => {
-    const items = ord.items || [];
-    items.forEach((it: any) => {
+    let items = ord.items;
+    if (!items) {
+      items = [];
+    } else if (typeof items === "string") {
+      try {
+        items = JSON.parse(items);
+      } catch {
+        items = [];
+      }
+    }
+
+    let itemsArray: any[] = [];
+    if (Array.isArray(items)) {
+      itemsArray = items;
+    } else if (items && typeof items === "object") {
+      itemsArray = Object.values(items);
+    }
+
+    itemsArray.forEach((it: any) => {
       const name = it.name || "Unknown Dish";
       const qty = Number(it.quantity || 0);
       const price = Number(it.price || 0);

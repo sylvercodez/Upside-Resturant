@@ -1,0 +1,22 @@
+{
+  "short_name": "Upside",
+  "name": "Upside Restaurant & Café",
+  "description": "Premium luxury restaurant and café eCommerce platform with instant ordering, reservation booking, and fine dining hospitality in Lagos.",
+  "icons": [
+    {
+      "src": "https://images.unsplash.com/photo-1514933651103-005eec06c04b?auto=format&fit=crop&q=80&w=192",
+      "sizes": "192x192",
+      "type": "image/jpeg"
+    },
+    {
+      "src": "https://images.unsplash.com/photo-1514933651103-005eec06c04b?auto=format&fit=crop&q=80&w=512",
+      "sizes": "512x512",
+      "type": "image/jpeg"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#ffffff",
+  "theme_color": "#b45309",
+  "display": "standalone",
+  "orientation": "portrait"
+}

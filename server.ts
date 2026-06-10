@@ -898,6 +898,7 @@ export async function initializeOpayPayment(paymentData: {
         address: paymentData.address || "Boutique Self-Pickup",
         orderStatus: "pending",
         paymentStatus: "pending",
+        status: "Prepping",
         transactionReference: paymentData.orderId,
         paymentMethod: "OPay",
         timestamp: Date.now(),

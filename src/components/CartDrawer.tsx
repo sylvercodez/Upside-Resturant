@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { X, Trash2, Ticket, ArrowRight, ShoppingCart, MessageSquare, Check, CreditCard, Sparkles, Minus, Plus, AlertCircle, HelpCircle } from "lucide-react";
-import { CartItem, CheckoutDetails, PromoCode, AVAILABLE_PROMOS, LAGOS_AREAS } from "../types";
+import { CartItem, CheckoutDetails, PromoCode, AVAILABLE_PROMOS, LAGOS_AREAS, ShippingLocation } from "../types";
 import { logCustomEvent } from "../utils/analytics";
 import { MENU_ITEMS, MenuItem } from "../data/menu";
 import OrderTracker from "./OrderTracker";
@@ -19,6 +19,8 @@ interface CartDrawerProps {
   currentUser?: any;
   onAuthClick?: () => void;
   menuItems?: MenuItem[];
+  isPage?: boolean;
+  shippingLocations?: ShippingLocation[];
 }
 
 export default function CartDrawer({
@@ -31,9 +33,11 @@ export default function CartDrawer({
   onAddToCartDirect,
   currentUser,
   onAuthClick,
-  menuItems
+  menuItems,
+  isPage = false,
+  shippingLocations = []
 }: CartDrawerProps) {
-  const [activeTab, setActiveTab] = useState<"checkout" | "tracker">("checkout");
+  const [activeTab, setActiveTab] = useState<"checkout">("checkout");
   const [promoInput, setPromoInput] = useState("");
   const [activePromo, setActivePromo] = useState<PromoCode | null>(null);
   const [promoError, setPromoError] = useState("");
@@ -53,14 +57,10 @@ export default function CartDrawer({
     }
   }, [currentUser]);
 
-  // Auto-switch to tracker tab if open and an active order is present during navigation events
+  // Log cart view metrics
   React.useEffect(() => {
     if (isOpen) {
       logCustomEvent("cart_view", { itemsCount: cartItems.length });
-      const saved = localStorage.getItem("upside_active_order");
-      if (saved) {
-        setActiveTab("tracker");
-      }
     }
   }, [isOpen]);
 
@@ -78,7 +78,7 @@ export default function CartDrawer({
     type: "delivery",
     address: "",
     area: "Lekki Phase 1",
-    paymentMethod: "paystack",
+    paymentMethod: "opay",
     promoCode: "",
     customNotes: ""
   });
@@ -117,6 +117,32 @@ export default function CartDrawer({
           setPollingStatus("passed");
           setCheckoutStep("success");
           onClearCart();
+
+          // Log conversion / transaction analysis
+          try {
+            const savedOrderRaw = localStorage.getItem("upside_active_order");
+            let analyticPrice = finalTotal;
+            let analyticItemsCount = cartItems.length;
+            let analyticType = formData.type || "delivery";
+            if (savedOrderRaw) {
+              const parsed = JSON.parse(savedOrderRaw);
+              if (parsed.totalPrice) analyticPrice = parsed.totalPrice;
+              if (parsed.items) {
+                analyticItemsCount = Array.isArray(parsed.items) 
+                  ? parsed.items.length 
+                  : Object.keys(parsed.items).length;
+              }
+              if (parsed.type) analyticType = parsed.type;
+            }
+            logCustomEvent("checkout_success", {
+              price: analyticPrice,
+              itemsCount: analyticItemsCount,
+              type: analyticType,
+              method: "opay"
+            });
+          } catch (analyticsLogErr) {
+            console.warn("OPay checkout success analytics logging failed:", analyticsLogErr);
+          }
           
           // Hydrate success state and synchronize database status securely on Frontend
           try {
@@ -239,9 +265,22 @@ export default function CartDrawer({
 
   if (!isOpen) return null;
 
+  // Determining active dynamic locations list
+  const locationsList = (shippingLocations && shippingLocations.length > 0) ? shippingLocations : LAGOS_AREAS;
+
+  // Dynamically align selected area with first available valid area if list shifts
+  React.useEffect(() => {
+    if (formData.type === "delivery" && locationsList.length > 0) {
+      const isAreaValid = locationsList.some((a) => a.name === formData.area);
+      if (!isAreaValid) {
+        setFormData(prev => ({ ...prev, area: locationsList[0].name }));
+      }
+    }
+  }, [locationsList, formData.type, formData.area]);
+
   // Pricing & Logistics Calculators
   const subtotal = cartItems.reduce((acc, curr) => acc + curr.price * curr.quantity, 0);
-  const activeDeliveryArea = LAGOS_AREAS.find((a) => a.name === formData.area);
+  const activeDeliveryArea = locationsList.find((a) => a.name === formData.area);
   const deliveryFee = formData.type === "delivery" ? (activeDeliveryArea?.fee || 3500) : 0;
   const discountAmount = activePromo ? Math.round((subtotal * activePromo.discountPercentage) / 100) : 0;
   const finalTotal = subtotal + deliveryFee - discountAmount;
@@ -472,23 +511,30 @@ export default function CartDrawer({
       console.warn("[FRONTEND SYNCHRONIZATION] Could not pre-persist Firestore order/payment records:", fsErr.message || fsErr);
     }
 
+    const opayPayload = {
+      amount: finalTotal,
+      customerName: formData.customerName,
+      email: formData.email,
+      phone: formData.phone,
+      reference: orderId,
+      type: formData.type,
+      address: activeOrderPayload.address,
+      items: activeOrderPayload.items,
+      userId: currentUserId
+    };
+
+    console.log("=================== OPAY DEBUG PAYLOAD LOGGER ===================");
+    console.log("Exact payload structure being transmitted to /api/opay/create-payment API:");
+    console.log(JSON.stringify(opayPayload, null, 2));
+    console.log("=================================================================");
+
     try {
       const response = await fetch("/api/opay/create-payment", {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
         },
-        body: JSON.stringify({
-          amount: finalTotal,
-          customerName: formData.customerName,
-          email: formData.email,
-          phone: formData.phone,
-          reference: orderId,
-          type: formData.type,
-          address: activeOrderPayload.address,
-          items: activeOrderPayload.items,
-          userId: currentUserId
-        })
+        body: JSON.stringify(opayPayload)
       });
 
       const data = await response.json();
@@ -581,66 +627,46 @@ export default function CartDrawer({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-black/40 backdrop-blur-sm" id="cart-overlay-wrapper">
+    <div 
+      className={isPage ? "w-full max-w-4xl mx-auto flex flex-col justify-between" : "fixed inset-0 z-50 flex justify-end bg-black/40 backdrop-blur-sm"} 
+      id={isPage ? "cart-page-container" : "cart-overlay-wrapper"}
+    >
       <div 
-        className={`bg-white border-l border-neutral-200 w-full h-full flex flex-col justify-between shadow-2xl overflow-hidden transition-all duration-300 ${
+        className={isPage ? "bg-white border border-neutral-200 w-full flex flex-col justify-between shadow-sm overflow-hidden rounded-xl min-h-[650px] relative text-neutral-900" : `bg-white border-l border-neutral-200 w-full h-full flex flex-col justify-between shadow-2xl overflow-hidden transition-all duration-300 ${
           checkoutStep === "details" ? "max-w-2xl" : "max-w-lg"
         }`}
         id="cart-drawer-container"
       >
-        
         {/* HEADER BRAND BAR */}
         <div className="p-6 border-b border-neutral-200 flex items-center justify-between bg-neutral-50" id="cart-header-ribbon">
           <div className="flex items-center gap-2">
             <ShoppingCart className="w-5 h-5 text-amber-600" />
             <h3 className="text-sm font-mono tracking-widest uppercase font-bold text-neutral-900">
-              {checkoutStep === "cart" && "YOUR SHOPPING CART"}
+              {checkoutStep === "cart" && "YOUR SHOPPING BASKET"}
               {checkoutStep === "details" && "WOOCOMMERCE SECURE CHECKOUT"}
               {checkoutStep === "success" && "ORDER TRANSACTION COMPLETED"}
             </h3>
           </div>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-neutral-150 text-neutral-500 hover:text-black rounded-full transition-colors cursor-pointer"
+            className={isPage ? "px-3 py-1.5 hover:bg-neutral-100 text-neutral-600 hover:text-black hover:border-neutral-300 border border-neutral-200 rounded-none transition-all cursor-pointer flex items-center gap-1.5 text-[10px] font-mono tracking-widest font-bold uppercase" : "p-2 hover:bg-neutral-150 text-neutral-500 hover:text-black rounded-full transition-colors cursor-pointer"}
             id="close-cart-drawer-btn"
           >
-            <X className="w-5 h-5" />
+            {isPage ? (
+              <>
+                <X className="w-3.5 h-3.5" />
+                <span>EXIT CART</span>
+              </>
+            ) : (
+              <X className="w-5 h-5" />
+            )}
           </button>
         </div>
 
-        {/* TAB TOGGLE NAVIGATION (Shown only if not in success step to avoid disruption) */}
-        {checkoutStep !== "success" && (
-          <div className="flex border-b border-neutral-200 bg-neutral-100" id="cart-tabs-header-strip">
-            <button
-              onClick={() => setActiveTab("checkout")}
-              className={`w-1/2 py-3.5 text-xs font-mono uppercase tracking-widest font-extrabold text-center transition-all cursor-pointer ${
-                activeTab === "checkout" 
-                  ? "bg-white text-amber-600 border-b-2 border-b-amber-500 font-extrabold" 
-                  : "text-neutral-500 hover:text-black hover:bg-neutral-50"
-              }`}
-            >
-              🛒 CheckOut Basket
-            </button>
-            <button
-              onClick={() => setActiveTab("tracker")}
-              className={`w-1/2 py-3.5 text-xs font-mono uppercase tracking-widest font-extrabold text-center transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                activeTab === "tracker" 
-                  ? "bg-white text-amber-600 border-b-2 border-b-amber-500 font-extrabold" 
-                  : "text-neutral-500 hover:text-black hover:bg-neutral-50"
-              }`}
-            >
-              <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-              🚚 Track My Order
-            </button>
-          </div>
-        )}
-
         {/* MAIN INTERACTIVE DISPLAY VIEW */}
-        <div className="flex-grow overflow-y-auto px-6 py-6 space-y-6 bg-white" id="cart-main-body">
+        <div className="flex-grow overflow-y-auto px-6 py-6 space-y-6 bg-white text-neutral-950" id="cart-main-body">
 
-          {activeTab === "tracker" ? (
-            <OrderTracker onBackToCart={() => setActiveTab("checkout")} />
-          ) : pollingStatus === "polling" ? (
+          {pollingStatus === "polling" ? (
             <div className="flex flex-col items-center justify-center p-8 py-16 text-center space-y-6 animate-fade-in" id="opay-polling-screen">
               <div className="relative flex items-center justify-center">
                 <span className="absolute inline-flex h-20 w-20 animate-ping rounded-full bg-amber-100 opacity-75"></span>
@@ -978,7 +1004,7 @@ export default function CartDrawer({
                           className="w-full bg-white border border-neutral-300 text-black font-mono text-xs px-4 py-3 focus:outline-none focus:border-amber-500 transition-all font-semibold rounded-none"
                         />
                         {currentUser ? (
-                          <span className="text-[10px] text-emerald-600 font-mono font-bold mt-1 block">⭐ Logged in as VIP guest</span>
+                          <span className="text-[10px] text-emerald-600 font-mono font-bold mt-1 block">⭐ Logged in as {currentUser.displayName || currentUser.email || "Client"}</span>
                         ) : (
                           <span className="text-[9px] text-neutral-400 font-mono block mt-1">Not logged in. Join below or proceed as guest.</span>
                         )}
@@ -1033,9 +1059,9 @@ export default function CartDrawer({
                             onChange={handleDetailsInputChange}
                             className="w-full bg-white border border-neutral-300 text-black font-mono text-xs px-4 py-3 focus:outline-none focus:border-amber-500 transition-all font-bold rounded-none"
                           >
-                            {LAGOS_AREAS.map((area) => (
-                              <option key={area.name} value={area.name} className="bg-white text-black">
-                                {area.name} (Delivery Fee: ₦{area.fee.toLocaleString()})
+                            {locationsList.map((area) => (
+                              <option key={area.id || area.name} value={area.name} className="bg-white text-black">
+                                {area.name} (Delivery Fee: ₦{area.fee.toLocaleString()}) {area.isMainland ? "— [Mainland]" : "— [Island]"}
                               </option>
                             ))}
                           </select>
@@ -1154,28 +1180,8 @@ export default function CartDrawer({
                       Secured Payment Gateways
                     </h4>
 
-                    {/* Radio 1: Secure Paystack Portal */}
-                    <div className="space-y-2">
-                      <label className="flex items-center gap-2 cursor-pointer text-black text-[11px] font-mono font-bold select-none">
-                        <input
-                          type="radio"
-                          name="checkoutPaymentMethod"
-                          checked={formData.paymentMethod === "paystack"}
-                          onChange={() => setFormData({ ...formData, paymentMethod: "paystack" })}
-                          className="w-4 h-4 text-amber-600 bg-white border-neutral-300 focus:ring-amber-500 cursor-pointer"
-                        />
-                        <span className="uppercase text-neutral-800">Standard Card / Bank Transfer</span>
-                        <CreditCard className="w-3.5 h-3.5 text-amber-600 ml-auto" />
-                      </label>
-                      {formData.paymentMethod === "paystack" && (
-                        <div className="bg-white border-l-2 border-amber-500 p-3 text-[10.5px] text-neutral-600 leading-relaxed font-mono animate-fadeIn border border-neutral-200">
-                          Make your payment directly via premium sandbox Paystack client supporting credit card channels, USSD tokens, and commercial banking transfers. Processing completes instantly.
-                        </div>
-                      )}
-                    </div>
-
                     {/* Radio 2: WhatsApp Manual integration */}
-                    <div className="space-y-2 pt-2 border-t border-neutral-200">
+                    <div className="space-y-2">
                       <label className="flex items-center gap-2 cursor-pointer text-black text-[11px] font-mono font-bold select-none">
                         <input
                           type="radio"
@@ -1393,17 +1399,7 @@ export default function CartDrawer({
                   >
                     Back to Cart
                   </button>
-                  {formData.paymentMethod === "paystack" ? (
-                    <button
-                      onClick={triggerPaystackSimulatedPayment}
-                      disabled={isProcessingPaystack}
-                      className="w-2/3 py-4 bg-black hover:bg-neutral-900 text-white font-bold text-xs tracking-widest font-mono uppercase transition-colors flex items-center justify-center gap-2 cursor-pointer disabled:opacity-40 select-none transition-all shadow-md"
-                      id="place-order-paystack-btn"
-                    >
-                      <CreditCard className="w-4 h-4" />
-                      <span>Place Order (₦{finalTotal.toLocaleString()})</span>
-                    </button>
-                  ) : formData.paymentMethod === "opay" ? (
+                  {formData.paymentMethod === "opay" ? (
                     <button
                       onClick={triggerOpayCheckoutPayment}
                       disabled={isProcessingOpay}

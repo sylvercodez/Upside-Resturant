@@ -17,7 +17,7 @@ export interface Reservation {
   date: string;
   time: string;
   guests: number;
-  seatingArea: "Standard" | "VIP Lounge" | "Terrace Garden" | "Bar Counter";
+  seatingArea: "Standard" | "Executive Lounge" | "Terrace Garden" | "Bar Counter";
   specialOccasion?: string;
   specialRequests?: string;
   status: "pending" | "confirmed";
@@ -47,12 +47,20 @@ export const AVAILABLE_PROMOS: PromoCode[] = [
   { code: "KAFE2026", discountPercentage: 20, description: "20% special discount on premium bakery & coffee" }
 ];
 
-export const LAGOS_AREAS = [
-  { name: "Ikoyi", fee: 3500 },
-  { name: "Victoria Island", fee: 3000 },
-  { name: "Lekki Phase 1", fee: 4000 },
-  { name: "Lekki Phase 2", fee: 4500 },
-  { name: "Banana Island", fee: 5000 },
-  { name: "Ikeja GRA", fee: 6000 },
-  { name: "Maryland / Gbagada", fee: 5500 }
+export interface ShippingLocation {
+  id: string;
+  name: string;
+  fee: number;
+  isMainland?: boolean;
+  deleted?: boolean;
+}
+
+export const LAGOS_AREAS: ShippingLocation[] = [
+  { id: "ikoyi", name: "Ikoyi", fee: 3500, isMainland: false },
+  { id: "victoria-island", name: "Victoria Island", fee: 3000, isMainland: false },
+  { id: "lekki-1", name: "Lekki Phase 1", fee: 4000, isMainland: false },
+  { id: "lekki-2", name: "Lekki Phase 2", fee: 4500, isMainland: false },
+  { id: "banana-island", name: "Banana Island", fee: 5000, isMainland: false },
+  { id: "ikeja-gra", name: "Ikeja GRA", fee: 6000, isMainland: true },
+  { id: "gbagada", name: "Maryland / Gbagada", fee: 5500, isMainland: true }
 ];
