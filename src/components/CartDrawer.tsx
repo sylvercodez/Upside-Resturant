@@ -643,7 +643,7 @@ export default function CartDrawer({
             <ShoppingCart className="w-5 h-5 text-amber-600" />
             <h3 className="text-sm font-mono tracking-widest uppercase font-bold text-neutral-900">
               {checkoutStep === "cart" && "YOUR SHOPPING BASKET"}
-              {checkoutStep === "details" && "WOOCOMMERCE SECURE CHECKOUT"}
+              {checkoutStep === "details" && "SECURE CHECKOUT"}
               {checkoutStep === "success" && "ORDER TRANSACTION COMPLETED"}
             </h3>
           </div>
@@ -949,7 +949,7 @@ export default function CartDrawer({
                         formData.type === "delivery" ? "bg-black text-white font-bold" : "bg-neutral-50 text-neutral-600 hover:bg-neutral-100"
                       }`}
                     >
-                      Gourmet Delivery
+                       Delivery
                     </button>
                     <button
                       type="button"
@@ -958,7 +958,7 @@ export default function CartDrawer({
                         formData.type === "pickup" ? "bg-black text-white font-bold" : "bg-neutral-50 text-neutral-600 hover:bg-neutral-100"
                       }`}
                     >
-                      Boutique Self-Pickup
+                       Self-Pickup
                     </button>
                   </div>
 
