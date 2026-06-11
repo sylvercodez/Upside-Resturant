@@ -56,7 +56,7 @@ export interface ShippingLocation {
 }
 
 export const LAGOS_AREAS: ShippingLocation[] = [
-  { id: "ikoyi", name: "Ikoyi", fee: 3500, isMainland: false },
+  { id: "ikoyi", name: "Ikoyi", fee: 0, isMainland: false },
   { id: "victoria-island", name: "Victoria Island", fee: 3000, isMainland: false },
   { id: "lekki-1", name: "Lekki Phase 1", fee: 4000, isMainland: false },
   { id: "lekki-2", name: "Lekki Phase 2", fee: 4500, isMainland: false },

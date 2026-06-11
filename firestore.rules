@@ -106,8 +106,11 @@ service cloud.firestore {
 
     // User Profiles Rules
     match /users/{userId} {
-      // Allow user themselves or admin to get details
-      allow get: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      // Allow user themselves to get details
+      allow get: if isSignedIn() && request.auth.uid == userId;
+
+      // Allow admin to get anyone's details
+      allow get: if isAdmin();
       
       // Allow only admin to list all users
       allow list: if isAdmin();
@@ -200,7 +203,13 @@ service cloud.firestore {
     }
 
     match /payments/{paymentId} {
-      allow get, list: if isSignedIn() && (resource.data.userId == request.auth.uid || isSales());
+      // Standard users can list/get their own payments (optimized, no exists/get lookups)
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow get: if isSignedIn() && resource.data.userId == request.auth.uid;
+
+      // Sales/Admin staff can list/get all payments
+      allow list: if isSales();
+      allow get: if isSales();
       allow create: if isSystem() || (
                     isSignedIn() 
                     && request.resource.data.userId == request.auth.uid 
@@ -218,8 +227,13 @@ service cloud.firestore {
 
     // Orders Collection Rules
     match /orders/{orderId} {
-      // Allow list and get options to owner or sales/admin staff
-      allow get, list: if isSignedIn() && (resource.data.userId == request.auth.uid || isSales());
+      // Standard users can list/get their own orders (optimized, no exists/get lookups)
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow get: if isSignedIn() && resource.data.userId == request.auth.uid;
+
+      // Sales/Admin staff can list/get all orders
+      allow list: if isSales();
+      allow get: if isSales();
       
       // Allow creation of order if the creator is the owner and the payload conforms to valid Order schemas
       allow create: if isSystem() || (

@@ -98,23 +98,58 @@
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
     <script>
-      if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.getRegistrations().then((registrations) => {
-          for (let registration of registrations) {
-            registration.unregister().then((success) => {
-              if (success) console.log('ServiceWorker unregistered successfully.');
-            });
-          }
-        });
-      }
-      if ('caches' in window) {
-        caches.keys().then((keys) => {
-          keys.forEach((key) => {
-            caches.delete(key).then((success) => {
-              if (success) console.log('Cleared cache:', key);
+      function performTotalPurge() {
+        console.log('[CACHE CLEAR] Initiating complete cache, service worker, and storage purge...');
+        
+        // 1. Unregister all service workers
+        if ('serviceWorker' in navigator) {
+          navigator.serviceWorker.getRegistrations().then((registrations) => {
+            for (let registration of registrations) {
+              registration.unregister().then((success) => {
+                if (success) console.log('[CACHE CLEAR] ServiceWorker unregistered successfully.');
+              });
+            }
+          });
+        }
+        
+        // 2. Clear all cache instances in CacheStorage
+        if ('caches' in window) {
+          caches.keys().then((keys) => {
+            keys.forEach((key) => {
+              caches.delete(key).then((success) => {
+                if (success) console.log('[CACHE CLEAR] Deleted cache store:', key);
+              });
             });
           });
-        });
+        }
+        
+        // 3. Clear LocalStorage and SessionStorage to wipe any corrupted or outdated state
+        try {
+          localStorage.clear();
+          sessionStorage.clear();
+          localStorage.setItem('upside_cache_purged_marker_v5', 'true');
+          console.log('[CACHE CLEAR] LocalStorage and SessionStorage cleared.');
+        } catch (e) {
+          console.error('[CACHE CLEAR] Failed to purge storage:', e);
+        }
+
+        // 4. Perform a clean hard redirect back to the home path to fetch fresh client assets
+        const cleanUrl = window.location.origin + window.location.pathname;
+        console.log('[CACHE CLEAR] Triggering hard page reload to:', cleanUrl);
+        window.location.replace(cleanUrl);
+      }
+
+      // Check if we need to execute a total purge
+      try {
+        const urlParams = new URLSearchParams(window.location.search);
+        const forceReset = urlParams.has('clearCache') || urlParams.get('clear') === 'true' || urlParams.get('clearCache') === 'true';
+        const hasBeenPurged = localStorage.getItem('upside_cache_purged_marker_v5') === 'true';
+
+        if (forceReset || !hasBeenPurged) {
+          performTotalPurge();
+        }
+      } catch (err) {
+        console.error('[CACHE CHECK] Error evaluating cache status:', err);
       }
     </script>
   </body>
