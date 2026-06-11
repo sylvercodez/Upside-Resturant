@@ -10,6 +10,7 @@ import {
   User as FirebaseUser
 } from "firebase/auth";
 import { doc, setDoc } from "firebase/firestore";
+import { getApiUrl } from "../types";
 
 interface DedicatedAuthProps {
   currentUser: FirebaseUser | null;
@@ -40,7 +41,7 @@ export default function DedicatedAuth({
 
   // Load SMTP status check on mount
   useEffect(() => {
-    fetch("/api/otp/status")
+    fetch(getApiUrl("/api/otp/status"))
       .then(async (res) => {
         const contentType = res.headers.get("content-type");
         if (contentType && contentType.includes("application/json")) {
@@ -139,7 +140,7 @@ export default function DedicatedAuth({
       }
 
       // Trigger secure OTP routing to verify the user owns the email address
-      const res = await fetch("/api/otp/request", {
+      const res = await fetch(getApiUrl("/api/otp/request"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ target: email })
@@ -188,7 +189,7 @@ export default function DedicatedAuth({
     
     setLoading(true);
     try {
-      const res = await fetch("/api/otp/verify", {
+      const res = await fetch(getApiUrl("/api/otp/verify"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ target: email, code: otpCode })

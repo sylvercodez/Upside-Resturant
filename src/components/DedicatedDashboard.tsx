@@ -30,7 +30,7 @@ import {
 } from "lucide-react";
 import { collection, query, updateDoc, doc, onSnapshot, setDoc, deleteDoc } from "firebase/firestore";
 import { db, handleFirestoreError, OperationType } from "../firebase";
-import { ShippingLocation } from "../types";
+import { ShippingLocation, getApiUrl } from "../types";
 
 interface DedicatedDashboardProps {
   currentUser: FirebaseUser | null;
@@ -216,7 +216,7 @@ export default function DedicatedDashboard({
 
           // If valid credentials exist in the admin's Firestore document, automatically sync them to .env on load!
           if (mId && pKey && sKey) {
-            fetch("/api/opay/convert-to-env", {
+            fetch(getApiUrl("/api/opay/convert-to-env"), {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ merchantId: mId, publicKey: pKey, secretKey: sKey, environment: env })
@@ -256,7 +256,7 @@ export default function DedicatedDashboard({
 
       // On successful database write, automatically replicate/convert these values to server env securely!
       try {
-        await fetch("/api/opay/convert-to-env", {
+        await fetch(getApiUrl("/api/opay/convert-to-env"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -353,7 +353,7 @@ export default function DedicatedDashboard({
     setInstagramSyncStatus("Initializing custom handshake gateway sessions...");
 
     try {
-      const response = await fetch("/api/instagram/auth-url");
+      const response = await fetch(getApiUrl("/api/instagram/auth-url"));
       if (!response.ok) {
         const errData = await response.json().catch(() => ({}));
         throw new Error(errData.error || `Failed to start: HTTP ${response.status}`);

@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { X, Trash2, Ticket, ArrowRight, ShoppingCart, MessageSquare, Check, CreditCard, Sparkles, Minus, Plus, AlertCircle, HelpCircle } from "lucide-react";
-import { CartItem, CheckoutDetails, PromoCode, AVAILABLE_PROMOS, LAGOS_AREAS, ShippingLocation } from "../types";
+import { CartItem, CheckoutDetails, PromoCode, AVAILABLE_PROMOS, LAGOS_AREAS, ShippingLocation, getApiUrl } from "../types";
 import { logCustomEvent } from "../utils/analytics";
 import { MENU_ITEMS, MenuItem } from "../data/menu";
 import OrderTracker from "./OrderTracker";
@@ -104,7 +104,7 @@ export default function CartDrawer({
 
     const checkStatus = async () => {
       try {
-        const response = await fetch("/api/opay/verify-payment", {
+        const response = await fetch(getApiUrl("/api/opay/verify-payment"), {
           method: "POST",
           headers: {
             "Content-Type": "application/json"
@@ -529,7 +529,7 @@ export default function CartDrawer({
     console.log("=================================================================");
 
     try {
-      const response = await fetch("/api/opay/create-payment", {
+      const response = await fetch(getApiUrl("/api/opay/create-payment"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
