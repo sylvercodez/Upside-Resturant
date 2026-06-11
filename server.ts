@@ -1275,6 +1275,11 @@ app.post("/api/opay/callback", async (req: any, res: any) => {
 
 // Serve frontend assets
 async function serveApp() {
+  if (process.env.VERCEL) {
+    console.log("[SERVER] Loaded inside Vercel serverless context. Skipping local listen port registration.");
+    return;
+  }
+
   const distPath = path.join(process.cwd(), "dist");
   const isProduction = process.env.NODE_ENV === "production" && fs.existsSync(path.join(distPath, "index.html"));
 
@@ -1321,3 +1326,5 @@ async function serveApp() {
 }
 
 serveApp();
+
+export default app;
