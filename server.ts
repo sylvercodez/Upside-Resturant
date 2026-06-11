@@ -1261,16 +1261,42 @@ app.post("/api/opay/callback", async (req: any, res: any) => {
 
 // Serve frontend assets
 async function serveApp() {
-  if (process.env.NODE_ENV !== "production") {
+  const distPath = path.join(process.cwd(), "dist");
+  const isProduction = process.env.NODE_ENV === "production" || fs.existsSync(distPath);
+
+  if (!isProduction) {
+    console.log("[SERVER] Starting App in development mode (using Vite middleware)...");
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
     });
     app.use(vite.middlewares);
+
+    // Dynamic wildcard fallback in development for SPA client-side routes (e.g. /menu)
+    app.get("*", async (req, res, next) => {
+      if (req.path.startsWith("/api/")) {
+        return next();
+      }
+      try {
+        const htmlPath = path.join(process.cwd(), "index.html");
+        let html = fs.readFileSync(htmlPath, "utf-8");
+        // Run Vite HTML transformations to insert client-side modules correctly
+        html = await vite.transformIndexHtml(req.url, html);
+        res.status(200).set({ "Content-Type": "text/html" }).end(html);
+      } catch (err) {
+        vite.ssrFixStacktrace(err as Error);
+        next(err);
+      }
+    });
   } else {
-    const distPath = path.join(process.cwd(), "dist");
+    console.log("[SERVER] Starting App in production mode (serving pre-built dist)...");
     app.use(express.static(distPath));
-    app.get("*", (req, res) => {
+    
+    // Catch-all route for SPA client-side routes in production
+    app.get("*", (req, res, next) => {
+      if (req.path.startsWith("/api/")) {
+        return next();
+      }
       res.sendFile(path.join(distPath, "index.html"));
     });
   }

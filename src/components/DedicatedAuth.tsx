@@ -41,7 +41,13 @@ export default function DedicatedAuth({
   // Load SMTP status check on mount
   useEffect(() => {
     fetch("/api/otp/status")
-      .then((res) => res.json())
+      .then(async (res) => {
+        const contentType = res.headers.get("content-type");
+        if (contentType && contentType.includes("application/json")) {
+          return res.json();
+        }
+        throw new Error(`Server returned non-JSON response (status ${res.status}).`);
+      })
       .then((data) => setSmtpStatus(data))
       .catch((err) => console.warn("Could not load SMTP configuration status:", err));
   }, []);
@@ -138,7 +144,16 @@ export default function DedicatedAuth({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ target: email })
       });
-      const data = await res.json();
+      
+      const contentType = res.headers.get("content-type");
+      let data: any;
+      if (contentType && contentType.includes("application/json")) {
+        data = await res.json();
+      } else {
+        const text = await res.text();
+        throw new Error(`Identity servers returned non-JSON response (status ${res.status}). Ensure the server is online and port 3000 mapping is active.`);
+      }
+      
       if (!res.ok) {
         throw new Error(data.error || "Failed to trigger verification code dispatcher.");
       }
@@ -178,7 +193,16 @@ export default function DedicatedAuth({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ target: email, code: otpCode })
       });
-      const data = await res.json();
+      
+      const contentType = res.headers.get("content-type");
+      let data: any;
+      if (contentType && contentType.includes("application/json")) {
+        data = await res.json();
+      } else {
+        const text = await res.text();
+        throw new Error(`Identity verification servers returned non-JSON response (status ${res.status}). Ensure backend handles verify requests correctly.`);
+      }
+      
       if (!res.ok) {
         throw new Error(data.error || "The inputted 6-digit OTP code is incorrect. Try again.");
       }
