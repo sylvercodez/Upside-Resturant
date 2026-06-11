@@ -1012,7 +1012,7 @@ export default function DedicatedDashboard({
         <div className="absolute top-10 left-[5%] lg:left-[10%] z-20">
           <button
             onClick={onBackToLobby}
-            className="flex items-center gap-2 px-3 py-1.5 bg-black/85 border border-neutral-800 hover:border-amber-500/50 text-neutral-450 hover:text-amber-500 transition-all font-mono text-[9px] uppercase tracking-widest cursor-pointer"
+            className="flex items-center gap-2 px-3 py-1.5 bg-black/85 border border-amber-500/50hover:border-amber-500/50 text-amber-500 hover:text-amber-500 transition-all font-mono text-[9px] uppercase tracking-widest cursor-pointer"
             id="dashboard-back-lobby-btn"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
