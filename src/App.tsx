@@ -16,12 +16,13 @@ import { CartItem, ShippingLocation, LAGOS_AREAS } from "./types";
 import { MenuItem, MENU_ITEMS, Category, CATEGORIES } from "./data/menu";
 import { getBranding, auth, db } from "./firebase";
 import { User, onAuthStateChanged, signOut } from "firebase/auth";
-import { doc, getDoc, setDoc, collection, query, onSnapshot } from "firebase/firestore";
+import { doc, getDoc, setDoc, updateDoc, collection, query, onSnapshot } from "firebase/firestore";
 import { logCustomEvent } from "./utils/analytics";
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [userRole, setUserRole] = useState<string>("user");
+  const [userDisabled, setUserDisabled] = useState<boolean>(false);
   const [allMenuItems, setAllMenuItems] = useState<MenuItem[]>(MENU_ITEMS);
   const [allCategories, setAllCategories] = useState<Category[]>(CATEGORIES);
   const [shippingLocations, setShippingLocations] = useState<ShippingLocation[]>(LAGOS_AREAS);
@@ -93,6 +94,8 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    let unsubUserDoc: (() => void) | null = null;
+
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setCurrentUser(user);
       if (user) {
@@ -105,41 +108,60 @@ export default function App() {
           emailLower.includes("mophethecommerce");
         const targetRole = isAdminEmail ? "admin" : "user";
         
+        // 1. Ensure user record exists in Firebase (bootstrap)
         try {
-          if (isAdminEmail) {
-            setUserRole("admin");
-            // Quietly ensure DB has the admin role synchronized
-            try {
-              await setDoc(userRef, { role: "admin" }, { merge: true });
-            } catch (dbErr) {
-              console.warn("Auto-syncing admin role failed, proceeding with local admin state:", dbErr);
-            }
+          const snap = await getDoc(userRef);
+          if (!snap.exists()) {
+            const initialProfile = {
+              uid: user.uid,
+              email: user.email || "",
+              displayName: user.displayName || user.email?.split("@")[0] || "User",
+              role: targetRole,
+              disabled: false,
+              createdAt: new Date().toISOString()
+            };
+            await setDoc(userRef, initialProfile);
           } else {
-            const snap = await getDoc(userRef);
-            if (snap.exists()) {
-              const currentRoleInDb = snap.data().role || "user";
-              setUserRole(currentRoleInDb);
-            } else {
-              const initialProfile = {
-                uid: user.uid,
-                email: user.email || "",
-                displayName: user.displayName || user.email?.split("@")[0] || "User",
-                role: targetRole,
-                createdAt: new Date().toISOString()
-              };
-              await setDoc(userRef, initialProfile);
-              setUserRole(targetRole);
+            const dbData = snap.data();
+            // If the user's email should be status admin but database doesn't reflect it, sync it.
+            if (isAdminEmail && dbData.role !== "admin") {
+              await updateDoc(userRef, { role: "admin" });
             }
           }
-        } catch (e) {
-          console.error("Failed to map / sync user role with db, checking bootstrap:", e);
-          setUserRole(targetRole);
+        } catch (bootstrapErr) {
+          console.warn("User bootstrap profile sync warning:", bootstrapErr);
         }
+
+        // 2. Set up real-time observer for user roles and disabled status
+        unsubUserDoc = onSnapshot(userRef, (docSnap) => {
+          if (docSnap.exists()) {
+            const data = docSnap.data();
+            setUserRole(data.role || "user");
+            setUserDisabled(!!data.disabled);
+          } else {
+            setUserRole(targetRole);
+            setUserDisabled(false);
+          }
+        }, (err) => {
+          console.error("User document live sync error:", err);
+          setUserRole(targetRole);
+        });
       } else {
         setUserRole("user");
+        setUserDisabled(false);
+        if (unsubUserDoc) {
+          unsubUserDoc();
+          unsubUserDoc = null;
+        }
       }
     });
-    return () => unsubscribe();
+
+    return () => {
+      unsubscribe();
+      if (unsubUserDoc) {
+        unsubUserDoc();
+      }
+    };
   }, []);
 
   const handleLogout = async () => {
@@ -583,6 +605,38 @@ export default function App() {
         currentUser={currentUser}
         onAuthClick={() => handleNavigate("/auth")}
       />
+
+      {/* USER DISABLED GATEWAY BLOCK */}
+      {userDisabled && (
+        <div className="fixed inset-0 bg-neutral-950 z-[9999] flex flex-col items-center justify-center p-6 text-center text-white">
+          <div className="max-w-md bg-neutral-900 border border-red-500/30 p-8 md:p-10 space-y-6 shadow-2xl relative">
+            <div className="mx-auto w-16 h-16 rounded-full bg-red-955/40 border border-red-500/50 flex items-center justify-center text-red-500">
+              <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m0 0v3m0-3h3m-3 0H9m12-5a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            
+            <div className="space-y-2">
+              <h1 className="text-xl md:text-2xl font-sans font-bold tracking-tight text-red-400">Profile Suspended</h1>
+              <p className="text-xs md:text-sm text-neutral-400 font-mono leading-relaxed">
+                Your Upside restaurant guest profile or partner dashboard credentials have been disabled by system security administrators.
+              </p>
+            </div>
+
+            <div className="border-t border-neutral-800 pt-6 space-y-3">
+              <button
+                onClick={handleLogout}
+                className="w-full py-3 bg-red-600 hover:bg-red-500 text-white font-mono font-bold text-xs tracking-widest uppercase transition-all duration-300 cursor-pointer shadow"
+              >
+                Sign Out Account
+              </button>
+              <p className="text-[10px] text-neutral-500 font-mono">
+                Session ID block ID: {currentUser?.uid.substring(0,8)}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* TABLE RESERVATION ALLOCATION DIALOG */}
       <ReservationSection

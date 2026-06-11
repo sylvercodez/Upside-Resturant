@@ -12,7 +12,7 @@ interface MenuSectionProps {
 }
 
 export default function MenuSection({ onAddToCart, favorites, onToggleFavorite, onViewAllMenu, menuItems, categories }: MenuSectionProps) {
-  const displayCategories = categories || CATEGORIES;
+  const displayCategories = (categories || CATEGORIES).filter(c => !(c as any).disabled);
   const [selectedCategory, setSelectedCategory] = useState<string>("best-sellers");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [selectedItemForModal, setSelectedItemForModal] = useState<MenuItem | null>(null);
@@ -28,6 +28,10 @@ export default function MenuSection({ onAddToCart, favorites, onToggleFavorite, 
   // Filter items based on selected category & search query
   const getFilteredItems = () => {
     let list = menuItems || MENU_ITEMS;
+
+    // Filter out any items whose category is disabled
+    const disabledCategoryIds = new Set((categories || CATEGORIES).filter(c => (c as any).disabled).map(c => c.id));
+    list = list.filter(item => !disabledCategoryIds.has(item.category));
 
     // Search query match
     if (searchQuery.trim().length > 0) {

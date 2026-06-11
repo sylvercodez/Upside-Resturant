@@ -20,7 +20,7 @@ export default function DedicatedMenu({
   categories
 }: DedicatedMenuProps) {
   const finalMenuItems = menuItems || MENU_ITEMS;
-  const displayCategories = categories || CATEGORIES;
+  const displayCategories = (categories || CATEGORIES).filter(c => !(c as any).disabled);
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [selectedTag, setSelectedTag] = useState<string>("all");
@@ -37,6 +37,10 @@ export default function DedicatedMenu({
   // Filter items safely
   const getFilteredItems = () => {
     let list = finalMenuItems;
+
+    // Filter out any items whose category is disabled
+    const disabledCategoryIds = new Set((categories || CATEGORIES).filter(c => (c as any).disabled).map(c => c.id));
+    list = list.filter(item => !disabledCategoryIds.has(item.category));
 
     // Filter by general category
     if (selectedCategory !== "all") {

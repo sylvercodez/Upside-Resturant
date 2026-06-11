@@ -719,6 +719,33 @@ export default function DedicatedDashboard({
     }
   };
 
+  const handleToggleCategoryDisabled = async (cat: Category, currentDisabled: boolean) => {
+    const actionText = currentDisabled ? "enable" : "disable";
+    if (!window.confirm(`Are you sure you want to ${actionText} the Category "${cat.name}"?`)) return;
+    try {
+      const isNativeStatic = CATEGORIES.some(s => s.id === cat.id);
+      if (isNativeStatic) {
+        // For static core categories, write or merge the disabled flag
+        await setDoc(doc(db, "categories", cat.id), {
+          id: cat.id,
+          name: cat.name,
+          icon: cat.icon,
+          description: cat.description,
+          disabled: !currentDisabled,
+          updatedAt: new Date().toISOString()
+        }, { merge: true });
+      } else {
+        // For custom categories, update the disabled property
+        const catRef = doc(db, "categories", cat.id);
+        await updateDoc(catRef, { disabled: !currentDisabled });
+      }
+      setCatFormSuccess(`"${cat.name}" category has been ${currentDisabled ? "enabled" : "disabled"} successfully!`);
+    } catch (err: any) {
+      console.error("Toggle category disabled failed:", err);
+      alert(`Could not toggle category state: ${err.message}`);
+    }
+  };
+
   // Auto fallback tabs selection safely on load or role shift
   useEffect(() => {
     if (userRole === "admin") {
@@ -774,6 +801,23 @@ export default function DedicatedDashboard({
     } catch (e: any) {
       console.error("Role update failed:", e);
       alert(`Could not update user role: ${e.message}`);
+    }
+  };
+
+  // Handle toggling user disabled state
+  const handleToggleUserDisabled = async (userId: string, currentDisabled: boolean) => {
+    const actionText = currentDisabled ? "enable" : "suspend";
+    if (userId === currentUser?.uid) {
+      alert("Self suspension is locked by system security policies.");
+      return;
+    }
+    if (!window.confirm(`Are you absolutely sure you want to ${actionText} this user's profile and credentials?`)) return;
+    try {
+      const userRef = doc(db, "users", userId);
+      await updateDoc(userRef, { disabled: !currentDisabled });
+    } catch (e: any) {
+      console.error("User profile suspension toggle failed:", e);
+      alert(`Could not toggle suspension state: ${e.message}`);
     }
   };
 
@@ -1518,6 +1562,7 @@ export default function DedicatedDashboard({
                             <th className="p-3.5">Full Name</th>
                             <th className="p-3.5">Email Contact</th>
                             <th className="p-3.5">Access Role</th>
+                            <th className="p-3.5 text-center">Profile State / Actions</th>
                             <th className="p-3.5 text-center">Change Permission Level</th>
                           </tr>
                         </thead>
@@ -1527,7 +1572,7 @@ export default function DedicatedDashboard({
                               <td className="p-3.5 font-sans font-semibold text-white">
                                 {usr.displayName || "Anonymous Staff"}
                               </td>
-                              <td className="p-3.5 text-neutral-300 font-mono">
+                              <td className="p-3.5 text-neutral-300 font-mono text-xs">
                                 {usr.email}
                               </td>
                               <td className="p-3.5">
@@ -1542,6 +1587,25 @@ export default function DedicatedDashboard({
                                 }`}>
                                   {usr.role || "user"}
                                 </span>
+                              </td>
+                              <td className="p-3.5 text-center flex items-center justify-center gap-2">
+                                <span className={`px-2 py-0.5 text-[8px] uppercase tracking-wider font-bold border ${
+                                  usr.disabled 
+                                    ? "bg-red-950/35 text-red-500 border-red-500/30 font-extrabold" 
+                                    : "bg-emerald-950/20 text-emerald-400 border-emerald-500/20"
+                                }`}>
+                                  {usr.disabled ? "🚫 Suspended" : "⚡ Active"}
+                                </span>
+                                <button
+                                  onClick={() => handleToggleUserDisabled(usr.id, !!usr.disabled)}
+                                  className={`px-2 py-1 text-[8.5px] uppercase font-bold border transition-colors cursor-pointer ${
+                                    usr.disabled 
+                                      ? "bg-emerald-950/20 text-emerald-400 border-emerald-500/30 hover:bg-emerald-900" 
+                                      : "bg-red-950/20 text-red-400 border-red-500/20 hover:bg-red-900"
+                                  }`}
+                                >
+                                  {usr.disabled ? "Enable" : "Suspend"}
+                                </button>
                               </td>
                               <td className="p-3.5 text-center">
                                 {/* Roles dropdown select */}
@@ -1984,6 +2048,9 @@ export default function DedicatedDashboard({
                                     {isHidden && (
                                       <span className="text-[8px] font-mono text-amber-500 uppercase font-bold animate-pulse">Hidden / Disabled</span>
                                     )}
+                                    {(cat as any).disabled && (
+                                      <span className="text-[8px] font-mono text-red-500 border border-red-500/20 px-1 bg-red-950/20 uppercase font-bold">Disabled</span>
+                                    )}
                                   </div>
                                   <p className="text-[10px] text-neutral-400 leading-relaxed font-sans">{cat.description}</p>
                                   <p className="text-[9px] text-neutral-500 font-mono">Icon representation: <code className="text-amber-500 font-bold">{cat.icon || "Utensils"}</code></p>
@@ -2006,6 +2073,21 @@ export default function DedicatedDashboard({
                                       Edit
                                     </button>
                                   )}
+                                  
+                                  {/* Toggle Disable button */}
+                                  {!isHidden && (
+                                    <button
+                                      onClick={() => handleToggleCategoryDisabled(cat, !!(cat as any).disabled)}
+                                      className={`py-1 px-2 border text-[8px] font-mono uppercase shrink-0 ${
+                                        (cat as any).disabled 
+                                          ? "border-emerald-900/45 text-emerald-300 bg-emerald-950/25 hover:bg-emerald-900 hover:text-white" 
+                                          : "border-red-900/45 text-red-300 bg-red-950/25 hover:bg-red-900 hover:text-white"
+                                      }`}
+                                    >
+                                      {(cat as any).disabled ? "Enable" : "Disable"}
+                                    </button>
+                                  )}
+
                                   {isHidden ? (
                                     <button
                                       onClick={() => handleUnhideCategory(cat)}
