@@ -965,7 +965,7 @@ export default function DedicatedDashboard({
         />
 
         {/* Back Link Overlay */}
-        <div className="absolute top-10 left-6 md:left-12 z-20">
+        <div className="absolute top-10 left-[5%] lg:left-[10%] z-20">
           <button
             onClick={onBackToLobby}
             className="flex items-center gap-2 px-3 py-1.5 bg-black/85 border border-neutral-800 hover:border-amber-500/50 text-neutral-450 hover:text-amber-500 transition-all font-mono text-[9px] uppercase tracking-widest cursor-pointer"
@@ -977,7 +977,7 @@ export default function DedicatedDashboard({
         </div>
 
         {/* User Identity Overlay */}
-        <div className="absolute bottom-6 left-6 md:left-12 z-20 text-left">
+        <div className="absolute bottom-6 left-[5%] lg:left-[10%] z-20 text-left">
           {currentUser && (
             <div className="space-y-1">
               <span className="text-[10px] tracking-[0.3em] text-amber-600 font-mono font-bold uppercase block">
@@ -997,7 +997,7 @@ export default function DedicatedDashboard({
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-6 md:px-12 mt-8 space-y-8">
+      <div className="w-full max-w-none px-[5%] lg:px-[10%] mt-8 space-y-8">
         {currentUser ? (
           <>
             {/* Standard Account KPI Grid */}

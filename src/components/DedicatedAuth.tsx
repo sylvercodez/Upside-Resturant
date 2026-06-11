@@ -750,45 +750,8 @@ export default function DedicatedAuth({
                   <span>Authenticating with Google</span>
                 </button>
 
-                <div className="relative flex items-center justify-center pt-2">
-                  <div className="absolute inset-x-0 bg-neutral-200 h-[1.5px] w-full" />
-                  <span className="relative bg-white px-3 text-[10px] tracking-widest font-mono text-neutral-400 uppercase">
-                    Sandbox Instant Access
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-3 gap-2 text-center">
-                  <button
-                    type="button"
-                    onClick={() => handleInstantBypass("admin")}
-                    disabled={loading}
-                    className="py-2 px-1.5 bg-amber-50 hover:bg-amber-100/70 border border-amber-200 text-amber-800 text-[10px] font-mono tracking-wider uppercase transition-all duration-300 rounded cursor-pointer flex flex-col justify-center items-center gap-1 hover:shadow-sm"
-                  >
-                    <span className="font-bold">🔑 Admin</span>
-                    <span className="text-[7px] text-neutral-500 font-mono tracking-tight leading-none truncate w-full">tosinotenaike3...</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleInstantBypass("chef")}
-                    disabled={loading}
-                    className="py-2 px-1.5 bg-[#fff7ed] hover:bg-[#ffedd5]/70 border border-[#fed7aa] text-[#9a3412] text-[10px] font-mono tracking-wider uppercase transition-all duration-300 rounded cursor-pointer flex flex-col justify-center items-center gap-1 hover:shadow-sm"
-                  >
-                    <span className="font-bold">🍳 Chef</span>
-                    <span className="text-[7px] text-neutral-500 font-mono tracking-tight leading-none truncate w-full">chefmonitor...</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleInstantBypass("user")}
-                    disabled={loading}
-                    className="py-2 px-1.5 bg-neutral-50 hover:bg-neutral-100 border border-neutral-200 text-neutral-800 text-[10px] font-mono tracking-wider uppercase transition-all duration-300 rounded cursor-pointer flex flex-col justify-center items-center gap-1 hover:shadow-sm"
-                  >
-                    <span className="font-bold">👤 Client</span>
-                    <span className="text-[7px] text-neutral-500 font-mono tracking-tight leading-none truncate w-full">democlient...</span>
-                  </button>
-                </div>
-
                 {/* Privacy policy statement */}
-                <div className="text-[9.5px] text-neutral-500 font-sans tracking-tight leading-relaxed max-w-xs mx-auto text-center">
+                <div className="text-[9.5px] text-neutral-500 font-sans tracking-tight leading-relaxed max-w-xs mx-auto text-center pt-2">
                   🛡️ Secure connections protected under absolute zero-trust encryption rules. By authenticating, you agree to UPSIDE fine dining hospitality policies.
                 </div>
               </div>
