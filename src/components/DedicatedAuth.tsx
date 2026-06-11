@@ -101,6 +101,9 @@ export default function DedicatedAuth({
     if (errString.includes("operation-not-allowed") || errString.includes("operation not allowed")) {
       return "Authentication method is currently disabled in the workspace dashboard configurations.";
     }
+    if (errString.includes("unauthorized-domain") || errString.includes("unauthorized domain")) {
+      return "Unauthorized Domain: Google Auth failed because 'upside-restaurant-cafe.com' has not been added to your Firebase Console under 'Authentication > Settings > Authorized domains'. Please register your custom domain there to authorize live Google logins.";
+    }
 
     if (msg) {
       let sanitizedMsg = msg.replace(/firebase/gi, "Secure custom");

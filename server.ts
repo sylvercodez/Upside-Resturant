@@ -1262,7 +1262,7 @@ app.post("/api/opay/callback", async (req: any, res: any) => {
 // Serve frontend assets
 async function serveApp() {
   const distPath = path.join(process.cwd(), "dist");
-  const isProduction = process.env.NODE_ENV === "production" || fs.existsSync(distPath);
+  const isProduction = process.env.NODE_ENV === "production" && fs.existsSync(path.join(distPath, "index.html"));
 
   if (!isProduction) {
     console.log("[SERVER] Starting App in development mode (using Vite middleware)...");

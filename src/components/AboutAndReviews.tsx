@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { REVIEWS } from "../data/menu";
-import { Award, Compass, Heart, Share2, Star, Mail, MapPin, Instagram, Sparkles, Gift } from "lucide-react";
+import { Award, Compass, Heart, Share2, Star, Mail, MapPin, Instagram, Sparkles, Gift, Play, Pause, Volume2, VolumeX } from "lucide-react";
 import { collection, getDocs, query, orderBy, limit } from "firebase/firestore";
 import { db } from "../firebase";
 
@@ -22,6 +22,26 @@ export default function AboutAndReviews({ onReadMoreExperience }: AboutAndReview
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   const [instagramFeed, setInstagramFeed] = useState<InstagramPost[]>([]);
   const [isLiveFeed, setIsLiveFeed] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(true);
+  const [isMuted, setIsMuted] = useState(true);
+  const videoRef = React.useRef<HTMLVideoElement>(null);
+
+  const togglePlay = () => {
+    if (videoRef.current) {
+      if (isPlaying) {
+        videoRef.current.pause();
+      } else {
+        videoRef.current.play().catch(e => console.warn("Video play exception:", e));
+      }
+    }
+  };
+
+  const toggleMute = () => {
+    if (videoRef.current) {
+      videoRef.current.muted = !isMuted;
+      setIsMuted(!isMuted);
+    }
+  };
 
   useEffect(() => {
     async function fetchInstagramFeed() {
@@ -146,6 +166,79 @@ export default function AboutAndReviews({ onReadMoreExperience }: AboutAndReview
               <span>Explore The Complete Experience</span>
               <span>&rarr;</span>
             </button>
+          </div>
+        </div>
+      </section>
+
+      {/* CINEMATIC EXPERIENTIAL VIDEO SHOWCASE */}
+      <section id="cinematic-showcase-section" className="max-w-7xl mx-auto px-4 md:px-8">
+        <div className="relative border border-neutral-200 bg-neutral-50 p-6 md:p-10 space-y-8 shadow-sm">
+          <div className="text-left space-y-2">
+            <span className="text-[10px] tracking-[0.3em] text-amber-600 font-mono uppercase block">
+              Cinematic Atmosphere
+            </span>
+            <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+              <h2 className="text-2xl md:text-4xl text-neutral-950 font-serif font-light leading-tight">
+                Experience Upside in Motion
+              </h2>
+              <p className="text-neutral-600 font-mono text-xs max-w-md">
+                A glimpse into our luxurious dining space, high-energy gourmet culinary lounge, and elite artisan brews.
+              </p>
+            </div>
+          </div>
+
+          {/* Interactive Player Frame */}
+          <div className="relative aspect-[16/9] w-full overflow-hidden border border-neutral-950 bg-black group" id="cinematic-video-frame">
+            <video
+              id="upside-promo-video-player"
+              src="https://res.cloudinary.com/dgc6ootad/video/upload/v1781165611/upsidevideo_ywljfb.mp4"
+              className="w-full h-full object-cover"
+              loop
+              muted={isMuted}
+              autoPlay
+              playsInline
+              ref={videoRef}
+              onPlay={() => setIsPlaying(true)}
+              onPause={() => setIsPlaying(false)}
+            />
+
+            {/* Gradient Mask Overlay */}
+            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/20 opacity-90 transition-opacity duration-300 group-hover:opacity-100 pointer-events-none" />
+
+            {/* Controls Overlay */}
+            <div className="absolute bottom-0 left-0 right-0 p-4 md:p-6 flex items-center justify-between z-10">
+              <div className="flex items-center gap-3">
+                <button
+                  id="video-toggle-play-btn"
+                  onClick={togglePlay}
+                  className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-white/10 hover:bg-amber-500 hover:text-black text-white border border-white/20 hover:border-transparent flex items-center justify-center transition-all duration-300 cursor-pointer"
+                  title={isPlaying ? "Pause Video" : "Play Video"}
+                >
+                  {isPlaying ? <Pause className="w-4 h-4 md:w-5 md:h-5 fill-current" /> : <Play className="w-4 h-4 md:w-5 md:h-5 fill-current translate-x-0.5" />}
+                </button>
+
+                <button
+                  id="video-toggle-mute-btn"
+                  onClick={toggleMute}
+                  className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-white/10 hover:bg-neutral-800 text-white border border-white/20 flex items-center justify-center transition-all duration-300 cursor-pointer"
+                  title={isMuted ? "Unmute Video" : "Mute Video"}
+                >
+                  {isMuted ? <VolumeX className="w-4 h-4 md:w-5 md:h-5" /> : <Volume2 className="w-4 h-4 md:w-5 md:h-5" />}
+                </button>
+              </div>
+
+              {/* Status HUD indicator */}
+              <div className="text-[9px] md:text-[10px] font-mono text-amber-500 uppercase tracking-widest bg-black/60 px-3 py-1.5 border border-amber-500/20 rounded-none animate-pulse">
+                <span>✦ Cinematic Playback Live</span>
+              </div>
+            </div>
+
+            {/* Visual aesthetic logo watermark */}
+            <div className="absolute top-4 left-4 md:top-6 md:left-6 z-10 opacity-75 sm:opacity-90">
+              <span className="font-sans font-bold text-[9px] tracking-[0.2em] text-white bg-black/50 px-3 py-1 border border-neutral-800">
+                UPSIDE FINE DINING
+              </span>
+            </div>
           </div>
         </div>
       </section>
