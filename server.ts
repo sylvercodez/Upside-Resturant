@@ -18,6 +18,20 @@ const PORT = 3000;
 
 app.use(express.json());
 
+// Enable Cross-Origin Resource Sharing (CORS) for all routes,
+// allowing our live domain (upside-restaurant-cafe.com) to seamlessly communicate with the server
+app.use((req, res, next) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, HEAD, PUT, PATCH, POST, DELETE, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, ClientAuthKey, Timestamp, BodyFormat, bodyformat, clientauthkey");
+  res.setHeader("Access-Control-Allow-Credentials", "true");
+  
+  if (req.method === "OPTIONS") {
+    return res.sendStatus(200);
+  }
+  next();
+});
+
 // Create email transporter dynamically based on configured environment variables
 function getMailTransporter() {
   if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) {
@@ -90,8 +104,8 @@ function getAppUrl(req: any): string {
   if (host.includes("localhost") || host.includes("127.0.0.1")) {
     return `http://${host}`;
   }
-  // The live site custom domain requested by the user
-  return "https://upside-restaurant-cafe.com";
+  const protocol = req.headers["x-forwarded-proto"] === "https" || req.secure ? "https" : "http";
+  return `${protocol}://${host}`;
 }
 
 // REST endpoints for OTP dispatch
