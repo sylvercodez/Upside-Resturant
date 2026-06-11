@@ -67,7 +67,16 @@ export const LAGOS_AREAS: ShippingLocation[] = [
 
 export function getApiUrl(path: string): string {
   const cleanPath = path.startsWith('/') ? path : `/${path}`;
-  // Use relative paths to ensure direct full-stack routing and prevent cross-origin CORS fetch errors
+  if (typeof window !== 'undefined') {
+    const host = window.location.hostname;
+    // Direct traffic to our active Cloud Run container backend if the user is visiting from the custom public domain
+    if (
+      host === "upside-restaurant-cafe.com" || 
+      (host && !host.includes("run.app") && !host.includes("localhost") && !host.includes("127.0.0.1"))
+    ) {
+      return `https://ais-pre-sbzn5bjecas4gnypehx4a5-856555242900.europe-west2.run.app${cleanPath}`;
+    }
+  }
   return cleanPath;
 }
 
