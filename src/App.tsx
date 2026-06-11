@@ -483,6 +483,9 @@ export default function App() {
             onReadMoreExperience={() => {
                handleNavigate("/experience");
             }}
+            onViewMenu={() => {
+               handleNavigate("/menu");
+            }}
           />
 
           {/* INLINE DIGITAL TABLE RESERVATION FORM */}
