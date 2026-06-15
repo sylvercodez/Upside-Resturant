@@ -67,6 +67,18 @@ export const LAGOS_AREAS: ShippingLocation[] = [
 
 export function getApiUrl(path: string): string {
   const cleanPath = path.startsWith('/') ? path : `/${path}`;
+  if (typeof window !== "undefined") {
+    const origin = window.location.origin;
+    // Map standalone dev client (5173 / 3001) to the active backend sandbox port 3000
+    if (origin.includes("localhost:5173") || origin.includes("127.0.0.1:5173") || origin.includes(":5173") || origin.includes(":3001")) {
+      return `http://localhost:3000${cleanPath}`;
+    }
+    // Respect custom injected API endpoint boundaries
+    const customApiBase = (import.meta as any).env?.VITE_API_BASE_URL;
+    if (customApiBase) {
+      return `${customApiBase}${cleanPath}`;
+    }
+  }
   return cleanPath;
 }
 
