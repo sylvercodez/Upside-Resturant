@@ -479,24 +479,10 @@ export default function CartDrawer({
     // Store details locally prior to checkout redirection to handle success return receipt smoothly
     localStorage.setItem("upside_active_order", JSON.stringify(activeOrderPayload));
 
-    // Dynamic self-healing double-write initialization using client credentials on Frontend.
-    // This pre-hydrates Firestore with the exact order schema under the active authenticated session,
-    // avoiding server-side IAM permissions issues securely.
+    // Direct payment intent tracking initialization.
+    // Instead of pre-creating an order record, we persist details on the payment intent itself,
+    // only instantiating the formal Order document once a successful payment response is fetched.
     try {
-      await setDoc(doc(db, "orders", orderId), {
-        id: orderId,
-        userId: currentUserId,
-        customerName: formData.customerName,
-        email: formData.email || "guest@example.com",
-        phone: formData.phone,
-        totalPrice: finalTotal,
-        items: activeOrderPayload.items,
-        address: activeOrderPayload.address,
-        status: "Prepping", // needed for isValidOrder rules
-        timestamp: Date.now(),
-        type: formData.type
-      });
-
       await setDoc(doc(db, "payments", orderId), {
         orderId: orderId,
         userId: currentUserId,
@@ -504,11 +490,17 @@ export default function CartDrawer({
         currency: "NGN",
         paymentMethod: "OPay",
         transactionReference: orderId,
-        paymentStatus: "PENDING"
+        paymentStatus: "PENDING",
+        customerName: formData.customerName,
+        email: formData.email || "guest@example.com",
+        phone: formData.phone,
+        items: activeOrderPayload.items,
+        address: activeOrderPayload.address,
+        type: formData.type
       });
-      console.log("[FRONTEND SYNCHRONIZATION] Pre-persisted order & payment documents successfully! Ref:", orderId);
+      console.log("[FRONTEND SYNCHRONIZATION] Pre-persisted payment intent reference successfully:", orderId);
     } catch (fsErr: any) {
-      console.warn("[FRONTEND SYNCHRONIZATION] Could not pre-persist Firestore order/payment records:", fsErr.message || fsErr);
+      console.warn("[FRONTEND SYNCHRONIZATION] Could not pre-persist Firestore payment record:", fsErr.message || fsErr);
     }
 
     const opayPayload = {

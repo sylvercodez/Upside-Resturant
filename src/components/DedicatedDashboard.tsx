@@ -1252,6 +1252,7 @@ export default function DedicatedDashboard({
                   <div className="bg-[#121212] border border-neutral-850 p-6 space-y-4" id="dashboard-tracker-tab">
                     <OrderTracker 
                       orderId={trackedOrderId}
+                      userRole={userRole}
                     />
                   </div>
                 )}

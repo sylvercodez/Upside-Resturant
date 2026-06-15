@@ -23,7 +23,7 @@ app.use(express.json());
 app.use((req, res, next) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, HEAD, PUT, PATCH, POST, DELETE, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, ClientAuthKey, Timestamp, BodyFormat, bodyformat, clientauthkey");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, ClientAuthKey, Timestamp, BodyFormat, bodyformat, clientauthkey, X-Firebase-AppCheck, x-firebase-appcheck");
   res.setHeader("Access-Control-Allow-Credentials", "true");
   
   if (req.method === "OPTIONS") {
@@ -31,6 +31,50 @@ app.use((req, res, next) => {
   }
   next();
 });
+
+// App Check verification middleware to protect API routes from unauthorized external scraping
+async function appCheckVerification(req: any, res: any, next: any) {
+  const path = req.path;
+
+  // Exempt external callbacks, webhooks or redirects that cannot possibly have browser App Check tokens
+  const isExempt = 
+    path === "/api/opay/webhook" ||
+    path === "/api/opay/callback" ||
+    path === "/api/instagram/callback";
+
+  if (isExempt) {
+    return next();
+  }
+
+  const appCheckToken = req.header("X-Firebase-AppCheck");
+
+  if (!appCheckToken) {
+    // If we are in local development or sandbox/preview mode, log warning but allow continuous iteration
+    const isLocalDev = process.env.NODE_ENV !== "production" || process.env.BYPASS_APP_CHECK_IN_DEV === "true";
+    if (isLocalDev) {
+      console.warn(`[App Check Warning] Missing App Check token from IP ${req.ip} for URI ${req.originalUrl} (Gracefully allowed in dev/sandbox)`);
+      return next();
+    }
+    console.warn(`[App Check ALERT] Unauthorized access blocked: Missing App Check token from IP ${req.ip} for URI ${req.originalUrl}`);
+    return res.status(401).json({ error: "Unauthorized: Missing Firebase App Check token." });
+  }
+
+  try {
+    const decodedToken = await admin.appCheck().verifyToken(appCheckToken);
+    req.appCheckToken = decodedToken;
+    next();
+  } catch (err: any) {
+    const isLocalDev = process.env.NODE_ENV !== "production" || process.env.BYPASS_APP_CHECK_IN_DEV === "true";
+    if (isLocalDev) {
+      console.warn(`[App Check Warning] Token verification failed from IP ${req.ip} for URI ${req.originalUrl} (Gracefully allowed in dev/sandbox):`, err.message || err);
+      return next();
+    }
+    console.error(`[App Check Failure] Unauthorized access blocked: Invalid/expired App Check token from IP ${req.ip} for URI ${req.originalUrl}:`, err.message || err);
+    return res.status(401).json({ error: "Unauthorized: Invalid Firebase App Check token." });
+  }
+}
+
+app.use("/api", appCheckVerification);
 
 // Create email transporter dynamically based on configured environment variables
 function getMailTransporter() {
@@ -888,42 +932,20 @@ export async function initializeOpayPayment(paymentData: {
         paymentMethod: "OPay",
         transactionReference: paymentData.orderId,
         paymentStatus: "PENDING",
-        createdAt: createdAt
+        createdAt: createdAt,
+        customerName: paymentData.customerName,
+        email: paymentData.email || "guest@example.com",
+        phone: paymentData.phone,
+        items: paymentData.items || [],
+        address: paymentData.address || "Boutique Self-Pickup",
+        type: paymentData.type || "delivery"
       });
-      console.log(`[initializeOpayPayment] Successfully logged payment document to Firestore for Ref: ${paymentData.orderId}`);
+      console.log(`[initializeOpayPayment] Successfully logged payment intent document to Firestore for Ref: ${paymentData.orderId}`);
     } else {
       console.warn(`[initializeOpayPayment] Administrative db instance is offline. Skipping payment logging for Ref: ${paymentData.orderId}`);
     }
   } catch (firestoreErr: any) {
     console.error(`[initializeOpayPayment] Firestore administrative logging error (payment record):`, firestoreErr.message || firestoreErr);
-  }
-
-  // 7. Store / Update Order record in Firestore matching precise requirement
-  try {
-    if (dbAdmin) {
-      await dbAdmin.collection("orders").doc(paymentData.orderId).set({
-        id: paymentData.orderId,
-        userId: paymentData.userId || "guest",
-        customerName: paymentData.customerName,
-        email: paymentData.email || "guest@example.com",
-        phone: paymentData.phone,
-        totalPrice: paymentData.amount,
-        items: paymentData.items || [],
-        address: paymentData.address || "Boutique Self-Pickup",
-        orderStatus: "pending",
-        paymentStatus: "pending",
-        status: "Prepping",
-        transactionReference: paymentData.orderId,
-        paymentMethod: "OPay",
-        timestamp: Date.now(),
-        type: paymentData.type || "delivery"
-      });
-      console.log(`[initializeOpayPayment] Successfully logged order document to Firestore for Ref: ${paymentData.orderId}`);
-    } else {
-      console.warn(`[initializeOpayPayment] Administrative db instance is offline. Skipping order logging for Ref: ${paymentData.orderId}`);
-    }
-  } catch (firestoreErr: any) {
-    console.error(`[initializeOpayPayment] Firestore administrative logging error (order record):`, firestoreErr.message || firestoreErr);
   }
 
   console.log(`[initializeOpayPayment] Success. Redirect cashierUrl generated for Ref: ${paymentData.orderId}`);
@@ -1025,24 +1047,49 @@ export async function verifyOpayPayment(reference: string) {
   if (mappedStatus === "PAID") {
     try {
       if (dbAdmin) {
-        await dbAdmin.collection("orders").doc(reference).update({
-          orderStatus: "paid",
-          paymentStatus: "paid",
-          updatedAt: new Date().toISOString()
-        });
-        console.log(`[verifyOpayPayment] Successfully updated order status to paid for Ref: ${reference}`);
+        const paymentSnap = await dbAdmin.collection("payments").doc(reference).get();
+        if (paymentSnap.exists) {
+          const paymentData = paymentSnap.data() || {};
+          const orderDoc = await dbAdmin.collection("orders").doc(reference).get();
+          if (!orderDoc.exists) {
+            await dbAdmin.collection("orders").doc(reference).set({
+              id: reference,
+              userId: paymentData.userId || "guest",
+              customerName: paymentData.customerName || "Vanguard Guest",
+              email: paymentData.email || "guest@example.com",
+              phone: paymentData.phone || "",
+              totalPrice: paymentData.amount || 0,
+              items: paymentData.items || [],
+              address: paymentData.address || "Boutique Self-Pickup",
+              status: "Prepping",
+              timestamp: Date.now(),
+              type: paymentData.type || "delivery"
+            });
+            console.log(`[verifyOpayPayment] Created new successful order document for Ref: ${reference}`);
+          } else {
+            await dbAdmin.collection("orders").doc(reference).update({
+              orderStatus: "paid",
+              paymentStatus: "paid",
+              updatedAt: new Date().toISOString()
+            });
+            console.log(`[verifyOpayPayment] Successfully updated status of existing order Ref: ${reference} to paid`);
+          }
+        }
       }
     } catch (firestoreErr: any) {
-      console.error(`[verifyOpayPayment] Firestore order update failed (status: PAID):`, firestoreErr.message || firestoreErr);
+      console.error(`[verifyOpayPayment] Firestore order create/update failed (status: PAID):`, firestoreErr.message || firestoreErr);
     }
   } else if (mappedStatus === "FAILED" || mappedStatus === "CANCELLED" || mappedStatus === "EXPIRED") {
     try {
       if (dbAdmin) {
-        await dbAdmin.collection("orders").doc(reference).update({
-          paymentStatus: mappedStatus.toLowerCase(),
-          updatedAt: new Date().toISOString()
-        });
-        console.log(`[verifyOpayPayment] Successfully updated order status to ${mappedStatus.toLowerCase()} for Ref: ${reference}`);
+        const orderDoc = await dbAdmin.collection("orders").doc(reference).get();
+        if (orderDoc.exists) {
+          await dbAdmin.collection("orders").doc(reference).update({
+            paymentStatus: mappedStatus.toLowerCase(),
+            updatedAt: new Date().toISOString()
+          });
+          console.log(`[verifyOpayPayment] Successfully updated order status to ${mappedStatus.toLowerCase()} for Ref: ${reference}`);
+        }
       }
     } catch (firestoreErr: any) {
       console.error(`[verifyOpayPayment] Firestore order update failed (status: ${mappedStatus}):`, firestoreErr.message || firestoreErr);
@@ -1234,12 +1281,34 @@ app.post("/api/opay/webhook", async (req: any, res: any) => {
     if (mappedStatus === "PAID") {
       try {
         if (dbAdmin) {
-          await dbAdmin.collection("orders").doc(reference).update({
-            orderStatus: "paid",
-            paymentStatus: "paid",
-            updatedAt: new Date().toISOString()
-          });
-          console.log(`[handleOpayWebhook] Order reference: ${reference} successfully locked as PAID.`);
+          const paymentSnap = await dbAdmin.collection("payments").doc(reference).get();
+          if (paymentSnap.exists) {
+            const paymentData = paymentSnap.data() || {};
+            const orderDoc = await dbAdmin.collection("orders").doc(reference).get();
+            if (!orderDoc.exists) {
+              await dbAdmin.collection("orders").doc(reference).set({
+                id: reference,
+                userId: paymentData.userId || "guest",
+                customerName: paymentData.customerName || "Vanguard Guest",
+                email: paymentData.email || "guest@example.com",
+                phone: paymentData.phone || "",
+                totalPrice: paymentData.amount || 0,
+                items: paymentData.items || [],
+                address: paymentData.address || "Boutique Self-Pickup",
+                status: "Prepping",
+                timestamp: Date.now(),
+                type: paymentData.type || "delivery"
+              });
+              console.log(`[handleOpayWebhook] Created new successful order document for Ref: ${reference}`);
+            } else {
+              await dbAdmin.collection("orders").doc(reference).update({
+                orderStatus: "paid",
+                paymentStatus: "paid",
+                updatedAt: new Date().toISOString()
+              });
+              console.log(`[handleOpayWebhook] Successfully updated status of existing order Ref: ${reference} to paid`);
+            }
+          }
         }
       } catch (firestoreErr: any) {
         console.error("[handleOpayWebhook] Firestore update order (PAID) status failure:", firestoreErr.message || firestoreErr);
@@ -1247,11 +1316,14 @@ app.post("/api/opay/webhook", async (req: any, res: any) => {
     } else {
       try {
         if (dbAdmin) {
-          await dbAdmin.collection("orders").doc(reference).update({
-            paymentStatus: mappedStatus.toLowerCase(),
-            updatedAt: new Date().toISOString()
-          });
-          console.log(`[handleOpayWebhook] Order reference: ${reference} status updated to ${mappedStatus.toLowerCase()}.`);
+          const orderDoc = await dbAdmin.collection("orders").doc(reference).get();
+          if (orderDoc.exists) {
+            await dbAdmin.collection("orders").doc(reference).update({
+              paymentStatus: mappedStatus.toLowerCase(),
+              updatedAt: new Date().toISOString()
+            });
+            console.log(`[handleOpayWebhook] Order reference: ${reference} status updated to ${mappedStatus.toLowerCase()}.`);
+          }
         }
       } catch (firestoreErr: any) {
         console.error(`[handleOpayWebhook] Firestore update order (${mappedStatus}) status failure:`, firestoreErr.message || firestoreErr);

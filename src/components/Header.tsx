@@ -37,15 +37,17 @@ export default function Header({
   return (
     <header className="sticky top-0 z-40 bg-white border-b border-neutral-200 shadow-sm backdrop-blur-md">
       {/* Top Banner with high-end alert context */}
-      <div className="bg-neutral-950 border-b border-neutral-800 px-4 py-2.5 text-center text-[11px] text-neutral-300 font-mono tracking-wider flex items-center justify-between sm:justify-center gap-4">
-        <div className="flex items-center gap-1.5">
+      <div className="bg-neutral-950 border-b border-neutral-800 px-4 py-2.5 text-center text-[11px] text-neutral-300 font-mono tracking-wider flex items-center justify-between gap-4">
+        <div className="flex items-center gap-1.5 shrink-0">
           <MapPin className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
-          <span>32A, Admiralty Way, Lekki Phase 1, Lagos</span>
+          <span className="hidden sm:inline">32A, Admiralty Way, Lekki Phase 1, Lagos</span>
+          <span className="inline sm:hidden">Lekki Phase 1, Lagos</span>
         </div>
-        <div className="hidden sm:block text-neutral-700 font-bold">|</div>
-        <div className="flex items-center gap-1.5 font-sans">
-          <Phone className="w-3.5 h-3.5 text-amber-400" />
-          <span className="font-semibold text-white">0911-464-6767</span>
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-1.5 font-sans">
+            <Phone className="w-3.5 h-3.5 text-amber-400 animate-bounce" />
+            <span className="font-semibold text-white">0911-464-6767</span>
+          </div>
         </div>
       </div>
 

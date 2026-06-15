@@ -252,8 +252,8 @@ service cloud.firestore {
                     )
                     );
 
-      // Admins can delete orders if necessary, standard users cannot
-      allow delete: if isAdmin();
+      // Admins can delete orders if necessary, standard users can delete their own if delivered
+      allow delete: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid && resource.data.status == "Delivered");
     }
 
     // Analytics Events Rules: Anyone can register events, but only administrators can read or query them

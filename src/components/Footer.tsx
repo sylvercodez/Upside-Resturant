@@ -1,5 +1,5 @@
 import React from "react";
-import { Coffee, Shield, Phone, Mail, MapPin } from "lucide-react";
+import { Coffee, Shield, Phone, Mail, MapPin, Facebook, Instagram, Music } from "lucide-react";
 
 interface FooterProps {
   onScrollToElement: (elementId: string) => void;
@@ -48,6 +48,40 @@ export default function Footer({ onScrollToElement, onOpenReservations, branding
               <Mail className="w-3.5 h-3.5 text-amber-500" />
               <span className="text-neutral-600 hover:text-amber-600 hover:underline transition-all cursor-pointer">concierge@upsidelagos.com</span>
             </p>
+          </div>
+          
+          {/* Social Icons Row */}
+          <div className="flex items-center gap-3 pt-3" id="footer-social-links">
+            <a
+              href="https://facebook.com/upsiderestaurantlagos"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-8 h-8 rounded-full border border-neutral-200 flex items-center justify-center text-neutral-500 hover:text-white hover:bg-neutral-900 hover:border-neutral-900 transition-all cursor-pointer shadow-sm hover:scale-105 duration-200"
+              title="Follow Upside on Facebook"
+              id="footer-social-facebook"
+            >
+              <Facebook className="w-4 h-4" />
+            </a>
+            <a
+              href="https://instagram.com/upside_lagos"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-8 h-8 rounded-full border border-neutral-200 flex items-center justify-center text-neutral-500 hover:text-white hover:bg-neutral-900 hover:border-neutral-900 transition-all cursor-pointer shadow-sm hover:scale-105 duration-200"
+              title="Follow Upside on Instagram"
+              id="footer-social-instagram"
+            >
+              <Instagram className="w-4 h-4" />
+            </a>
+            <a
+              href="https://tiktok.com/@upside_lagos"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-8 h-8 rounded-full border border-neutral-200 flex items-center justify-center text-neutral-500 hover:text-white hover:bg-neutral-900 hover:border-neutral-900 transition-all cursor-pointer shadow-sm hover:scale-105 duration-200"
+              title="Follow Upside on TikTok"
+              id="footer-social-tiktok"
+            >
+              <Music className="w-4 h-4" />
+            </a>
           </div>
         </div>
 

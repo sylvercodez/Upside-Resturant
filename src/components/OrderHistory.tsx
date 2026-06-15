@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { collection, query, where, orderBy, onSnapshot } from "firebase/firestore";
+import { collection, query, where, orderBy, onSnapshot, doc, deleteDoc, updateDoc } from "firebase/firestore";
 import { db, auth, handleFirestoreError, OperationType } from "../firebase";
 import { ShoppingBag, ChevronDown, ChevronUp, Clock, MapPin, CheckCircle, Package, Truck, ArrowRight } from "lucide-react";
 
@@ -55,8 +55,11 @@ export default function OrderHistory({ onReorderClick, onTrackClick }: OrderHist
       q,
       (snapshot) => {
         const fetchedOrders: Order[] = [];
-        snapshot.forEach((doc) => {
-          fetchedOrders.push({ id: doc.id, ...doc.data() } as Order);
+        snapshot.forEach((snapshotDoc) => {
+          const data = snapshotDoc.data();
+          if (!data.isArchived && !data.archived) {
+            fetchedOrders.push({ id: snapshotDoc.id, ...data } as Order);
+          }
         });
         setOrders(fetchedOrders);
         setLoading(false);
@@ -75,6 +78,29 @@ export default function OrderHistory({ onReorderClick, onTrackClick }: OrderHist
 
     return () => unsubscribe();
   }, []);
+
+  const handleDeleteOrder = async (orderId: string) => {
+    if (!window.confirm("Are you absolutely sure you want to delete this order? This action is permanent and cannot be undone.")) {
+      return;
+    }
+    try {
+      await deleteDoc(doc(db, "orders", orderId));
+      alert("Order deleted successfully!");
+    } catch (err: any) {
+      console.error("Failed to delete order:", err);
+      alert(`Could not delete order: ${err.message}`);
+    }
+  };
+
+  const handleArchiveOrder = async (orderId: string) => {
+    try {
+      await updateDoc(doc(db, "orders", orderId), { isArchived: true });
+      alert("Order archived successfully!");
+    } catch (err: any) {
+      console.error("Failed to archive order:", err);
+      alert(`Could not archive order: ${err.message}`);
+    }
+  };
 
   const toggleExpandOrder = (id: string) => {
     setExpandedOrderId(prev => (prev === id ? null : id));
@@ -277,6 +303,23 @@ export default function OrderHistory({ onReorderClick, onTrackClick }: OrderHist
                       </button>
                     )}
                   </div>
+
+                  {order.status === "Delivered" && (
+                    <div className="flex gap-2 mt-2 pt-2 border-t border-neutral-850/65">
+                      <button
+                        onClick={() => handleDeleteOrder(order.id)}
+                        className="flex-1 py-1.5 bg-red-950/40 hover:bg-red-900/40 border border-red-900/30 text-red-500 text-[9px] tracking-widest font-bold uppercase transition-all flex items-center justify-center gap-1 cursor-pointer"
+                      >
+                        Delete Order
+                      </button>
+                      <button
+                        onClick={() => handleArchiveOrder(order.id)}
+                        className="flex-1 py-1.5 bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-neutral-300 text-[9px] tracking-widest font-bold uppercase transition-all flex items-center justify-center gap-1 cursor-pointer"
+                      >
+                        Archive Order
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

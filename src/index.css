@@ -19,27 +19,64 @@ body {
   font-weight: 700 !important;
 }
 
-/* Override and force a minimum of 14px for any small-text Tailwind classes */
-.text-xs,
-.text-sm,
-.text-base,
-.text-\[9px\],
-.text-\[10px\],
-.text-\[10\.5px\],
-.text-\[11px\],
-.text-\[12px\],
-[class*="text-[9px]"],
-[class*="text-[10px]"],
-[class*="text-[10.5px]"],
-[class*="text-[11px]"],
-[class*="text-[12px]"],
-[class*="text-xs"],
-[class*="text-sm"] {
-  font-size: 14px !important;
+/* On desktop, force a minimum floor of 14px for typical small text classes */
+@media (min-width: 768px) {
+  .text-xs,
+  .text-sm,
+  .text-base,
+  .text-\[9px\],
+  .text-\[10px\],
+  .text-\[10\.5px\],
+  .text-\[11px\],
+  .text-\[12px\],
+  [class*="text-[9px]"],
+  [class*="text-[10px]"],
+  [class*="text-[10.5px]"],
+  [class*="text-[11px]"],
+  [class*="text-[12px]"],
+  [class*="text-xs"],
+  [class*="text-sm"] {
+    font-size: 14px !important;
+  }
+
+  span, p, a, button, label, input, select, textarea, li, td, th, option, small {
+    font-size: 14px !important;
+    font-weight: 700 !important;
+  }
 }
 
-/* Fallback floor for element tags prone to smaller text */
-span, p, a, button, label, input, select, textarea, li, td, th, option, small {
-  font-size: 14px !important;
-  font-weight: 700 !important;
+/* On mobile, allow tighter layouts but guarantee a minimum floor of 11px to ensure text is fully readable and doesn't wrap */
+@media (max-width: 767px) {
+  .text-xs,
+  .text-sm,
+  .text-base,
+  .text-\[9px\],
+  .text-\[10px\],
+  .text-\[10\.5px\],
+  .text-\[11px\],
+  .text-\[12px\],
+  [class*="text-[9px]"],
+  [class*="text-[10px]"],
+  [class*="text-[10.5px]"],
+  [class*="text-[11px]"],
+  [class*="text-[12px]"],
+  [class*="text-xs"],
+  [class*="text-sm"] {
+    font-size: 11px !important;
+  }
+
+  span, p, a, button, label, input, select, textarea, li, td, th, option, small {
+    font-size: 11px !important;
+    font-weight: 700 !important;
+  }
 }
+
+/* Scrollbar removal helper mapping standard browsers */
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-none {
+  -ms-overflow-style: none;  /* IE/Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+

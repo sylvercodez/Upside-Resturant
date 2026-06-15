@@ -252,22 +252,22 @@ export default function DedicatedMenu({
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
           
           {/* LEFT COLUMN: Categories Navigation Tab Deck */}
-          <div className="lg:col-span-3 space-y-2 lg:sticky lg:top-24 bg-neutral-50 p-4 border border-neutral-200">
-            <h4 className="text-xs uppercase font-mono tracking-wider text-amber-600 font-semibold mb-4 flex items-center gap-2 border-b border-neutral-200 pb-2">
+          <div className="lg:col-span-3 bg-neutral-50 p-3 lg:p-4 border border-neutral-200 flex flex-row lg:flex-col overflow-x-auto lg:overflow-x-visible lg:space-y-2 gap-2 scrollbar-none w-full lg:sticky lg:top-24" id="menu-categories-track">
+            <h4 className="hidden lg:flex text-xs uppercase font-mono tracking-wider text-amber-600 font-semibold mb-4 items-center gap-2 border-b border-neutral-200 pb-2">
               <Filter className="w-3.5 h-3.5" />
               <span>Categories</span>
             </h4>
             
             <button
               onClick={() => { setSelectedCategory("all"); }}
-              className={`w-full text-left px-4 py-3 text-xs font-mono uppercase tracking-wider transition-all flex items-center justify-between border ${
+              className={`text-left px-3.5 py-2.5 lg:px-4 lg:py-3 text-[10px] lg:text-xs font-mono uppercase tracking-wider transition-all flex items-center justify-between gap-2.5 border shrink-0 whitespace-nowrap ${
                 selectedCategory === "all"
                   ? "bg-black text-white font-bold border-transparent"
                   : "bg-white text-neutral-700 border-neutral-200 hover:border-neutral-300 hover:text-black"
               }`}
             >
-              <span>[ ] Entire Collection</span>
-              <span className="text-[10px] font-bold">{finalMenuItems.length}</span>
+              <span>[ ] All Entries</span>
+              <span className="text-[9px] lg:text-[10px] font-bold bg-neutral-100 text-black px-1.5 py-0.5 leading-none">{finalMenuItems.length}</span>
             </button>
 
             {displayCategories.filter(c => c.id !== "best-sellers").map((cat) => {
@@ -279,14 +279,14 @@ export default function DedicatedMenu({
                   onClick={() => {
                     setSelectedCategory(cat.id);
                   }}
-                  className={`w-full text-left px-4 py-3 text-xs font-mono uppercase tracking-wider transition-all flex items-center justify-between border ${
+                  className={`text-left px-3.5 py-2.5 lg:px-4 lg:py-3 text-[10px] lg:text-xs font-mono uppercase tracking-wider transition-all flex items-center justify-between gap-2.5 border shrink-0 whitespace-nowrap ${
                     isActive
                       ? "bg-black text-white font-bold border-transparent shadow-md"
                       : "bg-white text-neutral-700 border-neutral-200 hover:border-neutral-300 hover:text-black"
                   }`}
                 >
-                  <span className="truncate">{cat.name}</span>
-                  <span className={`text-[10px] font-bold ${isActive ? "text-white" : "text-neutral-500"}`}>
+                  <span>{cat.name}</span>
+                  <span className={`text-[9px] lg:text-[10px] font-bold px-1.5 py-0.5 leading-none ${isActive ? "bg-amber-500 text-black" : "bg-neutral-105 text-neutral-500"}`}>
                     {categoryItemsCount}
                   </span>
                 </button>

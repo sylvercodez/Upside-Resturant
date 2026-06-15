@@ -1,11 +1,81 @@
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getFirestore, doc, getDoc, setDoc } from "firebase/firestore";
+import { initializeAppCheck, ReCaptchaV3Provider, getToken } from "firebase/app-check";
 import firebaseConfig from "../firebase-applet-config.json";
 
 export const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 export const auth = getAuth(app);
+
+// State to keep track of App Check instance
+export let appCheck: any = null;
+
+// Initialize App Check if in browser environment
+if (typeof window !== "undefined") {
+  try {
+    const isDev = window.location.hostname === "localhost" || 
+                  window.location.hostname === "127.0.0.1" || 
+                  window.location.hostname.includes("ais-dev-") ||
+                  window.location.hostname.includes("ais-pre-");
+    
+    // In local dev/sandbox, configure App Check debug token prior to initialization
+    if (isDev) {
+      (window as any).FIREBASE_APPCHECK_DEBUG_TOKEN = true;
+    }
+
+    // Use default reCAPTCHA v3 sitekey. The customer can configure a custom one in import.meta.env if needed.
+    const customSiteKey = (import.meta as any).env?.VITE_RECAPTCHA_SITE_KEY;
+    const siteKey = customSiteKey || "6LdOqKcqAAAAAHzD6b5_R8_4_c450Hdf9SdgG-X1";
+
+    appCheck = initializeAppCheck(app, {
+      provider: new ReCaptchaV3Provider(siteKey),
+      isTokenAutoRefreshEnabled: true
+    });
+    console.log("[Firebase App Check] Initialized successfully with siteKey:", siteKey);
+  } catch (err) {
+    console.error("[Firebase App Check] Initialization failed:", err);
+  }
+}
+
+// Helper to retrieve the current token on demand
+export async function getAppCheckToken(): Promise<string | null> {
+  if (!appCheck) return null;
+  try {
+    const result = await getToken(appCheck, false);
+    return result.token;
+  } catch (err) {
+    console.warn("[App Check] Error getting token:", err);
+    return null;
+  }
+}
+
+// Global fetch wrapper/interceptor to automatically inject the token in all client-side /api/ requests
+if (typeof window !== "undefined") {
+  const originalFetch = window.fetch;
+  window.fetch = async function (input: RequestInfo | URL, init?: RequestInit) {
+    const urlString = typeof input === "string" ? input : (input instanceof URL ? input.toString() : input.url);
+    
+    // Check if targeting our own server API endpoints
+    const isLocalApi = urlString.includes("/api/") && 
+                       !urlString.includes("/api/opay/webhook") && 
+                       !urlString.includes("/api/instagram/callback");
+                       
+    if (isLocalApi) {
+      try {
+        const token = await getAppCheckToken();
+        if (token) {
+          const headers = new Headers(init?.headers || {});
+          headers.set("X-Firebase-AppCheck", token);
+          init = { ...init, headers };
+        }
+      } catch (err) {
+        console.warn("[App Check Interceptor] Failed to attach App Check token:", err);
+      }
+    }
+    return originalFetch(input, init);
+  };
+}
 
 // The exact high-fidelity representative brand image URL wrapped in a responsive block element
 export const DEFAULT_LOGO_SVG = `<img src="https://res.cloudinary.com/dgc6ootad/image/upload/v1780044707/upside_logo_1_swnvtf.jpg" alt="UPSIDE LOGO" style="width: 100%; height: 100%; object-fit: contain; display: block;" />`;

@@ -161,10 +161,10 @@ export default function AboutAndReviews({ onReadMoreExperience, onViewMenu }: Ab
           <div className="pt-2" id="read-more-experience-link">
             <button
               onClick={onReadMoreExperience}
-              className="px-8 py-3.5 bg-black text-white hover:bg-neutral-900 transition-all flex items-center justify-center gap-2 cursor-pointer w-full sm:w-auto shadow-lg text-xs font-mono tracking-widest uppercase mb-4"
+              className="px-4 sm:px-8 py-3.5 bg-black text-white hover:bg-neutral-900 transition-all flex items-center justify-center gap-2 cursor-pointer w-full sm:w-auto shadow-lg text-[10px] sm:text-xs font-mono tracking-widest uppercase mb-4 whitespace-nowrap"
               id="read-more-experience-btn"
             >
-              <span>Explore The Complete Experience</span>
+              <span>Explore Complete Experience</span>
               <span>&rarr;</span>
             </button>
           </div>
@@ -189,7 +189,7 @@ export default function AboutAndReviews({ onReadMoreExperience, onViewMenu }: Ab
           </div>
 
           {/* Interactive Player Frame */}
-          <div className="relative aspect-[16/9] w-full overflow-hidden border border-neutral-950 bg-black group" id="cinematic-video-frame">
+          <div className="relative aspect-[4/3] sm:aspect-[16/9] w-full overflow-hidden border border-neutral-950 bg-black group" id="cinematic-video-frame">
             <video
               id="upside-promo-video-player"
               src="https://res.cloudinary.com/dgc6ootad/video/upload/v1781165611/upsidevideo_ywljfb.mp4"
@@ -311,9 +311,9 @@ export default function AboutAndReviews({ onReadMoreExperience, onViewMenu }: Ab
                     const waText = encodeURIComponent("Hello Upside! I would like to place a premium order.");
                     window.open(`https://wa.me/2349114646767?text=${waText}`, "_blank");
                   }}
-                  className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 text-white font-mono font-bold text-xs tracking-widest uppercase transition-all flex items-center justify-center gap-3 cursor-pointer shadow-lg active:scale-[0.99]"
+                  className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 text-white font-mono font-bold text-[10px] sm:text-xs tracking-widest uppercase transition-all flex items-center justify-center gap-2.5 cursor-pointer shadow-lg active:scale-[0.99] whitespace-nowrap"
                 >
-                  <MessageCircle className="w-5 h-5 fill-current text-white" />
+                  <MessageCircle className="w-4.5 h-4.5 fill-current text-white shrink-0" />
                   <span>Start WhatsApp Order</span>
                 </button>
 
@@ -373,10 +373,10 @@ export default function AboutAndReviews({ onReadMoreExperience, onViewMenu }: Ab
                 <div className="pt-2">
                   <button
                     onClick={onViewMenu}
-                    className="group px-6 py-3 bg-neutral-950 hover:bg-amber-600 hover:text-black text-white font-mono text-[10px] tracking-widest uppercase transition-all duration-300 flex items-center gap-2 cursor-pointer shadow"
+                    className="group px-4 py-3 bg-neutral-950 hover:bg-amber-600 hover:text-black text-white font-mono text-[9px] sm:text-[10px] tracking-widest uppercase transition-all duration-300 flex items-center gap-2 cursor-pointer shadow whitespace-nowrap"
                   >
                     <span>View Digital Menu Online</span>
-                    <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
+                    <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform shrink-0" />
                   </button>
                 </div>
               )}
@@ -442,7 +442,7 @@ export default function AboutAndReviews({ onReadMoreExperience, onViewMenu }: Ab
               &ldquo;{REVIEWS[activeReviewIndex].text}&rdquo;
             </p>
 
-            <div className="flex justify-between items-end pt-4 border-t border-neutral-200">
+            <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 pt-4 border-t border-neutral-200">
               <div>
                 <p className="text-xs text-neutral-900 uppercase font-mono font-semibold">
                   {REVIEWS[activeReviewIndex].name}
@@ -455,9 +455,9 @@ export default function AboutAndReviews({ onReadMoreExperience, onViewMenu }: Ab
               {/* Share review button */}
               <button
                 onClick={() => handleShareReview(REVIEWS[activeReviewIndex].text, activeReviewIndex)}
-                className="p-2.5 bg-transparent hover:bg-neutral-100 text-neutral-800 transition-colors cursor-pointer text-xs font-mono flex items-center gap-1.5 border border-neutral-200 uppercase tracking-widest"
+                className="p-2 sm:p-2.5 bg-transparent hover:bg-neutral-100 text-neutral-800 transition-colors cursor-pointer text-[10px] sm:text-xs font-mono flex items-center justify-center gap-1.5 border border-neutral-200 uppercase tracking-widest whitespace-nowrap w-full sm:w-auto"
               >
-                <Share2 className="w-3.5 h-3.5 text-neutral-700" />
+                <Share2 className="w-3.5 h-3.5 text-neutral-700 shrink-0" />
                 <span>{copiedIndex === activeReviewIndex ? "Copied Link!" : "Copy Audit"}</span>
               </button>
             </div>
