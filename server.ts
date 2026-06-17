@@ -68,17 +68,36 @@ async function appCheckVerification(req: any, res: any, next: any) {
 
 app.use("/api", appCheckVerification);
 
+// Helper to strip any leading or trailing single/double quotes from environment secrets configuration
+const stripQuotes = (str: string): string => {
+  if (!str) return "";
+  let s = str.trim();
+  while ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'"))) {
+    s = s.substring(1, s.length - 1).trim();
+  }
+  return s;
+};
+
 // Create email transporter dynamically based on configured environment variables
 function getMailTransporter() {
   try {
-    if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) {
+    const rawHost = stripQuotes(process.env.SMTP_HOST || "");
+    const rawUser = stripQuotes(process.env.SMTP_USER || "");
+    const rawPass = stripQuotes(process.env.SMTP_PASS || "");
+    const rawPortStr = stripQuotes(process.env.SMTP_PORT || "");
+    const rawSecureStr = stripQuotes(process.env.SMTP_SECURE || "");
+
+    if (rawHost && rawUser && rawPass) {
+      const portVal = parseInt(rawPortStr || "587", 10);
+      const secureVal = rawSecureStr === "true" || portVal === 465;
+
       const smtpOptions = {
-        host: process.env.SMTP_HOST,
-        port: parseInt(process.env.SMTP_PORT || "587"),
-        secure: process.env.SMTP_SECURE === "true" || process.env.SMTP_PORT === "465",
+        host: rawHost,
+        port: isNaN(portVal) ? 587 : portVal,
+        secure: secureVal,
         auth: {
-          user: process.env.SMTP_USER,
-          pass: process.env.SMTP_PASS,
+          user: rawUser,
+          pass: rawPass,
         },
       };
 
@@ -104,21 +123,9 @@ function getMailTransporter() {
 
 // Generate the fully valid header "from" address
 function getFromEmailAddress(): string {
-  let rawFrom = process.env.SMTP_FROM || "";
-  let rawUser = process.env.SMTP_USER || "";
-  const rawHost = (process.env.SMTP_HOST || "").toLowerCase();
-
-  // Helper to strip any leading or trailing single/double quotes from secrets config
-  const stripQuotes = (str: string) => {
-    let s = str.trim();
-    while ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'"))) {
-      s = s.substring(1, s.length - 1).trim();
-    }
-    return s;
-  };
-
-  rawFrom = stripQuotes(rawFrom);
-  rawUser = stripQuotes(rawUser);
+  let rawFrom = stripQuotes(process.env.SMTP_FROM || "");
+  let rawUser = stripQuotes(process.env.SMTP_USER || "");
+  const rawHost = stripQuotes(process.env.SMTP_HOST || "").toLowerCase();
 
   // Simple email matcher
   const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/;
@@ -150,7 +157,7 @@ function getFromEmailAddress(): string {
 
 // In-memory registry for highly secure simulated 6-digit OTP codes
 const activeOtps = new Map<string, { code: string; expiresAt: number }>();
-const OTP_SESSION_SALT = process.env.OTP_SESSION_SALT || "UPSIDE_ROYAL_OTP_SECRET_COMPLEX_HASH_2026";
+const OTP_SESSION_SALT = stripQuotes(process.env.OTP_SESSION_SALT || "UPSIDE_ROYAL_OTP_SECRET_COMPLEX_HASH_2026");
 
 // Dynamic routing controller to detect preferred domains
 function getAppUrl(req: any): string {
@@ -775,6 +782,24 @@ try {
   const configPath = path.join(process.cwd(), "firebase-applet-config.json");
   if (fs.existsSync(configPath)) {
     config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+  } else {
+    // Robust administrative fallbacks for identity/database credential integrations
+    config = {
+      projectId: stripQuotes(process.env.FIREBASE_PROJECT_ID || process.env.GCLOUD_PROJECT || "gen-lang-client-0332471137"),
+      apiKey: stripQuotes(process.env.FIREBASE_API_KEY || ""),
+      authDomain: stripQuotes(process.env.FIREBASE_AUTH_DOMAIN || "gen-lang-client-0332471137.firebaseapp.com"),
+      firestoreDatabaseId: stripQuotes(process.env.FIREBASE_DATABASE_ID || process.env.FIRESTORE_DB_NAME || "ai-studio-7ee29b67-2013-4587-a753-b479a6e19155"),
+      appId: stripQuotes(process.env.FIREBASE_APP_ID || ""),
+      storageBucket: stripQuotes(process.env.FIREBASE_STORAGE_BUCKET || "gen-lang-client-0332471137.firebasestorage.app"),
+      messagingSenderId: stripQuotes(process.env.FIREBASE_MESSAGING_SENDER_ID || "")
+    };
+    if (!config.apiKey) {
+      // If there is no api key set in process.env, fallback to default configurations
+      config.apiKey = "AIzaSyBlIddU4ZP6QsC212vb__3AoMKH9MA-_1E";
+    }
+  }
+
+  if (config) {
     if (config.projectId) {
       projectId = config.projectId;
     }
