@@ -88,16 +88,6 @@ function getMailTransporter() {
         createTransportFn = (nodemailer as any).createTransport;
       } else if (nodemailer && (nodemailer as any).default && typeof (nodemailer as any).default.createTransport === "function") {
         createTransportFn = (nodemailer as any).default.createTransport;
-      } else {
-        // Fallback to direct require if imports has been mangled
-        try {
-          const directNodemailer = require("nodemailer");
-          if (directNodemailer && typeof directNodemailer.createTransport === "function") {
-            createTransportFn = directNodemailer.createTransport;
-          }
-        } catch (e) {
-          console.error("[getMailTransporter] Direct require of nodemailer failed:", e);
-        }
       }
 
       if (createTransportFn) {
@@ -964,8 +954,8 @@ export async function initializeOpayPayment(paymentData: {
   }
 
   // 4. Store Payment document in Firestore as specified using try-catch to keep it resilient
-  const createdAt = admin.firestore.Timestamp.now();
   try {
+    const createdAtIso = new Date().toISOString();
     if (dbAdmin) {
       await dbAdmin.collection("payments").doc(paymentData.orderId).set({
         orderId: paymentData.orderId,
@@ -975,7 +965,7 @@ export async function initializeOpayPayment(paymentData: {
         paymentMethod: "OPay",
         transactionReference: paymentData.orderId,
         paymentStatus: "PENDING",
-        createdAt: createdAt,
+        createdAt: createdAtIso,
         customerName: paymentData.customerName,
         email: paymentData.email || "guest@example.com",
         phone: paymentData.phone,
@@ -1076,7 +1066,7 @@ export async function verifyOpayPayment(reference: string) {
     if (dbAdmin) {
       await dbAdmin.collection("payments").doc(reference).update({
         paymentStatus: mappedStatus,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        updatedAt: new Date().toISOString()
       });
       console.log(`[verifyOpayPayment] Successfully verified and updated payment status for Ref: ${reference} -> ${mappedStatus}`);
     } else {
@@ -1312,7 +1302,7 @@ app.post("/api/opay/webhook", async (req: any, res: any) => {
       if (dbAdmin) {
         await dbAdmin.collection("payments").doc(reference).set({
           paymentStatus: mappedStatus,
-          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+          updatedAt: new Date().toISOString()
         }, { merge: true });
         console.log(`[handleOpayWebhook] Successfully written payment confirmation document to Firestore for Ref: ${reference}`);
       }
@@ -1388,6 +1378,18 @@ app.post("/api/opay/callback", async (req: any, res: any) => {
   // Forward query to the main webhook route logic
   req.url = "/api/opay/webhook";
   return app._router.handle(req, res);
+});
+
+// Global error handler middleware to prevent unhandled express exceptions from returning non-JSON responses
+app.use((err: any, req: any, res: any, next: any) => {
+  console.error("[GLOBAL SERVER ERROR HANDLER] Uncaught server exception:", err);
+  if (res.headersSent) {
+    return next(err);
+  }
+  res.status(500).json({
+    error: err?.message || "An internal gateway error occurred on the identity server.",
+    details: process.env.NODE_ENV !== "production" ? err?.stack : undefined
+  });
 });
 
 // Serve frontend assets
