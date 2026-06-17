@@ -52,10 +52,7 @@ async function appCheckVerification(req: any, res: any, next: any) {
   const appCheckToken = req.header("X-Firebase-AppCheck");
 
   if (!appCheckToken) {
-    console.warn(`[App Check Warning] Missing App Check token from IP ${req.ip} for URI ${req.originalUrl}`);
-    if (process.env.NODE_ENV === "production") {
-      return res.status(403).json({ error: "Unauthorized: Missing Firebase App Check token. Access denied." });
-    }
+    console.warn(`[App Check Warning] Missing App Check token from IP ${req.ip} for URI ${req.originalUrl} (Gracefully allowed)`);
     return next();
   }
 
@@ -64,10 +61,7 @@ async function appCheckVerification(req: any, res: any, next: any) {
     req.appCheckToken = decodedToken;
     next();
   } catch (err: any) {
-    console.warn(`[App Check Warning] Token verification failed from IP ${req.ip} for URI ${req.originalUrl}:`, err.message || err);
-    if (process.env.NODE_ENV === "production") {
-      return res.status(403).json({ error: "Unauthorized: Invalid Firebase App Check token. Access denied." });
-    }
+    console.warn(`[App Check Warning] Token verification failed from IP ${req.ip} for URI ${req.originalUrl} (Gracefully allowed):`, err.message || err);
     return next();
   }
 }
