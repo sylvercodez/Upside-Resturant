@@ -123,6 +123,28 @@ export default function DedicatedDashboard({
   const [imageFormSuccess, setImageFormSuccess] = useState("");
   const [imageFormError, setNewImageFormError] = useState("");
 
+  // STATIC MENU DB SYNC STATES
+  const [isSyncingMenu, setIsSyncingMenu] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<string | null>(null);
+
+  const handleSyncStaticMenu = async () => {
+    setIsSyncingMenu(true);
+    setSyncStatus(null);
+    try {
+      const res = await fetch("/api/seed-menu");
+      const data = await res.json();
+      if (res.ok && data.status === "success") {
+        setSyncStatus(`SUCCESS: ${data.message}`);
+      } else {
+        setSyncStatus(`ERROR: ${data.error || "Failed to synchronize menu."}`);
+      }
+    } catch (err: any) {
+      setSyncStatus(`ERROR: ${err.message || err}`);
+    } finally {
+      setIsSyncingMenu(false);
+    }
+  };
+
   // CUSTOM CATEGORIES STATES
   const [newCatData, setNewCatData] = useState({
     id: "",
@@ -895,6 +917,58 @@ export default function DedicatedDashboard({
     } catch (e: any) {
       console.error("Menu item deletion failure:", e);
       alert(`Failed to delete menu item: ${e.message}`);
+    }
+  };
+
+  // Handle uploading and auto-optimizing an image directly for the create/edit menu form
+  const handleMenuFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setMenuFormError("");
+    setMenuFormSuccess("");
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const img = new Image();
+        img.onload = () => {
+          // Downscale the image to fit within 600px bounds so it remains exceptionally lightweight but ultra-crisp
+          const maxDim = 600;
+          let width = img.width;
+          let height = img.height;
+          
+          if (width > maxDim || height > maxDim) {
+            if (width > height) {
+              height = Math.round((height * maxDim) / width);
+              width = maxDim;
+            } else {
+              width = Math.round((width * maxDim) / height);
+              height = maxDim;
+            }
+          }
+          
+          const canvas = document.createElement("canvas");
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext("2d");
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, width, height);
+            // Convert to highly optimized JPEG so it is perfectly lightweight for Firestore document limits
+            const compressedBase64 = canvas.toDataURL("image/jpeg", 0.70);
+            setNewMenuData(prev => ({ ...prev, image: compressedBase64 }));
+            setMenuFormSuccess("Gourmet image successfully processed and optimized for database storage!");
+          } else {
+            setNewMenuData(prev => ({ ...prev, image: reader.result as string }));
+            setMenuFormSuccess("Gourmet image successfully read into memory.");
+          }
+        };
+        img.onerror = () => {
+          setMenuFormError("Unsupported or corrupted local image format.");
+        };
+        img.src = reader.result as string;
+      };
+      reader.onerror = () => {
+        setMenuFormError("Failure reading local file.");
+      };
+      reader.readAsDataURL(file);
     }
   };
 
@@ -1790,16 +1864,63 @@ export default function DedicatedDashboard({
                           />
                         </div>
 
-                        <div className="space-y-1">
-                          <label className="text-[9px] text-neutral-400 uppercase tracking-widest block font-bold">Image Cover URL *</label>
-                          <input
-                            type="url"
-                            required
-                            placeholder="https://images.unsplash.com/..."
-                            value={newMenuData.image}
-                            onChange={(e) => setNewMenuData(prev => ({ ...prev, image: e.target.value }))}
-                            className="w-full bg-neutral-950 border border-neutral-850 p-2 text-white focus:outline-none focus:border-amber-500 font-mono text-[9px]"
-                          />
+                        <div className="space-y-2">
+                          <div className="flex justify-between items-center">
+                            <label className="text-[9px] text-neutral-400 uppercase tracking-widest block font-bold">Image Cover Source *</label>
+                            {newMenuData.image.startsWith("data:image/") && (
+                              <span className="text-[8px] text-emerald-400 font-mono bg-emerald-950/40 border border-emerald-900/30 px-1.5 py-0.5 rounded uppercase tracking-wider font-bold">Direct DB Base64 Mode</span>
+                            )}
+                          </div>
+                          
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            {/* File Upload Block */}
+                            <div className="flex items-center justify-center border border-dashed border-neutral-800 hover:border-amber-500/50 bg-neutral-950/40 p-3 transition-all relative rounded min-h-[60px]">
+                              <input
+                                type="file"
+                                id="menu-image-file-upload-direct"
+                                accept="image/*"
+                                onChange={handleMenuFileChange}
+                                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                              />
+                              <div className="text-center font-mono space-y-0.5 pointer-events-none">
+                                <span className="text-[10px] text-amber-500 block font-bold">📂 CHOOSE LOCAL FILE</span>
+                                <span className="text-[8px] text-neutral-500 block font-bold">Saves directly inside DB</span>
+                              </div>
+                            </div>
+
+                            {/* URL Input Block */}
+                            <div className="flex flex-col justify-center">
+                              <input
+                                type="text"
+                                placeholder="Or type external web image URL..."
+                                value={newMenuData.image.startsWith("data:image/") ? "" : newMenuData.image}
+                                onChange={(e) => setNewMenuData(prev => ({ ...prev, image: e.target.value }))}
+                                className="w-full bg-neutral-950 border border-neutral-850 p-3 text-white focus:outline-none focus:border-amber-500 font-mono text-[9px] rounded h-full min-h-[60px]"
+                              />
+                            </div>
+                          </div>
+
+                          {/* Live Dynamic Thumbnail & Diagnostic Info */}
+                          {newMenuData.image && (
+                            <div className="flex items-center gap-3 bg-neutral-950/70 border border-neutral-850 p-2.5 rounded-md">
+                              <img
+                                src={newMenuData.image}
+                                alt="Dynamic preview"
+                                className="w-12 h-12 object-cover border border-neutral-800 rounded-sm"
+                                onError={(e) => {
+                                  (e.target as any).src = "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&q=80&w=800";
+                                }}
+                              />
+                              <div className="font-mono text-[9px] space-y-0.5 overflow-hidden flex-1">
+                                <span className="text-neutral-300 block truncate font-bold">Preview: {newMenuData.name || "Unnamed Gourmet Food Item"}</span>
+                                <span className="text-neutral-500 block text-[8px] truncate">
+                                  {newMenuData.image.startsWith("data:image/") 
+                                    ? `Direct Base64 DB Format (~${Math.round(newMenuData.image.length / 1024)} KB)` 
+                                    : `External Link Source: ${newMenuData.image}`}
+                                </span>
+                              </div>
+                            </div>
+                          )}
                         </div>
 
                         <div className="space-y-1">
@@ -1869,6 +1990,34 @@ export default function DedicatedDashboard({
                             className="w-full bg-neutral-950 border border-neutral-850 p-2 pl-9 text-xs font-mono placeholder:text-neutral-600 focus:outline-none focus:border-amber-500/50 text-white"
                           />
                         </div>
+
+                        {/* Database Seeding Quick Sync Button */}
+                        <div className="bg-neutral-950/70 border border-neutral-850 p-3 rounded-md space-y-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                          <div className="space-y-0.5 text-left">
+                            <span className="text-[10px] font-mono text-amber-500 font-bold block uppercase tracking-widest">🔄 Menu Source Syncing Tool</span>
+                            <span className="text-[8px] text-neutral-400 block font-sans">
+                              Synchronizes all real café items and categories from project source code into your live Firestore database, replacing active products.
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            disabled={isSyncingMenu}
+                            onClick={handleSyncStaticMenu}
+                            className="bg-amber-600 hover:bg-amber-500 text-white font-mono uppercase font-black text-[9px] px-3.5 py-2 transition-all rounded disabled:opacity-50 cursor-pointer text-center shrink-0"
+                          >
+                            {isSyncingMenu ? "🔄 Syncing Database..." : "Publish Static Menu To Live DB"}
+                          </button>
+                        </div>
+
+                        {syncStatus && (
+                          <div className={`p-2.5 w-full font-mono text-[9px] text-left rounded border ${
+                            syncStatus.startsWith("SUCCESS:") 
+                              ? "bg-emerald-950/20 border-emerald-900/30 text-emerald-400" 
+                              : "bg-red-950/20 border-red-900/30 text-red-300"
+                          }`}>
+                            {syncStatus}
+                          </div>
+                        )}
                       </div>
 
                       {/* Scroll wrapper */}
