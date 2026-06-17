@@ -12,7 +12,7 @@ import DedicatedMenu from "./components/DedicatedMenu";
 import DedicatedExperience from "./components/DedicatedExperience";
 import DedicatedDashboard from "./components/DedicatedDashboard";
 import DedicatedAuth from "./components/DedicatedAuth";
-import { CartItem, ShippingLocation, LAGOS_AREAS } from "./types";
+import { CartItem, ShippingLocation, LAGOS_AREAS, getApiUrl } from "./types";
 import { MenuItem, MENU_ITEMS, Category, CATEGORIES } from "./data/menu";
 import { getBranding, auth, db } from "./firebase";
 import { User, onAuthStateChanged, signOut } from "firebase/auth";
@@ -417,9 +417,72 @@ export default function App() {
   };
 
   // Track simulated order status by copying to localStorage and focusing tracker tab
-  const handleTrackOrder = (order: any) => {
-    localStorage.setItem("upside_active_order", JSON.stringify(order));
-    handleNavigate("/dashboard");
+  const handleTrackOrder = async (order: any) => {
+    if (!order) return;
+
+    // Detect if order uses OPay (either checked out via OPay, type is opay, or id starts with order_)
+    const isOpay = order.paymentMethod === "opay" || order.paymentMethod === "OPay" || order.type === "opay" || order.id?.startsWith("order_");
+
+    if (isOpay && order.id) {
+      try {
+        console.log("[handleTrackOrder] Initiating robust payment verification check for:", order.id);
+        const response = await fetch(getApiUrl("/api/opay/verify-payment"), {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ reference: order.id })
+        });
+        
+        if (!response.ok) {
+          throw new Error("Unable to reach OPay verification API");
+        }
+        
+        const data = await response.json();
+        console.log("[handleTrackOrder] OPay verification API response:", data);
+
+        // Check if status returned is PAID / SUCCESS / payment_successful
+        if (data.paymentStatus === "PAID" || data.paymentStatus === "SUCCESS" || data.paymentStatus === "payment_successful") {
+          const verifiedOrderPayload = {
+            id: order.id,
+            userId: order.userId || auth.currentUser?.uid || "guest",
+            customerName: order.customerName || "Vanguard Guest",
+            email: order.email || "guest@example.com",
+            phone: order.phone || "",
+            totalPrice: order.totalPrice || 0,
+            items: order.items || [],
+            address: order.address || "Boutique Self-Pickup",
+            status: order.status || "Prepping",
+            timestamp: order.timestamp || Date.now(),
+            type: order.type || "delivery",
+            paymentStatus: "payment_successful",
+            orderStatus: "payment_successful",
+            updatedAt: new Date().toISOString()
+          };
+
+          try {
+            await setDoc(doc(db, "orders", order.id), verifiedOrderPayload);
+            console.log("[handleTrackOrder] Successfully verified & wrote order to 'orders' collection:", order.id);
+          } catch (dbErr) {
+            console.error("Failed to commit verified order to Firestore:", dbErr);
+          }
+
+          localStorage.setItem("upside_active_order", JSON.stringify(verifiedOrderPayload));
+          handleNavigate("/dashboard");
+        } else {
+          // Block the track operation and notify the user about unsuccessful payment status
+          alert(`Unable to track order: OPay payment status is non-successful ("${data.paymentStatus || 'PENDING'}"). Only successfully paid orders can be tracked.`);
+          console.warn(`[handleTrackOrder] Order tracking blocked for ref ${order.id}. Non-successful payment status:`, data.paymentStatus);
+        }
+      } catch (err: any) {
+        console.error("OPay payment track validation failed:", err);
+        alert(`Payment validation check error: ${err.message || 'Verification system offline. Please retry.'}`);
+      }
+    } else {
+      // For standard orders / non-OPay checkouts, track normally
+      localStorage.setItem("upside_active_order", JSON.stringify(order));
+      handleNavigate("/dashboard");
+    }
   };
 
   // MANAGE ORDER QUANTITIES

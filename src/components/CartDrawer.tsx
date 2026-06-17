@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { X, Trash2, Ticket, ArrowRight, ShoppingCart, MessageSquare, Check, CreditCard, Sparkles, Minus, Plus, AlertCircle, HelpCircle } from "lucide-react";
+import { X, Trash2, Ticket, ArrowRight, ShoppingCart, MessageSquare, Check, CreditCard, Sparkles, Minus, Plus, AlertCircle, HelpCircle, Store, MapPin, User } from "lucide-react";
 import { CartItem, CheckoutDetails, PromoCode, AVAILABLE_PROMOS, LAGOS_AREAS, ShippingLocation, getApiUrl } from "../types";
 import { logCustomEvent } from "../utils/analytics";
 import { MENU_ITEMS, MenuItem } from "../data/menu";
@@ -113,7 +113,7 @@ export default function CartDrawer({
         });
         const data = await response.json();
         console.log("[OPay Verification Polling]", data);
-        if (data.paymentStatus === "PAID") {
+        if (data.paymentStatus === "PAID" || data.paymentStatus === "SUCCESS" || data.paymentStatus === "payment_successful") {
           setPollingStatus("passed");
           setCheckoutStep("success");
           onClearCart();
@@ -146,11 +146,32 @@ export default function CartDrawer({
           
           // Hydrate success state and synchronize database status securely on Frontend
           try {
-            await updateDoc(doc(db, "orders", ref), {
-              orderStatus: "paid",
-              paymentStatus: "paid",
+            let orderPayload: any = {};
+            const savedOrderRaw = localStorage.getItem("upside_active_order");
+            if (savedOrderRaw) {
+              try {
+                orderPayload = JSON.parse(savedOrderRaw);
+              } catch (_) {}
+            }
+            const cleanOrder = {
+              id: ref,
+              userId: orderPayload?.userId || auth.currentUser?.uid || "guest",
+              customerName: orderPayload?.customerName || "Vanguard Guest",
+              email: orderPayload?.email || "guest@example.com",
+              phone: orderPayload?.phone || "",
+              totalPrice: orderPayload?.totalPrice || 0,
+              items: orderPayload?.items || [],
+              address: orderPayload?.address || "Boutique Self-Pickup",
+              status: orderPayload?.status || "Prepping",
+              timestamp: orderPayload?.timestamp || Date.now(),
+              type: orderPayload?.type || "delivery",
+              orderStatus: "payment_successful",
+              paymentStatus: "payment_successful",
               updatedAt: new Date().toISOString()
-            });
+            };
+            // Ensure full record is securely written on OPay verification success
+            await setDoc(doc(db, "orders", ref), cleanOrder, { merge: true });
+            
             await updateDoc(doc(db, "payments", ref), {
               paymentStatus: "PAID",
               updatedAt: serverTimestamp()
@@ -624,8 +645,8 @@ export default function CartDrawer({
       id={isPage ? "cart-page-container" : "cart-overlay-wrapper"}
     >
       <div 
-        className={isPage ? "bg-white border border-neutral-200 w-full flex flex-col justify-between shadow-sm overflow-hidden rounded-xl min-h-[650px] relative text-neutral-900" : `bg-white border-l border-neutral-200 w-full h-full flex flex-col justify-between shadow-2xl overflow-hidden transition-all duration-300 ${
-          checkoutStep === "details" ? "max-w-2xl" : "max-w-lg"
+        className={isPage ? "bg-white border border-neutral-200 w-full flex flex-col justify-between shadow-sm overflow-hidden rounded-xl min-h-[650px] relative text-neutral-900" : `bg-white border-l border-neutral-200 w-full h-full flex flex-col justify-between shadow-2xl overflow-hidden transition-all duration-500 ease-in-out ${
+          checkoutStep === "details" ? "max-w-4xl" : checkoutStep === "success" ? "max-w-2xl" : "max-w-lg"
         }`}
         id="cart-drawer-container"
       >
@@ -654,6 +675,66 @@ export default function CartDrawer({
             )}
           </button>
         </div>
+
+        {/* WIZARD PROCESS TRACKER (Highly UX-Friendly) */}
+        {checkoutStep !== "success" && (
+          <div className="px-6 py-4 bg-neutral-50/50 border-b border-neutral-200 flex items-center justify-center select-none" id="checkout-progress-timeline-wrapper">
+            <div className="w-full max-w-md flex items-center justify-between relative">
+              
+              {/* Connecting Background Line */}
+              <div className="absolute top-1/2 left-4 right-4 h-0.5 bg-neutral-200 -translate-y-1/2 -z-10" />
+              
+              {/* Animated/Colored active line */}
+              <div 
+                className="absolute top-1/2 left-4 h-0.5 bg-amber-600 -translate-y-1/2 -z-10 transition-all duration-500" 
+                style={{ width: checkoutStep === "details" ? "100%" : "0%" }}
+              />
+
+              {/* Step 1: Cart */}
+              <button 
+                onClick={() => {
+                  if (checkoutStep === "details") handleBackToCart();
+                }}
+                disabled={checkoutStep === "cart"}
+                className="flex flex-col items-center gap-1 bg-neutral-50/50 px-2 cursor-pointer focus:outline-none disabled:cursor-default"
+              >
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center border-2 transition-all duration-300 ${
+                  checkoutStep === "cart" 
+                    ? "border-neutral-900 bg-neutral-900 text-white shadow-sm ring-4 ring-neutral-950/10" 
+                    : "border-amber-600 bg-amber-600 text-white"
+                }`}>
+                  {checkoutStep === "details" ? <Check className="w-4 h-4" /> : <ShoppingCart className="w-4 h-4" />}
+                </div>
+                <span className={`text-[9px] font-mono tracking-widest uppercase font-bold transition-colors ${
+                  checkoutStep === "cart" ? "text-neutral-950 font-extrabold" : "text-neutral-500"
+                }`}>1. My Basket</span>
+              </button>
+
+              {/* Step 2: Details */}
+              <div className="flex flex-col items-center gap-1 bg-neutral-50/50 px-2">
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center border-2 transition-all duration-300 ${
+                  checkoutStep === "details" 
+                    ? "border-neutral-950 bg-neutral-950 text-white shadow-sm ring-4 ring-neutral-950/10" 
+                    : "border-neutral-200 bg-white text-neutral-400"
+                }`}>
+                  <MapPin className="w-4 h-4" />
+                </div>
+                <span className={`text-[9px] font-mono tracking-widest uppercase font-bold transition-colors ${
+                  checkoutStep === "details" ? "text-neutral-950 font-extrabold" : "text-neutral-500"
+                }`}>2. Billing</span>
+              </div>
+
+              {/* Step 3: Success */}
+              <div className="flex flex-col items-center gap-1 bg-neutral-50/50 px-2">
+                <div className="w-8 h-8 rounded-full flex items-center justify-center border-2 border-neutral-200 bg-white text-neutral-400 transition-all duration-300">
+                  <Sparkles className="w-4 h-4" />
+                </div>
+                <span className="text-[9px] font-mono tracking-widest uppercase font-bold text-neutral-400">3. Splendor</span>
+              </div>
+
+            </div>
+          </div>
+        )}
 
         {/* MAIN INTERACTIVE DISPLAY VIEW */}
         <div className="flex-grow overflow-y-auto px-6 py-6 space-y-6 bg-white text-neutral-950" id="cart-main-body">
@@ -735,70 +816,81 @@ export default function CartDrawer({
               ) : (
                 <div className="space-y-4">
                   {/* Cart Item Loop */}
-                  <div className="space-y-3" id="cart-items-wrapper">
+                  <div className="space-y-4" id="cart-items-wrapper">
                     {cartItems.map((item, index) => (
                       <div
                         key={`${item.itemId}-${index}`}
-                        className="flex items-center gap-4 bg-white p-4 border border-neutral-200 transition-all hover:border-neutral-300 shadow-sm text-left"
+                        className="group flex gap-4 bg-white p-5 border border-neutral-100 rounded-xl transition-all duration-300 hover:border-amber-600/30 hover:shadow-md text-left relative overflow-hidden"
                         id={`cart-item-row-${item.itemId}`}
                       >
-                        <img
-                          src={item.image}
-                          alt={item.name}
-                          className="w-16 h-16 object-cover border border-neutral-200"
-                        />
-                        <div className="flex-grow space-y-1">
-                          <div className="flex justify-between items-start">
+                        {/* Elite background flare */}
+                        <div className="absolute top-0 right-0 w-16 h-16 bg-gradient-to-br from-amber-500/0 to-amber-500/5 pointer-events-none duration-300 rounded-bl-full group-hover:scale-110" />
+
+                        <div className="relative w-20 h-20 flex-shrink-0 overflow-hidden rounded-lg border border-neutral-200/80 shadow-sm bg-neutral-50 flex items-center justify-center">
+                          <img
+                            src={item.image}
+                            alt={item.name}
+                            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                            referrerPolicy="no-referrer"
+                          />
+                        </div>
+
+                        <div className="flex-grow flex flex-col justify-between">
+                          <div className="flex justify-between items-start gap-3">
                             <div>
-                              <h4 className="text-xs font-mono font-bold text-neutral-900 uppercase">{item.name}</h4>
+                              <h4 className="text-xs font-sans font-extrabold text-neutral-900 uppercase tracking-tight group-hover:text-amber-600 transition-colors duration-200">
+                                {item.name}
+                              </h4>
                               
                               {/* Option and extras detail tag lines */}
-                              {item.selectedVariant && (
-                                <p className="text-[10px] text-amber-600 font-mono mt-0.5 font-bold">
-                                  Option: <span className="underline">{item.selectedVariant}</span>
-                                </p>
-                              )}
+                              <div className="flex flex-wrap gap-1.5 mt-2">
+                                {item.selectedVariant && (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-mono font-bold bg-amber-500/10 text-amber-700 border border-amber-500/10">
+                                    {item.selectedVariant}
+                                  </span>
+                                )}
 
-                              {item.selectedExtras && item.selectedExtras.length > 0 && (
-                                <p className="text-[10px] text-neutral-500 font-mono">
-                                  Extras: {item.selectedExtras.join(", ")}
-                                </p>
-                              )}
+                                {(item.selectedExtras || []).map((ex, idx) => (
+                                  <span key={idx} className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-mono bg-neutral-100 text-neutral-600 border border-neutral-200">
+                                    +{ex}
+                                  </span>
+                                ))}
 
-                              {item.notes && (
-                                <p className="text-[10px] text-neutral-500 italic font-mono mt-0.5">
-                                  &ldquo;{item.notes}&rdquo;
-                                </p>
-                              )}
+                                {item.notes && (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-sans italic bg-neutral-50 text-neutral-600 truncate max-w-[150px]" title={item.notes}>
+                                    💬 &ldquo;{item.notes}&rdquo;
+                                  </span>
+                                )}
+                              </div>
                             </div>
-                            <span className="text-xs font-mono font-bold text-neutral-900">
+                            <span className="text-xs font-mono font-extrabold text-neutral-950 flex-shrink-0">
                               ₦{(item.price * item.quantity).toLocaleString()}
                             </span>
                           </div>
 
                           {/* WooCommerce style qty manager and trash trigger */}
-                          <div className="flex items-center justify-between pt-2">
-                            <div className="flex items-center border border-neutral-200 bg-neutral-50">
+                          <div className="flex items-center justify-between pt-3 mt-1">
+                            <div className="inline-flex items-center p-0.5 bg-neutral-155 border border-neutral-200/60 rounded-full shadow-inner bg-neutral-50">
                               <button
                                 onClick={() => onUpdateQuantity(item.itemId, item.quantity - 1, item.selectedVariant)}
-                                className="px-2.5 py-1 text-xs text-neutral-500 hover:text-neutral-900 transition-colors cursor-pointer"
+                                className="w-8 h-8 flex items-center justify-center rounded-full text-neutral-500 hover:text-black hover:bg-white transition-all cursor-pointer shadow-sm active:scale-90"
                                 title="Decrease"
                               >
-                                <Minus className="w-3 h-3" />
+                                <Minus className="w-3.5 h-3.5" />
                               </button>
-                              <span className="px-3 text-xs text-black font-mono font-bold">{item.quantity}</span>
+                              <span className="w-8 text-center text-xs text-neutral-950 font-mono font-bold select-none">{item.quantity}</span>
                               <button
                                 onClick={() => onUpdateQuantity(item.itemId, item.quantity + 1, item.selectedVariant)}
-                                className="px-2.5 py-1 text-xs text-neutral-500 hover:text-neutral-900 transition-colors cursor-pointer"
+                                className="w-8 h-8 flex items-center justify-center rounded-full text-neutral-500 hover:text-black hover:bg-white transition-all cursor-pointer shadow-sm active:scale-90"
                                 title="Increase"
                               >
-                                <Plus className="w-3 h-3" />
+                                <Plus className="w-3.5 h-3.5" />
                               </button>
                             </div>
 
                             <button
                               onClick={() => onRemoveItem(item.itemId, item.selectedVariant)}
-                              className="text-neutral-400 hover:text-rose-600 transition-colors p-1 cursor-pointer font-mono"
+                              className="p-1.5 text-neutral-400 hover:text-rose-600 hover:bg-rose-50 rounded-full transition-colors cursor-pointer"
                               title="Delete Item"
                             >
                               <Trash2 className="w-4 h-4" />
@@ -810,8 +902,8 @@ export default function CartDrawer({
                   </div>
 
                   {/* WordPress WooCommerce Styled Coupon Code Box */}
-                  <div className="bg-neutral-50 p-4 border border-neutral-200 space-y-3 text-left shadow-sm" id="cart-coupon-zone">
-                    <label className="text-[10px] uppercase font-mono tracking-widest text-neutral-500 flex items-center gap-1.5 font-bold">
+                  <div className="bg-neutral-50 px-5 py-5 border border-neutral-200/80 rounded-xl space-y-4 text-left shadow-sm" id="cart-coupon-zone">
+                    <label className="text-[10px] uppercase font-mono tracking-widest text-neutral-400 flex items-center gap-1.5 font-bold">
                       <Ticket className="w-3.5 h-3.5 text-amber-600" />
                       <span>Have a promo coupon?</span>
                     </label>
@@ -822,27 +914,76 @@ export default function CartDrawer({
                         placeholder="Coupon code (e.g. UPSIDELUXE)"
                         value={promoInput}
                         onChange={(e) => setPromoInput(e.target.value)}
-                        className="flex-grow bg-white border border-neutral-300 text-black font-mono uppercase text-xs px-3 py-2.5 focus:outline-none focus:border-amber-500"
+                        className="flex-grow bg-white border border-neutral-300 text-black font-mono uppercase text-xs px-4 py-2.5 rounded-lg focus:outline-none focus:border-amber-500 shadow-sm"
                       />
                       <button
                         onClick={handleApplyPromo}
-                        className="px-5 bg-black hover:bg-neutral-900 text-white text-xs font-mono uppercase tracking-wider font-semibold transition-all cursor-pointer"
+                        className="px-5 bg-black hover:bg-neutral-900 text-white text-xs font-mono uppercase tracking-wider font-extrabold transition-all cursor-pointer rounded-lg shadow-sm"
                       >
-                        Apply Coupon
+                        Apply
                       </button>
+                    </div>
+
+                    {/* Highly Interactive Recommended Available Promos */}
+                    <div className="pt-2">
+                      <p className="text-[10px] uppercase font-mono tracking-wider text-neutral-400 mb-2 font-bold">Recommended Coupons (Tap to Apply):</p>
+                      <div className="grid grid-cols-1 gap-2">
+                        {AVAILABLE_PROMOS.map((promo) => {
+                          const isCurrentlyApplied = activePromo?.code === promo.code;
+                          return (
+                            <button
+                              key={promo.code}
+                              onClick={() => {
+                                if (isCurrentlyApplied) {
+                                  handleRemovePromo();
+                                } else {
+                                  setPromoInput(promo.code);
+                                  // Directly apply
+                                  setActivePromo(promo);
+                                  setPromoSuccess(`"${promo.code}" coupon applied successfully!`);
+                                  setPromoError("");
+                                  logCustomEvent("promo_applied", { code: promo.code });
+                                }
+                              }}
+                              className={`text-left p-3 border transition-all duration-300 rounded-lg text-xs flex justify-between items-center cursor-pointer ${
+                                isCurrentlyApplied 
+                                  ? "bg-amber-500/10 border-amber-500 text-amber-950 shadow-sm font-extrabold" 
+                                  : "bg-white border-neutral-200 text-neutral-700 hover:border-neutral-300 hover:bg-neutral-50/50"
+                              }`}
+                            >
+                              <div className="font-mono">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-extrabold tracking-wider text-neutral-900">{promo.code}</span>
+                                  <span className="bg-emerald-100 text-emerald-800 text-[9px] font-bold px-1.5 py-0.5 rounded-full font-sans">
+                                    {promo.discountPercentage}% OFF
+                                  </span>
+                                </div>
+                                <span className="block text-[10px] text-neutral-500 font-sans mt-0.5 font-semibold">{promo.description}</span>
+                              </div>
+                              {isCurrentlyApplied ? (
+                                <span className="bg-amber-600 text-white rounded-full p-0.5 shadow-sm">
+                                  <Check className="w-3.5 h-3.5" />
+                                </span>
+                              ) : (
+                                <span className="text-[10px] font-mono text-neutral-400 hover:text-neutral-900 font-extrabold uppercase">Apply</span>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
 
                     {/* Promotion validations notifications */}
                     {promoError && (
-                      <p className="text-[10px] font-mono text-rose-600 flex items-center gap-1">
-                        <AlertCircle className="w-3.5 h-3.5" />
+                      <p className="text-[10px] font-mono text-rose-600 flex items-center gap-1.5 bg-rose-50 border border-rose-100 p-2 rounded-lg font-bold">
+                        <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
                         <span>{promoError}</span>
                       </p>
                     )}
                     {promoSuccess && (
-                      <div className="bg-amber-50 border border-amber-500/20 p-2.5 text-[10px] font-mono text-amber-700 flex justify-between items-center" id="coupon-active-badge">
+                      <div className="bg-amber-55 text-amber-900 border border-amber-500/20 p-3 text-[10px] font-mono flex justify-between items-center rounded-lg shadow-sm" id="coupon-active-badge">
                         <span>🎉 {promoSuccess}</span>
-                        <button onClick={handleRemovePromo} className="underline text-black font-bold hover:text-rose-600 transition-colors cursor-pointer text-[10px]">
+                        <button onClick={handleRemovePromo} className="underline text-amber-950 font-extrabold hover:text-rose-600 transition-colors cursor-pointer text-[10px]">
                           [Remove]
                         </button>
                       </div>
@@ -925,164 +1066,215 @@ export default function CartDrawer({
 
               {/* Master Checkout Columns */}
               <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
-                
-                {/* COLUMN 1: BILLING DETAILS FORM (WooCommerce format) */}
-                <div className="md:col-span-7 space-y-4">
-                  <div className="border-b border-neutral-200 pb-2">
-                    <h3 className="text-sm font-mono font-bold tracking-widest text-neutral-900 uppercase">BILLING DETAILS</h3>
+                <div className="md:col-span-7 space-y-6">
+                  <div className="border-b border-neutral-200 pb-2 flex items-center justify-between">
+                    <h3 className="text-sm font-sans font-extrabold tracking-wider text-neutral-900 uppercase">1. Checkout Details</h3>
+                    <span className="text-[10px] font-mono bg-neutral-100 text-neutral-600 font-bold px-2 py-0.5 rounded-full uppercase">Step 2 of 3</span>
                   </div>
 
-                  {/* Segment: Fulfillment type layout */}
-                  <div className="flex border border-neutral-200" id="fulfillment-selector">
+                  {/* Segment: Fulfillment type layout (UX-Friendly Pill Slider) */}
+                  <div className="relative flex p-1 bg-neutral-100 rounded-xl border border-neutral-200/80" id="fulfillment-selector">
                     <button
                       type="button"
                       onClick={() => switchCheckoutType("delivery")}
-                      className={`w-1/2 py-3 text-xs font-mono uppercase tracking-wider font-semibold transition-all ${
-                        formData.type === "delivery" ? "bg-black text-white font-bold" : "bg-neutral-50 text-neutral-600 hover:bg-neutral-100"
+                      className={`relative z-10 flex-1 py-3 text-xs font-mono uppercase tracking-wider font-extrabold transition-all duration-300 flex items-center justify-center gap-2 rounded-lg ${
+                        formData.type === "delivery" ? "text-white bg-black shadow-sm" : "text-neutral-600 hover:text-black cursor-pointer"
                       }`}
                     >
-                       Delivery
+                      <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="3" width="15" height="13" /><polygon points="16 8 20 8 23 11 23 16 16 16 16 8" /><circle cx="5.5" cy="18.5" r="2.5" /><circle cx="18.5" cy="18.5" r="2.5" /></svg>
+                      <span>Luxury Delivery</span>
                     </button>
                     <button
                       type="button"
                       onClick={() => switchCheckoutType("pickup")}
-                      className={`w-1/2 py-3 text-xs font-mono uppercase tracking-wider font-semibold transition-all ${
-                        formData.type === "pickup" ? "bg-black text-white font-bold" : "bg-neutral-50 text-neutral-600 hover:bg-neutral-100"
+                      className={`relative z-10 flex-1 py-3 text-xs font-mono uppercase tracking-wider font-extrabold transition-all duration-300 flex items-center justify-center gap-2 rounded-lg ${
+                        formData.type === "pickup" ? "text-white bg-black shadow-sm" : "text-neutral-600 hover:text-black cursor-pointer"
                       }`}
                     >
-                       Self-Pickup
+                      <Store className="w-3.5 h-3.5" />
+                      <span>Boutique Pickup</span>
                     </button>
                   </div>
 
-                  <div className="space-y-3 pt-2">
-                    {/* Customer Name */}
-                    <div className="space-y-1">
-                      <label className="text-[11px] text-neutral-600 font-mono block font-bold">Guest Full Name *</label>
-                      <input
-                        type="text"
-                        name="customerName"
-                        required
-                        value={formData.customerName}
-                        onChange={handleDetailsInputChange}
-                        placeholder="E.g., Tosin Otenaike"
-                        className="w-full bg-white border border-neutral-300 text-black font-mono text-xs px-4 py-3 focus:outline-none focus:border-amber-500 transition-all font-semibold rounded-none"
-                      />
-                    </div>
+                  {/* Profile & Account Details Bento Box */}
+                  <div className="bg-neutral-50/40 border border-neutral-200/85 rounded-xl p-5 space-y-4 shadow-sm">
+                    <h4 className="text-[10px] uppercase font-mono tracking-widest text-neutral-400 font-extrabold border-b border-neutral-200/60 pb-1.5 flex items-center gap-1.5">
+                      <User className="w-3.5 h-3.5 text-amber-600" />
+                      <span>Personal Profile</span>
+                    </h4>
 
-                    {/* Contact details */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div className="space-y-1">
-                        <label className="text-[11px] text-neutral-600 font-mono block font-bold">Mobile Phone Line *</label>
-                        <input
-                          type="tel"
-                          name="phone"
-                          required
-                          value={formData.phone}
-                          onChange={handleDetailsInputChange}
-                          placeholder="Phone number"
-                          className="w-full bg-white border border-neutral-300 text-black font-mono text-xs px-4 py-3 focus:outline-none focus:border-amber-500 transition-all font-semibold rounded-none"
-                        />
+                    <div className="space-y-4">
+                      {/* Customer Name */}
+                      <div className="space-y-1 text-left">
+                        <label className="text-[11px] text-neutral-600 font-mono block font-bold">Guest Full Name *</label>
+                        <div className="relative">
+                          <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-neutral-400">
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+                          </span>
+                          <input
+                            type="text"
+                            name="customerName"
+                            required
+                            value={formData.customerName}
+                            onChange={handleDetailsInputChange}
+                            placeholder="E.g., Tosin Otenaike"
+                            className="w-full bg-white border border-neutral-300 text-black font-mono text-xs pl-10 pr-4 py-3 focus:outline-none focus:border-amber-500 transition-all font-semibold rounded-lg shadow-sm animate-scaleIn"
+                          />
+                        </div>
                       </div>
 
-                      <div className="space-y-1">
-                        <label className="text-[11px] text-neutral-600 font-mono block font-bold">Email Address *</label>
-                        <input
-                          type="email"
-                          name="email"
-                          required
-                          value={formData.email}
-                          onChange={handleDetailsInputChange}
-                          placeholder="E.g., tosin@example.com"
-                          className="w-full bg-white border border-neutral-300 text-black font-mono text-xs px-4 py-3 focus:outline-none focus:border-amber-500 transition-all font-semibold rounded-none"
-                        />
-                        {currentUser ? (
-                          <span className="text-[10px] text-emerald-600 font-mono font-bold mt-1 block">⭐ Logged in as {currentUser.displayName || currentUser.email || "Client"}</span>
-                        ) : (
-                          <span className="text-[9px] text-neutral-400 font-mono block mt-1">Not logged in. Join below or proceed as guest.</span>
-                        )}
+                      {/* Contact details */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="space-y-1 text-left">
+                          <label className="text-[11px] text-neutral-600 font-mono block font-bold">Mobile Phone Line *</label>
+                          <div className="relative">
+                            <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-neutral-400">
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.94.725l.548 2.2a1 1 0 01-.321.988l-1.305.98a10.582 10.582 0 004.872 4.872l.98-1.305a1 1 0 01.988-.321l2.2.548a1 1 0 01.725.94V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" /></svg>
+                            </span>
+                            <input
+                              type="tel"
+                              name="phone"
+                              required
+                              value={formData.phone}
+                              onChange={handleDetailsInputChange}
+                              placeholder="Phone number"
+                              className="w-full bg-white border border-neutral-300 text-black font-mono text-xs pl-10 pr-4 py-3 focus:outline-none focus:border-amber-500 transition-all font-semibold rounded-lg shadow-sm"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="space-y-1 text-left">
+                          <label className="text-[11px] text-neutral-600 font-mono block font-bold">Email Address *</label>
+                          <div className="relative">
+                            <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-neutral-400">
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
+                            </span>
+                            <input
+                              type="email"
+                              name="email"
+                              required
+                              value={formData.email}
+                              onChange={handleDetailsInputChange}
+                              placeholder="E.g., tosin@example.com"
+                              className="w-full bg-white border border-neutral-300 text-black font-mono text-xs pl-10 pr-4 py-3 focus:outline-none focus:border-amber-500 transition-all font-semibold rounded-lg shadow-sm"
+                            />
+                          </div>
+                          {currentUser ? (
+                            <span className="text-[10px] text-emerald-600 font-mono font-extrabold mt-1.5 block">⭐ Logged in as {currentUser.displayName || currentUser.email || "Client"}</span>
+                          ) : (
+                            <span className="text-[9px] text-neutral-400 font-mono block mt-1.5">Not logged in. Join below or proceed as guest.</span>
+                          )}
+                        </div>
                       </div>
                     </div>
 
                     {/* Optional Auto-Signup Block if Guest is not logged in */}
                     {!currentUser && (
-                      <div className="p-4 bg-amber-500/5 border border-amber-500/10 space-y-2.5 mt-2" id="checkout-auth-conversion-promo">
+                      <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl space-y-3 mt-4" id="checkout-auth-conversion-promo">
                         <div className="flex items-center justify-between">
-                          <span className="text-[10px] font-mono tracking-widest text-amber-600 uppercase font-bold flex items-center gap-1">
-                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-                            🔑 SECURE PREMIUM ACCOUNT CREATION
+                          <span className="text-[10px] font-mono tracking-widest text-[#ff6b00] uppercase font-extrabold flex items-center gap-1.5">
+                            <span className="w-1.5 h-1.5 rounded-full bg-[#ff6b00] animate-pulse" />
+                            🔑 Upside Lounge Account (Optional)
                           </span>
                           <button
                             type="button"
                             onClick={onAuthClick}
-                            className="text-[9px] font-mono text-amber-600 hover:text-amber-700 bg-amber-500/10 hover:bg-amber-500/20 px-2.5 py-1 uppercase font-extrabold transition-all cursor-pointer"
+                            className="text-[9px] font-mono text-amber-800 hover:text-neutral-900 bg-amber-500/15 hover:bg-amber-500/25 px-3 py-1 rounded-full uppercase font-bold transition-all cursor-pointer shadow-sm animate-pulse"
                           >
                             Sign In / Log In
                           </button>
                         </div>
-                        <p className="text-[10px] text-neutral-500 font-sans leading-relaxed">
-                          Provide a password to register your email and instantly create your premium account, securely saving your order transactions.
+                        <p className="text-[10px] text-neutral-600 font-sans leading-relaxed">
+                          Provide a password to register your email and instantly create your premium lounge account, securely saving your order transactions and tracking histories.
                         </p>
-                        <div className="space-y-1">
-                          <label className="text-[10px] text-neutral-700 font-mono block font-bold">Desired Password (Min. 6 characters)</label>
-                          <input
-                            type="password"
-                            value={checkoutPassword}
-                            onChange={(e) => setCheckoutPassword(e.target.value)}
-                            placeholder="Enter password to auto-create account"
-                            className="w-full bg-white border border-neutral-300 text-black font-mono text-xs px-4 py-2.5 focus:outline-none focus:border-amber-500 transition-all font-semibold rounded-none"
-                          />
+                        <div className="space-y-1.5 text-left">
+                          <label className="text-[10px] text-neutral-700 font-mono block font-bold">Desired Account Password</label>
+                          <div className="relative">
+                            <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-neutral-400">
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+                            </span>
+                            <input
+                              type="password"
+                              value={checkoutPassword}
+                              onChange={(e) => setCheckoutPassword(e.target.value)}
+                              placeholder="Min. 6 characters to register"
+                              className="w-full bg-white border border-neutral-300 text-black font-mono text-xs pl-10 pr-4 py-2.5 focus:outline-none focus:border-amber-500 transition-all font-semibold rounded-lg shadow-sm"
+                            />
+                          </div>
                           {registrationMessage && (
-                            <p className="text-[9px] font-mono text-amber-600 uppercase tracking-wider mt-1 font-bold animate-pulse">
+                            <p className="text-[9px] font-mono text-[#ff6b00] uppercase tracking-wider mt-1 font-extrabold animate-pulse">
                               ✨ {registrationMessage}
                             </p>
                           )}
                         </div>
                       </div>
                     )}
+                  </div>
 
-                    {/* Conditional Delivery Address Details */}
-                    {formData.type === "delivery" && (
-                      <div className="space-y-3 animate-fadeIn duration-500">
+                  {/* Fulfillment & Destination Card */}
+                  <div className="bg-neutral-50/40 border border-neutral-200/85 rounded-xl p-5 space-y-4 shadow-sm text-left">
+                    <h4 className="text-[10px] uppercase font-mono tracking-widest text-neutral-400 font-extrabold border-b border-neutral-200/60 pb-1.5 flex items-center gap-1.5">
+                      <MapPin className="w-3.5 h-3.5 text-amber-600" />
+                      <span>{formData.type === "delivery" ? "Delivery Destination" : "Pickup Location Details"}</span>
+                    </h4>
+
+                    {formData.type === "delivery" ? (
+                      <div className="space-y-4 animate-fadeIn duration-500">
                         <div className="space-y-1">
                           <label className="text-[11px] text-neutral-600 font-mono block font-bold">Lagos Neighborhood Area *</label>
-                          <select
-                            name="area"
-                            value={formData.area}
-                            onChange={handleDetailsInputChange}
-                            className="w-full bg-white border border-neutral-300 text-black font-mono text-xs px-4 py-3 focus:outline-none focus:border-amber-500 transition-all font-bold rounded-none"
-                          >
-                            {locationsList.map((area) => (
-                              <option key={area.id || area.name} value={area.name} className="bg-white text-black">
-                                {area.name} (Delivery Fee: ₦{area.fee.toLocaleString()}) {area.isMainland ? "— [Mainland]" : "— [Island]"}
-                              </option>
-                            ))}
-                          </select>
+                          <div className="relative">
+                            <select
+                              name="area"
+                              value={formData.area}
+                              onChange={handleDetailsInputChange}
+                              className="w-full bg-white border border-neutral-300 text-black font-mono text-xs px-4 py-3.5 focus:outline-none focus:border-amber-500 transition-all font-bold rounded-lg shadow-sm cursor-pointer appearance-none"
+                            >
+                              {locationsList.map((area) => (
+                                <option key={area.id || area.name} value={area.name} className="bg-white text-black font-semibold">
+                                  {area.name} (Delivery Fee: ₦{area.fee.toLocaleString()}) {area.isMainland ? "— [Mainland]" : "— [Island]"}
+                                </option>
+                              ))}
+                            </select>
+                            <span className="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none text-neutral-500 font-bold">&#9662;</span>
+                          </div>
                         </div>
 
                         <div className="space-y-1">
-                          <label className="text-[11px] text-neutral-600 font-mono block font-bold">Full Street Address *</label>
-                          <input
-                            type="text"
-                            name="address"
-                            required
-                            value={formData.address || ""}
-                            onChange={handleDetailsInputChange}
-                            placeholder="E.g., Apartment 4B, 32A Admiralty Way, Lekki Phase 1"
-                            className="w-full bg-white border border-neutral-300 text-black font-mono text-xs px-4 py-3 focus:outline-none focus:border-amber-500 transition-all font-semibold rounded-none"
-                          />
+                          <label className="text-[11px] text-neutral-600 font-mono block font-bold">Full Street Address & Gate Details *</label>
+                          <div className="relative">
+                            <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-neutral-400">
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
+                            </span>
+                            <input
+                              type="text"
+                              name="address"
+                              required
+                              value={formData.address || ""}
+                              onChange={handleDetailsInputChange}
+                              placeholder="E.g., Apt 4B, 32A Admiralty Way, Lekki 1"
+                              className="w-full bg-white border border-neutral-300 text-black font-mono text-xs pl-10 pr-4 py-3.5 focus:outline-none focus:border-amber-500 transition-all font-semibold rounded-lg shadow-sm"
+                            />
+                          </div>
                         </div>
+                      </div>
+                    ) : (
+                      <div className="p-4 bg-amber-500/5 border border-amber-500/10 rounded-xl space-y-1.5 animate-fadeIn">
+                        <span className="text-[10px] font-mono text-[#ff6b00] font-extrabold uppercase">📍 Bayside Sanctuary Lounge Pickup</span>
+                        <p className="text-[11px] text-neutral-600 leading-relaxed font-sans font-semibold">
+                          Your premium order will be freshly prepped and await your collection directly at the VIP reception desk of **Upside Lekki Bayside sanctuary Lounge**. No delivery charges applied.
+                        </p>
                       </div>
                     )}
 
                     {/* Kitchen Remarks */}
-                    <div className="space-y-1">
-                      <label className="text-[11px] text-neutral-600 font-mono block font-bold">Kitchen Notes & Special Instructions</label>
+                    <div className="space-y-1 pt-1">
+                      <label className="text-[11px] text-neutral-600 font-mono block font-bold">Kitchen Instructions & Remarks</label>
                       <textarea
                         name="customNotes"
                         value={formData.customNotes}
                         onChange={handleDetailsInputChange}
-                        placeholder="E.g., Level 5 spicy, extra milk, leave at reception desk..."
-                        className="w-full bg-white border border-neutral-300 text-black font-mono text-xs px-4 py-3 focus:outline-none focus:border-amber-500 transition-all font-semibold h-20 resize-none rounded-none"
+                        placeholder="E.g., Level 5 spicy, extra dressing, leave with concierge reception..."
+                        className="w-full bg-white border border-neutral-350 text-black font-mono text-xs px-4 py-3 focus:outline-none focus:border-amber-500 transition-all font-semibold h-20 resize-none rounded-lg shadow-sm"
                       />
                     </div>
                   </div>
@@ -1167,64 +1359,93 @@ export default function CartDrawer({
                   </div>
 
                   {/* WooCommerce Enclosed Payment Gateways Box */}
-                  <div className="bg-neutral-50 border border-neutral-200 p-4 space-y-4 shadow-sm" id="woocommerce-payment-box">
-                    <h4 className="text-[10px] uppercase font-mono tracking-widest text-neutral-500 font-bold border-b border-neutral-200 pb-2">
-                      Secured Payment Gateways
+                  <div className="bg-neutral-50/50 border border-neutral-200/85 p-5 rounded-xl space-y-4 shadow-sm" id="woocommerce-payment-box">
+                    <h4 className="text-[10px] uppercase font-mono tracking-widest text-neutral-400 font-extrabold border-b border-neutral-200/60 pb-2 flex items-center gap-1.5">
+                      <CreditCard className="w-3.5 h-3.5 text-amber-600" />
+                      <span>Secured Payment Gateways</span>
                     </h4>
 
-                    {/* Radio 2: WhatsApp Manual integration */}
-                    <div className="space-y-2">
-                      <label className="flex items-center gap-2 cursor-pointer text-black text-[11px] font-mono font-bold select-none">
-                        <input
-                          type="radio"
-                          name="checkoutPaymentMethod"
-                          checked={formData.paymentMethod === "whatsapp"}
-                          onChange={() => setFormData({ ...formData, paymentMethod: "whatsapp" })}
-                          className="w-4 h-4 text-amber-600 bg-white border-neutral-300 focus:ring-amber-500 cursor-pointer"
-                        />
-                        <span className="uppercase text-neutral-800">Send WhatsApp Invoice Receipt</span>
-                        <MessageSquare className="w-3.5 h-3.5 text-amber-600 ml-auto" />
-                      </label>
-                      {formData.paymentMethod === "whatsapp" && (
-                        <div className="bg-white border-l-2 border-amber-500 p-3 text-[10.5px] text-neutral-600 leading-relaxed font-mono animate-fadeIn border border-neutral-200">
-                          Review details completely and generate an invoice script routed immediately inside WhatsApp to an active customer desk. Excellent for manual or business transfers offline.
+                    {/* OPay Interactive Premium Card */}
+                    <div 
+                      onClick={() => setFormData({ ...formData, paymentMethod: "opay" })}
+                      className={`group p-4 border rounded-xl cursor-pointer transition-all duration-300 select-none ${
+                        formData.paymentMethod === "opay" 
+                          ? "border-[#ff6b00] bg-[#ff6b00]/5 shadow-sm ring-2 ring-[#ff6b00]/5" 
+                          : "border-neutral-200 hover:border-neutral-300 bg-white"
+                      }`}
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${
+                            formData.paymentMethod === "opay" ? "border-[#ff6b00] bg-[#ff6b00]" : "border-neutral-300"
+                          }`}>
+                            {formData.paymentMethod === "opay" && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                          </div>
+                          <div>
+                            <span className="text-xs font-sans font-extrabold text-neutral-900 uppercase tracking-tight block">
+                              Pay Securely via OPay
+                            </span>
+                            <span className="text-[10px] text-neutral-500 font-mono mt-0.5 block font-bold">
+                              OPay Wallet • Bank Transfer • Debit Cards
+                            </span>
+                          </div>
                         </div>
-                      )}
-                    </div>
-
-                    {/* Radio 3: Secure OPay checkout */}
-                    <div className="space-y-2 pt-2 border-t border-neutral-200">
-                      <label className="flex items-center gap-2 cursor-pointer text-black text-[11px] font-mono font-bold select-none">
-                        <input
-                          type="radio"
-                          name="checkoutPaymentMethod"
-                          checked={formData.paymentMethod === "opay"}
-                          onChange={() => setFormData({ ...formData, paymentMethod: "opay" })}
-                          className="w-4 h-4 text-amber-600 bg-white border-neutral-300 focus:ring-amber-500 cursor-pointer"
-                        />
-                        <span className="uppercase text-neutral-800">Pay Securely via OPay</span>
-                        <HelpCircle className="w-3.5 h-3.5 text-amber-600 ml-auto" />
-                      </label>
-                      {formData.paymentMethod === "opay" && (
-                        <div className="bg-white border-l-2 border-amber-500 p-3 text-[10.5px] text-neutral-600 leading-relaxed font-mono animate-fadeIn border border-neutral-200">
-                          Directly initiate an official checkout cashier request on OPay's high-speed checkout servers. Make payment safely via internet wallet balance, cards, or instant bank transfers.
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Loading feedback simulation if card paystack is active */}
-                    {formData.paymentMethod === "paystack" && isProcessingPaystack && (
-                      <div className="text-center py-4 space-y-2 border-t border-neutral-250 pt-4" id="paystack-processing-indicator">
-                        <div className="w-6 h-6 border-2 border-amber-500 border-t-transparent rounded-full animate-spin mx-auto" />
-                        <p className="text-[10px] uppercase tracking-wider font-mono text-amber-600">Contacting Paystack gateway...</p>
+                        <span className="text-[9px] bg-[#ff6b00] text-white font-mono font-bold px-2 py-0.5 rounded-md uppercase tracking-wider shadow-sm flex-shrink-0">
+                          OPay
+                        </span>
                       </div>
-                    )}
+                      <div className={`transition-all duration-500 overflow-hidden ${
+                        formData.paymentMethod === "opay" ? "max-h-24 mt-3" : "max-h-0"
+                      }`}>
+                        <p className="text-[10.5px] text-neutral-600 leading-relaxed font-sans border-t border-[#ff6b00]/10 pt-2.5">
+                          Directly initiate an official checkout Cashier Session on OPay's high-speed checkout servers. Pay securely with your secure bank-app transfer or debit card.
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* WhatsApp Interactive Premium Card */}
+                    <div 
+                      onClick={() => setFormData({ ...formData, paymentMethod: "whatsapp" })}
+                      className={`group p-4 border rounded-xl cursor-pointer transition-all duration-300 select-none ${
+                        formData.paymentMethod === "whatsapp" 
+                          ? "border-emerald-600 bg-emerald-500/5 shadow-sm ring-2 ring-emerald-50/10" 
+                          : "border-neutral-200 hover:border-neutral-300 bg-white"
+                      }`}
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${
+                            formData.paymentMethod === "whatsapp" ? "border-emerald-600 bg-emerald-600" : "border-neutral-300"
+                          }`}>
+                            {formData.paymentMethod === "whatsapp" && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                          </div>
+                          <div>
+                            <span className="text-xs font-sans font-extrabold text-neutral-900 uppercase tracking-tight block">
+                              Deliver Order via WhatsApp
+                            </span>
+                            <span className="text-[10px] text-neutral-500 font-mono mt-0.5 block font-bold">
+                              Send Direct Invoice Receipt Script
+                            </span>
+                          </div>
+                        </div>
+                        <span className="text-[9px] bg-emerald-600 text-white font-mono font-bold px-2 py-0.5 rounded-md uppercase tracking-wider shadow-sm flex items-center gap-1 flex-shrink-0">
+                          <MessageSquare className="w-2.5 h-2.5" /> WA
+                        </span>
+                      </div>
+                      <div className={`transition-all duration-500 overflow-hidden ${
+                        formData.paymentMethod === "whatsapp" ? "max-h-24 mt-3" : "max-h-0"
+                      }`}>
+                        <p className="text-[10.5px] text-neutral-600 leading-relaxed font-sans border-t border-emerald-600/10 pt-2.5">
+                          Review complete details and compile an official receipt invoice routed inside WhatsApp to our concierge desk, useful for direct boutique collection.
+                        </p>
+                      </div>
+                    </div>
 
                     {/* Loading feedback if OPay is active */}
                     {formData.paymentMethod === "opay" && isProcessingOpay && (
-                      <div className="text-center py-4 space-y-2 border-t border-neutral-250 pt-4" id="opay-processing-indicator">
+                      <div className="text-center py-4 bg-[#ff6b00]/5 border border-[#ff6b00]/25 rounded-xl space-y-2 pt-4" id="opay-processing-indicator">
                         <div className="w-6 h-6 border-2 border-[#ff6b00] border-t-transparent rounded-full animate-spin mx-auto" />
-                        <p className="text-[10px] uppercase tracking-wider font-mono text-[#ff6b00]">Contacting OPay Gateway Cashier...</p>
+                        <p className="text-[10px] uppercase tracking-wider font-mono text-[#ff6b00] font-bold">Contacting OPay Gateway Cashier...</p>
                       </div>
                     )}
                   </div>

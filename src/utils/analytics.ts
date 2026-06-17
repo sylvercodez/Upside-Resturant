@@ -22,7 +22,8 @@ export type AnalyticsEventType =
   | "reservation_success"
   | "cart_view"
   | "checkout_attempt"
-  | "checkout_success";
+  | "checkout_success"
+  | "promo_applied";
 
 /**
  * Tracks and pushes user engagement metrics and reservation conversion ratios.

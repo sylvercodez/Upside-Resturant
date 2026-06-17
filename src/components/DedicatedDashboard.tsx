@@ -26,7 +26,8 @@ import {
   Sparkles,
   Search,
   Check,
-  Award
+  Award,
+  Trash2
 } from "lucide-react";
 import { collection, query, updateDoc, doc, onSnapshot, setDoc, deleteDoc } from "firebase/firestore";
 import { db, handleFirestoreError, OperationType } from "../firebase";
@@ -832,6 +833,29 @@ export default function DedicatedDashboard({
     }
   };
 
+  // Handle deleting order (and automatically setting its status to Cancelled first)
+  const handleDeleteOrder = async (orderId: string) => {
+    if (!window.confirm("Are you absolutely sure you want to cancel and delete this order? This action is permanent and cannot be undone.")) {
+      return;
+    }
+    try {
+      const orderRef = doc(db, "orders", orderId);
+      // Automatically cancel it before deleting
+      await updateDoc(orderRef, {
+        status: "Cancelled",
+        orderStatus: "Cancelled",
+        paymentStatus: "cancelled",
+        updatedAt: new Date().toISOString()
+      });
+      // Perform the deletion
+      await deleteDoc(orderRef);
+      alert("Order was successfully cancelled and deleted permanently from the system.");
+    } catch (e: any) {
+      console.error("Order cancel & delete operation failed:", e);
+      alert(`Could not delete order: ${e.message}`);
+    }
+  };
+
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
 
   // Handle deleting of menu items (only allowed to admin)
@@ -1518,6 +1542,17 @@ export default function DedicatedDashboard({
                                       }`}
                                     >
                                       Delivered ✓
+                                    </button>
+
+                                    <div className="border-t border-neutral-800 my-1"></div>
+
+                                    <button
+                                      onClick={() => handleDeleteOrder(ord.id)}
+                                      className="py-1.5 px-2.5 text-center border border-rose-500/30 text-rose-400 bg-rose-950/20 hover:bg-rose-600 hover:text-white transition-all duration-200 cursor-pointer font-bold flex items-center justify-center gap-1.5"
+                                      title="Auto-cancels the order first, then deletes it permanently"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                      <span>Cancel & Delete</span>
                                     </button>
                                   </div>
                                 </div>
