@@ -70,16 +70,44 @@ app.use("/api", appCheckVerification);
 
 // Create email transporter dynamically based on configured environment variables
 function getMailTransporter() {
-  if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) {
-    return nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: parseInt(process.env.SMTP_PORT || "587"),
-      secure: process.env.SMTP_SECURE === "true" || process.env.SMTP_PORT === "465",
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
-      },
-    });
+  try {
+    if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) {
+      const smtpOptions = {
+        host: process.env.SMTP_HOST,
+        port: parseInt(process.env.SMTP_PORT || "587"),
+        secure: process.env.SMTP_SECURE === "true" || process.env.SMTP_PORT === "465",
+        auth: {
+          user: process.env.SMTP_USER,
+          pass: process.env.SMTP_PASS,
+        },
+      };
+
+      // Handle ESM default import or CJS require fallback differences
+      let createTransportFn: any = null;
+      if (nodemailer && typeof (nodemailer as any).createTransport === "function") {
+        createTransportFn = (nodemailer as any).createTransport;
+      } else if (nodemailer && (nodemailer as any).default && typeof (nodemailer as any).default.createTransport === "function") {
+        createTransportFn = (nodemailer as any).default.createTransport;
+      } else {
+        // Fallback to direct require if imports has been mangled
+        try {
+          const directNodemailer = require("nodemailer");
+          if (directNodemailer && typeof directNodemailer.createTransport === "function") {
+            createTransportFn = directNodemailer.createTransport;
+          }
+        } catch (e) {
+          console.error("[getMailTransporter] Direct require of nodemailer failed:", e);
+        }
+      }
+
+      if (createTransportFn) {
+        return createTransportFn(smtpOptions);
+      } else {
+        console.warn("[getMailTransporter] Nodemailer createTransport function could not be resolved.");
+      }
+    }
+  } catch (err: any) {
+    console.error("[getMailTransporter Exception] Could not construct mail transporter:", err);
   }
   return null;
 }
@@ -155,37 +183,44 @@ app.get("/api/otp/status", (req, res) => {
 });
 
 app.post("/api/otp/request", async (req, res) => {
-  const { target } = req.body;
-  if (!target) {
-    return res.status(400).json({ error: "Email address or Phone number is required." });
-  }
+  try {
+    const { target } = req.body || {};
+    if (!target) {
+      return res.status(400).json({ error: "Email address or Phone number is required." });
+    }
 
-  const cleanTarget = target.trim().toLowerCase();
-  
-  // Generate a random 6-digit secure numerical PIN
-  const code = Math.floor(100000 + Math.random() * 900000).toString();
-  const expiresAt = Date.now() + 5 * 60 * 1000; // 5 minutes validity
-  
-  activeOtps.set(cleanTarget, { code, expiresAt });
+    const cleanTarget = target.trim().toLowerCase();
+    
+    // Generate a random 6-digit secure numerical PIN
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = Date.now() + 5 * 60 * 1000; // 5 minutes validity
+    
+    activeOtps.set(cleanTarget, { code, expiresAt });
 
-  // Dispatched console alert log for server console/verification
-  console.log(`\n=================================================`);
-  console.log(`[SECURE OTP SYSTEM] Dispatched to: ${cleanTarget}`);
-  console.log(`[SECURE OTP SYSTEM] 6-Digit Code : ${code}`);
-  console.log(`=================================================\n`);
+    // Dispatched console alert log for server console/verification
+    console.log(`\n=================================================`);
+    console.log(`[SECURE OTP SYSTEM] Dispatched to: ${cleanTarget}`);
+    console.log(`[SECURE OTP SYSTEM] 6-Digit Code : ${code}`);
+    console.log(`=================================================\n`);
 
-  const transporter = getMailTransporter();
-  if (transporter) {
+    let transporter = null;
     try {
-      const computedFrom = getFromEmailAddress();
-      console.log(`[SMTP] Attempting email dispatch: FROM: ${computedFrom} -> TO: ${cleanTarget}`);
+      transporter = getMailTransporter();
+    } catch (transporterErr: any) {
+      console.error("[SMTP TRANSPORTER INITIALIZATION ERROR]:", transporterErr);
+    }
 
-      const mailOptions = {
-        from: computedFrom,
-        to: cleanTarget,
-        subject: `[UPSIDE] Secure Verification PIN: ${code}`,
-        text: `Your Upside verification code is: ${code}. This code is active for 5 minutes.`,
-        html: `
+    if (transporter) {
+      try {
+        const computedFrom = getFromEmailAddress();
+        console.log(`[SMTP] Attempting email dispatch: FROM: ${computedFrom} -> TO: ${cleanTarget}`);
+
+        const mailOptions = {
+          from: computedFrom,
+          to: cleanTarget,
+          subject: `[UPSIDE] Secure Verification PIN: ${code}`,
+          text: `Your Upside verification code is: ${code}. This code is active for 5 minutes.`,
+          html: `
 <!DOCTYPE html>
 <html>
 <head>
@@ -359,81 +394,94 @@ app.post("/api/otp/request", async (req, res) => {
 </body>
 </html>
         `
-      };
+        };
 
-      await transporter.sendMail(mailOptions);
-      console.log(`[SMTP] Successfully sent real verification email to: ${cleanTarget}`);
-      
-      return res.json({
-        success: true,
-        message: "Verification code sent to your email!"
-      });
-    } catch (mailError: any) {
-      console.error(`[SMTP ERROR] Sending failed, falling back to Sandbox Delivery:`, mailError);
-      return res.json({
-        success: true,
-        message: "Verification code sent! (Sandbox fallback due to SMTP error)",
-        demoCode: code,
-        smtpError: mailError?.message || "Unknown SMTP transport error"
-      });
+        await transporter.sendMail(mailOptions);
+        console.log(`[SMTP] Successfully sent real verification email to: ${cleanTarget}`);
+        
+        return res.json({
+          success: true,
+          message: "Verification code sent to your email!"
+        });
+      } catch (mailError: any) {
+        console.error(`[SMTP ERROR] Sending failed, falling back to Sandbox Delivery:`, mailError);
+        return res.json({
+          success: true,
+          message: "Verification code sent! (Sandbox fallback due to SMTP error)",
+          demoCode: code,
+          smtpError: mailError?.message || "Unknown SMTP transport error"
+        });
+      }
     }
-  }
 
-  // Fallback: SMTP is not configured
-  res.json({
-    success: true,
-    message: "Verification code sent! (Sandbox Mode)",
-    demoCode: code
-  });
+    // Fallback: SMTP is not configured
+    return res.json({
+      success: true,
+      message: "Verification code sent! (Sandbox Mode)",
+      demoCode: code
+    });
+  } catch (err: any) {
+    console.error("[api/otp/request SEVERE ERROR]:", err);
+    return res.status(500).json({
+      error: `Internal server error: ${err.message || err}`
+    });
+  }
 });
 
 app.post("/api/otp/verify", (req, res) => {
-  const { target, code } = req.body;
-  if (!target || !code) {
-    return res.status(400).json({ error: "Missing identity token or verification code." });
-  }
+  try {
+    const { target, code } = req.body || {};
+    if (!target || !code) {
+      return res.status(400).json({ error: "Missing identity token or verification code." });
+    }
 
-  const cleanTarget = target.trim().toLowerCase();
-  const otpRecord = activeOtps.get(cleanTarget);
+    const cleanTarget = target.trim().toLowerCase();
+    const otpRecord = activeOtps.get(cleanTarget);
 
-  if (!otpRecord) {
-    return res.status(400).json({ error: "No active verification sessions found. Please request a new OTP code." });
-  }
+    if (!otpRecord) {
+      return res.status(400).json({ error: "No active verification sessions found. Please request a new OTP code." });
+    }
 
-  if (Date.now() > otpRecord.expiresAt) {
+    if (Date.now() > otpRecord.expiresAt) {
+      activeOtps.delete(cleanTarget);
+      return res.status(400).json({ error: "The OTP verification code has expired. Please request a new PIN code." });
+    }
+
+    if (otpRecord.code !== code.trim()) {
+      return res.status(400).json({ error: "The inputted 6-digit OTP code is incorrect. Please try again." });
+    }
+
+    // Verification succeeded! Consume the code.
     activeOtps.delete(cleanTarget);
-    return res.status(400).json({ error: "The OTP verification code has expired. Please request a new PIN code." });
+
+    // Derive a durable deterministic password hash based on target + secure production salt
+    const passwordHash = crypto
+      .createHmac("sha256", OTP_SESSION_SALT)
+      .update(cleanTarget)
+      .digest("hex")
+      .slice(0, 20);
+
+    // Standardize the target email name format for Firebase Auth compatibility
+    let sessionEmail = cleanTarget;
+    let isPhoneMode = !cleanTarget.includes("@");
+    if (isPhoneMode) {
+      // Generate a secure synthetic virtual email structure for standard Firebase auth linkage
+      sessionEmail = `phone_${cleanTarget.replace(/[^0-9a-z]/g, "")}@upside-restaurant-cafe.com`;
+    }
+
+    return res.json({
+      success: true,
+      message: "Identity verified successfully. Linking secure credential session.",
+      email: sessionEmail,
+      firebasePassword: passwordHash,
+      displayName: isPhoneMode ? `Phone User (${target})` : target.split("@")[0]
+    });
+  } catch (err: any) {
+    console.error("[api/otp/verify SEVERE ERROR]:", err);
+    return res.status(500).json({
+      error: `Internal server error: ${err.message || err}`
+    });
   }
-
-  if (otpRecord.code !== code.trim()) {
-    return res.status(400).json({ error: "The inputted 6-digit OTP code is incorrect. Please try again." });
-  }
-
-  // Verification succeeded! Consume the code.
-  activeOtps.delete(cleanTarget);
-
-  // Derive a durable deterministic password hash based on target + secure production salt
-  const passwordHash = crypto
-    .createHmac("sha256", OTP_SESSION_SALT)
-    .update(cleanTarget)
-    .digest("hex")
-    .slice(0, 20);
-
-  // Standardize the target email name format for Firebase Auth compatibility
-  let sessionEmail = cleanTarget;
-  let isPhoneMode = !cleanTarget.includes("@");
-  if (isPhoneMode) {
-    // Generate a secure synthetic virtual email structure for standard Firebase auth linkage
-    sessionEmail = `phone_${cleanTarget.replace(/[^0-9a-z]/g, "")}@upside-restaurant-cafe.com`;
-  }
-
-  res.json({
-    success: true,
-    message: "Identity verified successfully. Linking secure credential session.",
-    email: sessionEmail,
-    firebasePassword: passwordHash,
-    displayName: isPhoneMode ? `Phone User (${target})` : target.split("@")[0]
-  });
 });
 
 // API Endpoints for Instagram
