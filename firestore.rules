@@ -157,8 +157,8 @@ service cloud.firestore {
       // Menus are publicly readable
       allow read, list: if true;
       
-      // Only admin can write custom menus
-      allow write, create, update, delete: if isAdmin();
+      // Only admin or system can write custom menus
+      allow write, create, update, delete: if isAdmin() || isSystem();
     }
 
     // Categories Collection Rules
@@ -166,8 +166,8 @@ service cloud.firestore {
       // Categories are publicly readable
       allow read, list: if true;
       
-      // Only admin can create, update, or delete categories
-      allow write, create, update, delete: if isAdmin();
+      // Only admin or system can create, update, or delete categories
+      allow write, create, update, delete: if isAdmin() || isSystem();
     }
 
     // Shipping Areas Collection Rules

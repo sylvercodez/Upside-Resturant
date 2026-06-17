@@ -170,6 +170,84 @@ function getAppUrl(req: any): string {
 }
 
 // REST endpoints for OTP dispatch
+app.get("/api/seed-menu", async (req, res) => {
+  try {
+    const configPath = path.join(process.cwd(), "firebase-applet-config.json");
+    let databaseId = "ai-studio-7ee29b67-2013-4587-a753-b479a6e19155";
+    if (fs.existsSync(configPath)) {
+      const configObj = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+      if (configObj.firestoreDatabaseId) databaseId = configObj.firestoreDatabaseId;
+    }
+
+    const { getFirestore } = await import("firebase-admin/firestore");
+    const { CATEGORIES, MENU_ITEMS } = await import("./src/data/menu");
+    const adminApp = admin.apps[0];
+    if (!adminApp) {
+      return res.status(500).json({ error: "Firebase Admin app is not initialized." });
+    }
+
+    const db = getFirestore(adminApp, databaseId);
+
+    // 1. Mark obsolete categories as deleted
+    const catQuerySnapshot = await db.collection("categories").get();
+    const existingCatNames = new Set(CATEGORIES.map(c => c.id));
+    for (const doc of catQuerySnapshot.docs) {
+      if (!existingCatNames.has(doc.id)) {
+        await doc.ref.set({ deleted: true }, { merge: true });
+      }
+    }
+
+    // 2. Mark obsolete menus as deleted
+    const menuQuerySnapshot = await db.collection("menus").get();
+    const existingMenuNames = new Set(MENU_ITEMS.map(m => m.id));
+    for (const doc of menuQuerySnapshot.docs) {
+      if (!existingMenuNames.has(doc.id)) {
+        await doc.ref.set({ deleted: true }, { merge: true });
+      }
+    }
+
+    // 3. Keep synced and live categories
+    let catsSynced = 0;
+    for (const cat of CATEGORIES) {
+      await db.collection("categories").doc(cat.id).set({
+        id: cat.id,
+        name: cat.name,
+        description: cat.description,
+        icon: cat.icon,
+        deleted: false,
+        updatedAt: new Date().toISOString()
+      });
+      catsSynced++;
+    }
+
+    // 4. Keep synced and live menu items
+    let menusSynced = 0;
+    for (const item of MENU_ITEMS) {
+      await db.collection("menus").doc(item.id).set({
+        id: item.id,
+        name: item.name,
+        description: item.description,
+        price: item.price,
+        category: item.category,
+        image: item.image,
+        tags: item.tags || [],
+        specs: item.specs || [],
+        deleted: false,
+        updatedAt: new Date().toISOString()
+      });
+      menusSynced++;
+    }
+
+    res.json({
+      status: "success",
+      message: `Database successfully seeded with ${catsSynced} categories and ${menusSynced} menu items!`,
+      databaseId
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || err });
+  }
+});
+
 app.get("/api/otp/status", (req, res) => {
   const isConfigured = !!(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
   res.json({
