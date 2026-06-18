@@ -13,7 +13,7 @@
       "source": "/api/:path*",
       "destination": "/api/index.ts"
     },
-    
+    { "source": "/api/(.*)", "destination": "/api" },
     {
       "source": "/((?!api/).*)",
       "destination": "/index.html"
