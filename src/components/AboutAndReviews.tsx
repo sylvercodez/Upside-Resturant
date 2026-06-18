@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { REVIEWS } from "../data/menu";
+import { REVIEWS } from "../data/reviews";
 import { Award, Compass, Heart, Share2, Star, Mail, MapPin, Instagram, Sparkles, Gift, Play, Pause, Volume2, VolumeX, MessageCircle, Zap, QrCode, Smartphone, ArrowRight } from "lucide-react";
 import { collection, getDocs, query, orderBy, limit } from "firebase/firestore";
 import { db } from "../firebase";

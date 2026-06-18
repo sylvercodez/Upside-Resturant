@@ -82,3 +82,24 @@ export function getApiUrl(path: string): string {
   return cleanPath;
 }
 
+export interface MenuItem {
+  id: string;
+  name: string;
+  price: number;
+  category: string;
+  description: string;
+  image: string;
+  tags?: string[];
+  specs?: string[];
+  variants?: { name: string; price: number }[];
+  extras?: { name: string; price: number }[];
+}
+
+export interface Category {
+  id: string;
+  name: string;
+  icon: string;
+  description: string;
+}
+
+
