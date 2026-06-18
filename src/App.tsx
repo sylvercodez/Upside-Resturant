@@ -434,11 +434,34 @@ export default function App() {
           body: JSON.stringify({ reference: order.id })
         });
         
-        if (!response.ok) {
-          throw new Error("Unable to reach OPay verification API");
+        let data: any;
+        const contentType = response.headers.get("content-type");
+        if (contentType && contentType.includes("application/json")) {
+          data = await response.json();
+        } else {
+          const text = await response.text();
+          let excerpt = text.trim();
+          if (excerpt.includes("<pre>")) {
+            const preMatch = excerpt.match(/<pre>([\s\S]*?)<\/pre>/i);
+            if (preMatch && preMatch[1]) {
+              excerpt = preMatch[1].trim();
+            }
+          } else if (excerpt.includes("<title>")) {
+            const titleMatch = excerpt.match(/<title>([\s\S]*?)<\/title>/i);
+            if (titleMatch && titleMatch[1]) {
+              excerpt = `Page Title: ${titleMatch[1].trim()}`;
+            }
+          }
+          if (excerpt.length > 350) {
+            excerpt = excerpt.substring(0, 350) + "...";
+          }
+          throw new Error(`Server returned non-JSON error (status ${response.status}). Diagnostic details: ${excerpt || "No response body returned."}`);
         }
         
-        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.error || "Unable to reach OPay verification API");
+        }
+        
         console.log("[handleTrackOrder] OPay verification API response:", data);
 
         // Check if status returned is PAID / SUCCESS / payment_successful

@@ -3,7 +3,6 @@ import path from "path";
 import dotenv from "dotenv";
 import crypto from "crypto";
 import nodemailer from "nodemailer";
-import { createServer as createViteServer } from "vite";
 import admin from "firebase-admin";
 import { getFirestore } from "firebase-admin/firestore";
 import fs from "fs";
@@ -877,17 +876,13 @@ try {
     // Robust administrative fallbacks for identity/database credential integrations
     config = {
       projectId: stripQuotes(process.env.FIREBASE_PROJECT_ID || process.env.GCLOUD_PROJECT || "gen-lang-client-0332471137"),
-      apiKey: stripQuotes(process.env.FIREBASE_API_KEY || ""),
+      apiKey: stripQuotes(process.env.FIREBASE_API_KEY || "AIzaSyBlIddU4ZP6QsC212vb__3AoMKH9MA-_1E"),
       authDomain: stripQuotes(process.env.FIREBASE_AUTH_DOMAIN || "gen-lang-client-0332471137.firebaseapp.com"),
       firestoreDatabaseId: stripQuotes(process.env.FIREBASE_DATABASE_ID || process.env.FIRESTORE_DB_NAME || "ai-studio-7ee29b67-2013-4587-a753-b479a6e19155"),
-      appId: stripQuotes(process.env.FIREBASE_APP_ID || ""),
+      appId: stripQuotes(process.env.FIREBASE_APP_ID || "1:603064167629:web:81ee6a02fc18f423460d84"),
       storageBucket: stripQuotes(process.env.FIREBASE_STORAGE_BUCKET || "gen-lang-client-0332471137.firebasestorage.app"),
-      messagingSenderId: stripQuotes(process.env.FIREBASE_MESSAGING_SENDER_ID || "")
+      messagingSenderId: stripQuotes(process.env.FIREBASE_MESSAGING_SENDER_ID || "603064167629")
     };
-    if (!config.apiKey) {
-      // If there is no api key set in process.env, fallback to default configurations
-      config.apiKey = "AIzaSyBlIddU4ZP6QsC212vb__3AoMKH9MA-_1E";
-    }
   }
 
   if (config) {
@@ -1520,6 +1515,7 @@ async function serveApp() {
 
   if (!isProduction) {
     console.log("[SERVER] Starting App in development mode (using Vite middleware)...");
+    const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
