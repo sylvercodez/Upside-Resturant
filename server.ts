@@ -130,9 +130,9 @@ function getMailTransporter() {
 
 // Generate the fully valid header "from" address
 function getFromEmailAddress(): string {
-  let rawFrom = stripQuotes(process.env.SMTP_FROM || "");
-  let rawUser = stripQuotes(process.env.SMTP_USER || "");
-  const rawHost = stripQuotes(process.env.SMTP_HOST || "").toLowerCase();
+  let rawFrom = stripQuotes(process.env.VITE_SMTP_FROM || "");
+  let rawUser = stripQuotes(process.env.VITE_SMTP_USER || "");
+  const rawHost = stripQuotes(process.env.VITE_SMTP_HOST || "").toLowerCase();
 
   // Simple email matcher
   const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/;
