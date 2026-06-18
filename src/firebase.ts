@@ -26,7 +26,7 @@ if (typeof window !== "undefined") {
 
     // Use default reCAPTCHA v3 sitekey. The customer can configure a custom one in import.meta.env if needed.
     const customSiteKey = (import.meta as any).env?.VITE_RECAPTCHA_SITE_KEY;
-    const siteKey = customSiteKey || "6LdOqKcqAAAAAHzD6b5_R8_4_c450Hdf9SdgG-X1";
+    const siteKey = customSiteKey || "6LeaPCYtAAAAAEJFosfUOWKgLL0g89O_AjWKyqys";
 
     appCheck = initializeAppCheck(app, {
       provider: new ReCaptchaV3Provider(siteKey),
