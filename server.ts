@@ -9,12 +9,12 @@ import fs from "fs";
 import { initializeApp as initClientApp } from "firebase/app";
 import { getFirestore as getClientFirestore, doc, getDoc, setDoc, updateDoc, serverTimestamp as clientServerTimestamp } from "firebase/firestore";
 
-// CRITICAL VERCEL CONFIGURATION: Only execute dynamic local .env loaders when not hosted on production.
-if (process.env.NODE_ENV !== "production") {
-  dotenv.config();
-}
+// Load environment variables
+dotenv.config();
 
 const app = express();
+const PORT = 3000;
+
 app.use(express.json());
 
 // Enable Cross-Origin Resource Sharing (CORS) for all routes,
@@ -101,9 +101,9 @@ function getMailTransporter() {
         },
         connectionTimeout: 4000, // wait up to 4 seconds to connect
         greetingTimeout: 3000,   // wait up to 3 seconds for greeting
-        socketTimeout: 4000      // socket inactivity timeout of 4 seconds
+        socketTimeout: 4000     // socket inactivity timeout of 4 seconds
       };
-
+      
       // Handle ESM default import or CJS require fallback differences
       let createTransportFn: any = null;
       if (nodemailer && typeof (nodemailer as any).createTransport === "function") {
@@ -134,15 +134,12 @@ function getFromEmailAddress(): string {
 
   // Validate rawFrom if it is a fully qualified email address or has one formatted in <>
   if (rawFrom && emailRegex.test(rawFrom)) {
-    // If it has a clean pattern with no < >, wrap it properly
     if (!rawFrom.includes("<") && !rawFrom.includes(">")) {
       return `"Upside Fine Dining" <${rawFrom}>`;
     }
     return rawFrom;
   }
 
-  // If rawFrom has a display name like "Upside Fine Dining" but no email address,
-  // pair it with the custom verified domain "noreply@upside-restaurant-cafe.com" instead of the sandbox default!
   if (rawFrom && !emailRegex.test(rawFrom)) {
     return `"${rawFrom}" <noreply@upside-restaurant-cafe.com>`;
   }
@@ -152,7 +149,7 @@ function getFromEmailAddress(): string {
     return `"Upside Fine Dining" <${rawUser}>`;
   }
 
-  // Pure generic domain fallback (which matches their verified domain name on Resend!)
+  // Pure generic domain fallback
   return `"Upside Fine Dining" <noreply@upside-restaurant-cafe.com>`;
 }
 
@@ -335,103 +332,20 @@ app.post("/api/otp/request", async (req, res) => {
       background-color: #ffffff;
       border-bottom: 1px solid #f1f0ee;
     }
-    .logo-container {
-      margin-bottom: 20px;
-    }
-    .logo-img {
-      width: 140px;
-      max-width: 140px;
-      height: auto;
-      object-fit: contain;
-      display: inline-block;
-    }
-    .brand-sub {
-      font-family: 'Georgia', serif;
-      font-size: 11px;
-      letter-spacing: 0.25em;
-      color: #78350f;
-      text-transform: uppercase;
-      font-weight: bold;
-      margin: 0;
-    }
-    .body-content {
-      padding: 40px;
-    }
-    .heading {
-      font-size: 20px;
-      font-weight: 700;
-      letter-spacing: -0.01em;
-      color: #1c1917;
-      margin: 0 0 16px 0;
-      text-align: center;
-    }
-    .text-para {
-      font-size: 14px;
-      line-height: 1.6;
-      color: #44403c;
-      margin: 0 0 24px 0;
-      text-align: center;
-    }
-    .otp-wrapper {
-      background-color: #fdfbf7;
-      border: 1px solid #f3ebd7;
-      border-radius: 2px;
-      padding: 24px;
-      margin: 28px 0;
-      text-align: center;
-    }
-    .otp-code {
-      font-family: 'JetBrains Mono', 'Courier New', Courier, monospace;
-      font-size: 36px;
-      font-weight: 800;
-      letter-spacing: 0.2em;
-      color: #b45309;
-      display: inline-block;
-      margin: 0;
-    }
-    .otp-label {
-      font-size: 10px;
-      letter-spacing: 0.15em;
-      color: #78350f;
-      text-transform: uppercase;
-      font-weight: bold;
-      margin-top: 8px;
-    }
-    .time-banner {
-      font-size: 12px;
-      color: #78350f;
-      font-weight: 600;
-      text-align: center;
-      margin-top: 10px;
-    }
-    .security-note {
-      font-size: 12px;
-      line-height: 1.5;
-      color: #78716c;
-      background-color: #f5f5f4;
-      padding: 12px 18px;
-      border-left: 2px solid #b45353;
-      margin: 24px 0;
-    }
-    .footer {
-      background-color: #fafaf9;
-      padding: 28px 40px;
-      border-top: 1px solid #f5f5f4;
-      text-align: center;
-    }
-    .footer-text {
-      font-size: 11px;
-      line-height: 1.6;
-      color: #a8a29e;
-      margin: 0 0 12px 0;
-    }
-    .signature {
-      font-family: 'Georgia', serif;
-      font-size: 12px;
-      font-style: italic;
-      color: #78350f;
-      margin: 16px 0 0 0;
-    }
+    .logo-container { margin-bottom: 20px; }
+    .logo-img { width: 140px; max-width: 140px; height: auto; object-fit: contain; display: inline-block; }
+    .brand-sub { font-family: 'Georgia', serif; font-size: 11px; letter-spacing: 0.25em; color: #78350f; text-transform: uppercase; font-weight: bold; margin: 0; }
+    .body-content { padding: 40px; }
+    .heading { font-size: 20px; font-weight: 700; letter-spacing: -0.01em; color: #1c1917; margin: 0 0 16px 0; text-align: center; }
+    .text-para { font-size: 14px; line-height: 1.6; color: #44403c; margin: 0 0 24px 0; text-align: center; }
+    .otp-wrapper { background-color: #fdfbf7; border: 1px solid #f3ebd7; border-radius: 2px; padding: 24px; margin: 28px 0; text-align: center; }
+    .otp-code { font-family: 'JetBrains Mono', 'Courier New', Courier, monospace; font-size: 36px; font-weight: 800; letter-spacing: 0.2em; color: #b45309; display: inline-block; margin: 0; }
+    .otp-label { font-size: 10px; letter-spacing: 0.15em; color: #78350f; text-transform: uppercase; font-weight: bold; margin-top: 8px; }
+    .time-banner { font-size: 12px; color: #78350f; font-weight: 600; text-align: center; margin-top: 10px; }
+    .security-note { font-size: 12px; line-height: 1.5; color: #78716c; background-color: #f5f5f4; padding: 12px 18px; border-left: 2px solid #b45353; margin: 24px 0; }
+    .footer { background-color: #fafaf9; padding: 28px 40px; border-top: 1px solid #f5f5f4; text-align: center; }
+    .footer-text { font-size: 11px; line-height: 1.6; color: #a8a29e; margin: 0 0 12px 0; }
+    .signature { font-family: 'Georgia', serif; font-size: 12px; font-style: italic; color: #78350f; margin: 16px 0 0 0; }
   </style>
 </head>
 <body>
@@ -458,7 +372,8 @@ app.post("/api/otp/request", async (req, res) => {
       <p class="time-banner">⚠️ Active for 5 minutes only.</p>
       
       <div class="security-note">
-        <strong>Confidentiality Warning:</strong> For your private table reservation and menu preferences safety, never disclose this passcode to any customer support or third party.
+        <strong>Confidentiality Warning:</strong> For your private table reservation and 
+        menu preferences safety, never disclose this passcode to any customer support or third party.
         Our concierges will never ask for this code.
       </div>
       
@@ -481,8 +396,7 @@ app.post("/api/otp/request", async (req, res) => {
     </div>
   </div>
 </body>
-</html>
-        `
+</html>`
         };
         await transporter.sendMail(mailOptions);
         console.log(`[SMTP] Successfully sent real verification email to: ${cleanTarget}`);
@@ -600,38 +514,11 @@ app.get("/api/instagram/callback", async (req: any, res: any) => {
         <meta charset="utf-8">
         <title>Instagram Authorization Failed</title>
         <style>
-          body {
-            background-color: #0c0a09;
-            color: #f5f5f4;
-            font-family: ui-sans-serif, system-ui, sans-serif;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            height: 100vh;
-            margin: 0;
-            padding: 20px;
-          }
-          .card {
-            background-color: #1c1917;
-            border: 1px solid #444;
-            padding: 32px;
-            max-width: 450px;
-            text-align: center;
-          }
+          body { background-color: #0c0a09; color: #f5f5f4; font-family: ui-sans-serif, system-ui, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; padding: 20px; }
+          .card { background-color: #1c1917; border: 1px solid #444; padding: 32px; max-width: 450px; text-align: center; }
           h1 { color: #ef4444; font-size: 20px; margin-top: 0; }
           p { color: #a8a29e; font-size: 13px; line-height: 1.6; }
-          button {
-            background-color: #ef4444;
-            color: #fff;
-            border: none;
-            padding: 10px 20px;
-            font-size: 11px;
-            text-transform: uppercase;
-            font-weight: bold;
-            letter-spacing: 0.1em;
-            cursor: pointer;
-            margin-top: 20px;
-          }
+          button { background-color: #ef4444; color: #fff; border: none; padding: 10px 20px; font-size: 11px; text-transform: uppercase; font-weight: bold; letter-spacing: 0.1em; cursor: pointer; margin-top: 20px; }
         </style>
       </head>
       <body>
@@ -697,7 +584,6 @@ app.get("/api/instagram/callback", async (req: any, res: any) => {
 
     const shortTokenData = await shortTokenRes.json();
     const shortLivedToken = shortTokenData.access_token;
-    const userId = shortTokenData.user_id;
 
     // 3. Exchange for long-lived access token
     const longTokenUrl = `https://graph.instagram.com/access_token?grant_type=ig_exchange_token&client_secret=${clientSecret}&access_token=${shortLivedToken}`;
@@ -727,27 +613,8 @@ app.get("/api/instagram/callback", async (req: any, res: any) => {
         <meta charset="utf-8">
         <title>Success!</title>
         <style>
-          body {
-            background-color: #0c0a09;
-            color: #f5f5f4;
-            font-family: ui-sans-serif, system-ui, sans-serif;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            height: 100vh;
-            margin: 0;
-            text-align: center;
-          }
-          .spinner {
-            border: 3px solid rgba(255,191,0,0.1);
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            border-left-color: #d97706;
-            animation: spin 1s linear infinite;
-            margin-bottom: 24px;
-          }
+          body { background-color: #0c0a09; color: #f5f5f4; font-family: ui-sans-serif, system-ui, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; text-align: center; }
+          .spinner { border: 3px solid rgba(255,191,0,0.1); width: 40px; height: 40px; border-radius: 50%; border-left-color: #d97706; animation: spin 1s linear infinite; margin-bottom: 24px; }
           @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
           h1 { color: #f59e0b; font-size: 20px; font-weight: 300; margin: 0 0 8px 0; letter-spacing: 0.05em; }
           p { color: #a8a29e; font-size: 12px; margin: 0; }
@@ -759,14 +626,8 @@ app.get("/api/instagram/callback", async (req: any, res: any) => {
         <p>Syncing details with your administrator workspace...</p>
         <script>
           if (window.opener) {
-            window.opener.postMessage({
-              type: "INSTAGRAM_AUTH_SUCCESS",
-              accessToken: "${longLivedToken}",
-              username: "${username}"
-            }, "*");
-            setTimeout(() => {
-              window.close();
-            }, 1000);
+            window.opener.postMessage({ type: "INSTAGRAM_AUTH_SUCCESS", accessToken: "${longLivedToken}", username: "${username}" }, "*");
+            setTimeout(() => { window.close(); }, 1000);
           } else {
             document.querySelector('p').innerText = "Authorization successful. You can close this tab now.";
           }
@@ -851,7 +712,6 @@ try {
   let databaseId = "";
   let config: any = null;
   const configPath = path.join(process.cwd(), "firebase-applet-config.json");
-
   if (fs.existsSync(configPath)) {
     config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
   } else {
@@ -866,17 +726,11 @@ try {
       messagingSenderId: stripQuotes(process.env.FIREBASE_MESSAGING_SENDER_ID || "603064167629")
     };
   }
-
   if (config) {
-    if (config.projectId) {
-      projectId = config.projectId;
-    }
-    if (config.firestoreDatabaseId) {
-      databaseId = config.firestoreDatabaseId;
-    }
+    if (config.projectId) { projectId = config.projectId; }
+    if (config.firestoreDatabaseId) { databaseId = config.firestoreDatabaseId; }
   }
-
-  // Initialize admin app instances safely
+  // Initialize admin app instances so admin.auth and other services are loaded safely
   try {
     if (admin.apps.length === 0) {
       admin.initializeApp({ projectId: projectId, credential: admin.credential.applicationDefault() });
@@ -886,280 +740,21 @@ try {
       admin.initializeApp({ projectId: projectId });
     }
   }
-
   // Swap to the Client SDK DB connection wrapper to bypass GCP IAM Permission blockages on Custom DBs
   if (config) {
     const clientApp = initClientApp(config);
     const dbClient = getClientFirestore(clientApp, databaseId);
-    dbAdmin = {
-      collection(pathStr: string) {
-        return new CustomCollectionReference(dbClient, pathStr);
-      }
-    };
-    console.log("[FIREBASE CLIENT MIMIC] Hooked dbAdmin successfully using Web Client API and security bypass.");
-  } else {
-    console.warn("[FIREBASE CLIENT MIMIC] Config file not found. Falling back to default admin firestore.");
-    dbAdmin = admin.firestore();
+    dbAdmin = { collection(pathStr: string) { return new CustomCollectionReference(dbClient, pathStr); } };
   }
 } catch (firebaseErr: any) {
-  console.error("[FIREBASE CLIENT MIMIC] Setup failed:", firebaseErr);
+  console.error("Firebase initializing configuration fallback issue mapping profiles:", firebaseErr);
 }
 
-// ==========================================================
-// SECURE OPAY GATEWAY EXCEL-FIDELITY CLOUD FUNCTIONS & ROUTES
-// ==========================================================
-import { encryptPayload, decryptPayload, generateSignature, verifyWebhookSignature, generateOpayApiSignature } from "./src/utils/opayHelpers";
-
-async function getOpayConfig() {
-  console.log("=== [VERCEL LOG] OPAY CONFIGURATION RESOLUTION INITIATED ===");
-  let merchantId = process.env.OPAY_MERCHANT_ID;
-  let publicKey = process.env.OPAY_PUBLIC_KEY;
-  let secretKey = process.env.OPAY_SECRET_KEY;
-  let environment = process.env.OPAY_ENVIRONMENT || "sandbox";
-
-  console.log("[VERCEL LOG] Checked Environment Variables in Process:");
-  console.log(` - OPAY_MERCHANT_ID: ${merchantId ? `Present (length: ${merchantId.length}, partial: ${merchantId.substring(0, 4)}...${merchantId.substring(Math.max(0, merchantId.length - 4))})` : "MISSING"}`);
-  console.log(` - OPAY_PUBLIC_KEY: ${publicKey ? `Present (length: ${publicKey.length}, partial: ${publicKey.substring(0, 8)}...)` : "MISSING"}`);
-  console.log(` - OPAY_SECRET_KEY: ${secretKey ? `Present (length: ${secretKey.length}, partial: ...${secretKey.substring(Math.max(0, secretKey.length - 8))})` : "MISSING"}`);
-  console.log(` - OPAY_ENVIRONMENT: ${process.env.OPAY_ENVIRONMENT || "NOT SET (Defaulting to sandbox)"}`);
-
-  if (!merchantId || !publicKey || !secretKey) {
-    console.log("[VERCEL LOG] process.env variables incomplete. Querying Firestore settings collection as fallback...");
-    try {
-      if (dbAdmin) {
-        const docSnap = await dbAdmin.collection("settings").doc("opay").get();
-        if (docSnap.exists) {
-          const data = docSnap.data();
-          if (data) {
-            if (!merchantId && data.merchantId) merchantId = stripQuotes(data.merchantId);
-            if (!publicKey && data.publicKey) publicKey = stripQuotes(data.publicKey);
-            if (!secretKey && data.secretKey) secretKey = stripQuotes(data.secretKey);
-            if (data.environment) environment = stripQuotes(data.environment);
-            console.log("[VERCEL LOG] Successfully fetched configurations fallback from Firestore document settings/opay");
-          }
-        } else {
-          console.log("[VERCEL LOG] Settings document settings/opay does not exist in Firestore.");
-        }
-      }
-    } catch (dbErr: any) {
-      console.error("[VERCEL LOG ERROR] Querying fallback settings/opay doc failed:", dbErr.message || dbErr);
-    }
-  }
-
-  return {
-    merchantId: merchantId || "",
-    publicKey: publicKey || "",
-    secretKey: secretKey || "",
-    environment: environment || "sandbox"
-  };
-}
-
-// REST Endpoints for OPay checkout
-app.post("/api/opay/checkout", async (req, res) => {
-  try {
-    const config = await getOpayConfig();
-    if (!config.merchantId || !config.publicKey || !config.secretKey) {
-      return res.status(400).json({ error: "OPay gateway parameters are missing or unconfigured on Vercel environment variables." });
-    }
-
-    const { amount, reference, orderDescription, customerEmail, customerName, callbackUrl } = req.body || {};
-    if (!amount || !reference) {
-      return res.status(400).json({ error: "Missing checkout parameters: amount and reference required." });
-    }
-
-    const appUrl = getAppUrl(req);
-    const resolvedCallback = callbackUrl || `${appUrl}/api/opay/callback`;
-    const resolvedWebhook = `${appUrl}/api/opay/webhook`;
-
-    const payload = {
-      merchantId: config.merchantId,
-      publicKey: config.publicKey,
-      amount: String(amount),
-      currency: "NGN",
-      reference: String(reference),
-      countryCode: "NG",
-      payMethod: " those requested by payment request configurations ",
-      callbackUrl: resolvedCallback,
-      webhookUrl: resolvedWebhook,
-      productDesc: orderDescription || "Upside Dining Reservation Session",
-      customerEmail: customerEmail || "guest@upside-restaurant-cafe.com",
-      customerName: customerName || "Upside Guest"
-    };
-
-    const signature = generateOpayApiSignature(payload, config.secretKey);
-    const opayEndpoint = config.environment === "production" 
-      ? "https://api.opaycheckout.com/api/v1/international/cashier/create"
-      : "https://sandbox-api.opaycheckout.com/api/v1/international/cashier/create";
-
-    const response = await fetch(opayEndpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${signature}`,
-        "MerchantId": config.merchantId
-      },
-      body: JSON.stringify(payload)
-    });
-
-    const resData = await response.json();
-    res.json({ success: true, opayResponse: resData, requestPayload: payload });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message || err });
-  }
-});
-
-app.post("/api/opay/webhook", async (req, res) => {
-  try {
-    const config = await getOpayConfig();
-    const signatureHeader = req.header("X-Opay-Signature") || "";
-    
-    console.log("[OPAY WEBHOOK INCOMING]");
-    console.log("Headers Signature:", signatureHeader);
-    console.log("Body Payload structure:", JSON.stringify(req.body));
-
-    const verified = verifyWebhookSignature(req.body, signatureHeader, config.secretKey);
-    if (!verified) {
-      console.warn("[OPAY WEBHOOK WARNING] Cryptographic signature check failed.");
-    }
-
-    const { reference, orderStatus, amount } = req.body || {};
-    if (dbAdmin && reference) {
-      await dbAdmin.collection("orders").doc(reference).set({
-        webhookReceivedAt: new Date().toISOString(),
-        paymentStatus: orderStatus || "UNKNOWN_WEBHOOK_STATUS",
-        rawWebhookPayload: req.body,
-        amountVerified: amount || null,
-        signatureMatch: verified
-      }, { merge: true });
-      console.log(`[OPAY WEBHOOK] Successfully persisted checkout transaction status update for order ref: ${reference}`);
-    }
-
-    res.status(200).json({ status: "SUCCESS", message: "Webhook accepted and processed" });
-  } catch (err: any) {
-    console.error("[OPAY WEBHOOK SEVERE CRASH]:", err);
-    res.status(500).json({ error: err.message || err });
-  }
-});
-
-app.get("/api/opay/callback", async (req, res) => {
-  const { reference, orderId, orderStatus } = req.query;
-  res.send(`
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta charset="utf-8">
-      <title>Payment Authentication Redirect</title>
-      <meta name="viewport" content="width=device-width, initial-scale=1">
-      <style>
-        body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; background-color: #fcfbf9; color: #1c1917; }
-        h1 { font-size: 24px; margin-bottom: 8px; }
-        p { color: #666; }
-      </style>
-    </head>
-    <body>
-      <h1>Upside Restaurant & Café</h1>
-      <p>Establishing secure connection... Please refresh in a moment.</p>
-      <script>
-        setTimeout(() => { window.location.reload(); }, 2000);
-      </script>
-    </body>
-    </html>
-  `);
-});
-
-// Dynamic configuration wrapper to bind local environments safely without causing execution blocks on cloud servers
-async function serveApp() {
-  const distPath = path.join(process.cwd(), "dist");
-  const isProduction = process.env.NODE_ENV === "production" || fs.existsSync(path.join(distPath, "index.html"));
-
-  if (!isProduction) {
-    console.log("[SERVER] Starting App in development mode (using Vite middleware)...");
-    const { createServer: createViteServer } = await import("vite");
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa",
-    });
-    app.use(vite.middlewares);
-
-    // Dynamic wildcard fallback in development for SPA client-side routes (e.g. /menu)
-    app.get("*", async (req, res, next) => {
-      if (req.path.startsWith("/api/")) {
-        return next();
-      }
-      try {
-        const htmlPath = path.join(process.cwd(), "index.html");
-        if (fs.existsSync(htmlPath)) {
-          let html = fs.readFileSync(htmlPath, "utf-8");
-          // Run Vite HTML transformations to insert client-side modules correctly
-          html = await vite.transformIndexHtml(req.url, html);
-          res.status(200).set({ "Content-Type": "text/html" }).end(html);
-        } else {
-          res.status(404).send("index.html not found");
-        }
-      } catch (err) {
-        if (vite && vite.ssrFixStacktrace) {
-          vite.ssrFixStacktrace(err as Error);
-        }
-        next(err);
-      }
-    });
-  } else {
-    console.log("[SERVER] Starting App in production mode (serving pre-built dist)...");
-    app.use(express.static(distPath));
-    
-    // Catch-all route for SPA client-side routes in production
-    app.get("*", (req, res, next) => {
-      if (req.path.startsWith("/api/")) {
-        return next();
-      }
-      
-      const indexPath = path.join(distPath, "index.html");
-      if (fs.existsSync(indexPath)) {
-        res.sendFile(indexPath);
-      } else {
-        console.warn(`[SERVER WARNING] dist/index.html not found at ${indexPath}. Falling back dynamically.`);
-        const fallbackPath = path.join(process.cwd(), "index.html");
-        if (fs.existsSync(fallbackPath)) {
-          res.sendFile(fallbackPath);
-        } else {
-          res.status(200).send(`
-            <!DOCTYPE html>
-            <html>
-            <head>
-              <meta charset="utf-8">
-              <title>Upside Restaurant & Café</title>
-              <meta name="viewport" content="width=device-width, initial-scale=1">
-              <style>
-                body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; background-color: #fcfbf9; color: #1c1917; }
-                h1 { font-size: 24px; margin-bottom: 8px; }
-                p { color: #666; }
-              </style>
-            </head>
-            <body>
-              <h1>Upside Restaurant & Café</h1>
-              <p>Establishing secure connection... Please refresh in a moment.</p>
-              <script>
-                setTimeout(() => { window.location.reload(); }, 2000);
-              </script>
-            </body>
-            </html>
-          `);
-        }
-      }
-    });
-  }
-
-  // CRITICAL PLATFORM BINDING CODE:
-  // Vercel serverless functions handle connections natively; they don't boot an active listening process.
-  // However, Cloud Run containers MUST run a web server listening on port 3000 to pass health check validation.
-  if (!process.env.VERCEL) {
-    const PORT = 3000;
-    app.listen(PORT, "0.0.0.0", () => {
-      console.log(`Express server executing on http://0.0.0.0:${PORT}`);
-    });
-  } else {
-    console.log("[SERVER] Loaded inside Vercel serverless context. Skipping local listen port registration.");
-  }
+// Fallback runtime binding execution loop
+function serveApp() {
+  app.listen(PORT, "0.0.0.0", () => {
+    console.log(`Express server executing on http://0.0.0.0:${PORT}`);
+  });
 }
 
 serveApp();
@@ -1170,8 +765,7 @@ app.use((err: any, req: any, res: any, next: any) => {
   if (res.headersSent) {
     return next(err);
   }
-  res.status(500).json({ error: "Internal Server Infrastructure Failure", details: err?.message || String(err) });
+  res.status(500).json({ error: "Internal Server Infrastructure Failure", details: err?.message || err });
 });
 
-// Export default application reference context directly for dynamic Vercel Node Serverless platform runtimes
 export default app;
