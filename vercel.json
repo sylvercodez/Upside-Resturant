@@ -2,14 +2,25 @@
   "version": 2,
   "builds": [
     {
-      "src": "index.ts", 
+      "src": "index.ts",
       "use": "@vercel/node",
       "config": {
-        "includeFiles": ["src/data/**", "firebase-applet-config.json"]
+        "includeFiles": [
+          "src/data/**",
+          "firebase-applet-config.json"
+        ]
       }
     }
   ],
-  "routes": [
-    { "src": "/api/(.*)", "dest": "index.ts" }
-  ]
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "/index.ts"
+    },
+    {
+      "source": "/((?!api/).*)",
+      "destination": "/index.html"
+    }
+  ],
+  "cleanUrls": true
 }
