@@ -180,7 +180,23 @@ export default function DedicatedAuth({
         data = await res.json();
       } else {
         const text = await res.text();
-        throw new Error(`Identity servers returned non-JSON response (status ${res.status}). Ensure the server is online and port 3000 mapping is active.`);
+        let excerpt = text.trim();
+        // Clean and parse HTML page errors to extract clean, precise developer diagnostic reports
+        if (excerpt.includes("<pre>")) {
+          const preMatch = excerpt.match(/<pre>([\s\S]*?)<\/pre>/i);
+          if (preMatch && preMatch[1]) {
+            excerpt = preMatch[1].trim();
+          }
+        } else if (excerpt.includes("<title>")) {
+          const titleMatch = excerpt.match(/<title>([\s\S]*?)<\/title>/i);
+          if (titleMatch && titleMatch[1]) {
+            excerpt = `Page Title: ${titleMatch[1].trim()}`;
+          }
+        }
+        if (excerpt.length > 350) {
+          excerpt = excerpt.substring(0, 350) + "...";
+        }
+        throw new Error(`Server returned non-JSON error (status ${res.status}). Diagnostic details: ${excerpt || "No response body returned from server."}`);
       }
       
       if (!res.ok) {
@@ -229,7 +245,22 @@ export default function DedicatedAuth({
         data = await res.json();
       } else {
         const text = await res.text();
-        throw new Error(`Identity verification servers returned non-JSON response (status ${res.status}). Ensure backend handles verify requests correctly.`);
+        let excerpt = text.trim();
+        if (excerpt.includes("<pre>")) {
+          const preMatch = excerpt.match(/<pre>([\s\S]*?)<\/pre>/i);
+          if (preMatch && preMatch[1]) {
+            excerpt = preMatch[1].trim();
+          }
+        } else if (excerpt.includes("<title>")) {
+          const titleMatch = excerpt.match(/<title>([\s\S]*?)<\/title>/i);
+          if (titleMatch && titleMatch[1]) {
+            excerpt = `Page Title: ${titleMatch[1].trim()}`;
+          }
+        }
+        if (excerpt.length > 350) {
+          excerpt = excerpt.substring(0, 350) + "...";
+        }
+        throw new Error(`OTP Verification server returned non-JSON error (status ${res.status}). Diagnostic details: ${excerpt || "No response body returned."}`);
       }
       
       if (!res.ok) {
