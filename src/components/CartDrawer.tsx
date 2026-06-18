@@ -372,7 +372,14 @@ export default function CartDrawer({
         } else if (err.code === "auth/invalid-email") {
           throw new Error("The entered email address structure is invalid.");
         } else {
-          throw new Error(err.message || "Auto-signup failed.");
+          const errStr = String(err.code || err.message || "").toLowerCase();
+          if (errStr.includes("operation-not-allowed") || errStr.includes("operation not allowed") || errStr.includes("identitytoolkit") || errStr.includes("identity toolkit")) {
+            throw new Error("Firebase Setup Missing: The 'Email/Password' login method has not been enabled or the Identity Toolkit API is disabled in your Firebase console. ACTION: Log in to your Firebase Console > Authentication > Sign-in method, click 'Email/Password' and enable it. Also ensure the Google Cloud Identity Toolkit API is enabled.");
+          } else if (errStr.includes("unauthorized-domain") || errStr.includes("unauthorized domain")) {
+            throw new Error("Unauthorized Domain: The domain '" + window.location.hostname + "' has not been authorized in your Firebase console. ACTION: Go to Firebase Console > Authentication > Settings and add '" + window.location.hostname + "' to your 'Authorized domains' list.");
+          } else {
+            throw new Error((err.code ? `[${err.code}] ` : "") + (err.message || "Auto-signup failed. Please verify credentials."));
+          }
         }
       }
     }

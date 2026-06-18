@@ -65,15 +65,18 @@ export default function DedicatedAuth({
   }, [currentUser, onNavigate]);
 
   const getCleanAuthError = (err: any): string => {
-    const code = err?.code;
-    let msg = err?.message || "";
-    const errString = `${code || ""} ${msg}`.toLowerCase();
+    if (!err) return "An unknown authentication error occurred. Please try again.";
+    
+    // Extract code and message from various possible error formats
+    const code = err?.code || "";
+    let msg = err?.message || (typeof err === "string" ? err : "");
+    const errString = `${code} ${msg}`.toLowerCase();
     
     if (errString.includes("email-already-in-use") || errString.includes("email already in use")) {
-      return "This email address is already registered. Please proceed with logging in instead.";
+      return "This email address is already registered with Upside. Please select 'Sign In' instead of 'Sign Up' or use 'Forgot Password' if you cannot recall your credentials.";
     }
     if (errString.includes("user-not-found") || errString.includes("user not found") || errString.includes("account does not exist")) {
-      return "Account does not exist. Please verify your email address or select Sign Up to register.";
+      return "Account does not exist. Please verify your email address or select 'Sign Up' to register.";
     }
     if (errString.includes("wrong-password") || errString.includes("wrong password")) {
       return "Incorrect password. Please verify and try again.";
@@ -82,16 +85,16 @@ export default function DedicatedAuth({
       return "Incorrect credentials or account does not exist. Please verify and try again.";
     }
     if (errString.includes("invalid-email") || errString.includes("invalid email")) {
-      return "Please enter a valid structure email address.";
+      return "Please enter a valid email address structure (e.g., mail@example.com).";
     }
     if (errString.includes("weak-password") || errString.includes("weak password")) {
       return "The password is too weak. It must be at least 6 characters.";
     }
     if (errString.includes("user-disabled") || errString.includes("user disabled")) {
-      return "This account is inactive or disabled. Please coordinate with elite support.";
+      return "This account is inactive or disabled. Please coordinate with support.";
     }
     if (errString.includes("too-many-requests") || errString.includes("too many requests")) {
-      return "Too many unsuccessful attempts. Access has been temporarily suspended. Please try again later.";
+      return "Too many unsuccessful attempts. Access has been temporarily suspended. Please try again later or recover your credentials.";
     }
     if (errString.includes("popup-closed-by-user") || errString.includes("popup closed by user")) {
       return "Authorization window closed before completing. Please try again.";
@@ -99,22 +102,25 @@ export default function DedicatedAuth({
     if (errString.includes("network-request-failed") || errString.includes("network request failed")) {
       return "A network connection error occurred. Please verify your internet connection stability.";
     }
-    if (errString.includes("operation-not-allowed") || errString.includes("operation not allowed")) {
-      return "Authentication method is currently disabled in the workspace dashboard configurations.";
+    if (errString.includes("operation-not-allowed") || errString.includes("operation not allowed") || errString.includes("identitytoolkit.googleapis.com") || errString.includes("identity toolkit")) {
+      return "Authentication Setup Missing: The 'Email/Password' authentication provider has not been enabled in your Firebase project, or the 'Identity Toolkit API' is disabled in your Google Cloud Developer Console. Action: 1. Go to Firebase Console > Authentication > Sign-in method, click 'Email/Password' and enable it. 2. Ensure Google Cloud Identity Toolkit API is enabled.";
     }
     if (errString.includes("unauthorized-domain") || errString.includes("unauthorized domain")) {
-      return "Unauthorized Domain: Google Auth failed because 'upside-restaurant-cafe.com' has not been added to your Firebase Console under 'Authentication > Settings > Authorized domains'. Please register your custom domain there to authorize live Google logins.";
+      return "Unauthorized Domain: The domain '" + window.location.hostname + "' has not been added to your Firebase project. Action: Go to Firebase Console > Authentication > Settings and add '" + window.location.hostname + "' to the list of 'Authorized domains'.";
+    }
+    if (errString.includes("api-key-not-valid") || errString.includes("invalid api-key") || errString.includes("api key is invalid")) {
+      return "Configuration Error [auth/invalid-api-key]: The Firebase API key utilized is invalid or restricted. Please double check your firebase-applet-config.json and ensure your API key does not have domain restrictions that exclude your domain '" + window.location.hostname + "'.";
     }
 
-    if (msg) {
-      let sanitizedMsg = msg.replace(/firebase/gi, "Secure custom");
-      sanitizedMsg = sanitizedMsg.replace(/\s*\([\w\-/\s]+\)\.?/g, "");
-      sanitizedMsg = sanitizedMsg.replace(/Secure custom:\s*Error\s*:/gi, "Error:");
-      sanitizedMsg = sanitizedMsg.replace(/Secure custom:\s*Error/gi, "Error");
-      return sanitizedMsg.trim();
-    }
+    // Fallback error renderer with clear debug information
+    const displayCode = code ? `[${code}] ` : "";
+    let cleanMsg = msg || "An error occurred during authentication. Please contact system administration.";
+    
+    // Clean up internal Firebase prefixes
+    cleanMsg = cleanMsg.replace(/firebase/gi, "Firebase");
+    cleanMsg = cleanMsg.replace(/\s*\([\w\-/\s]+\)\.?/g, ""); // strip duplicate bracketed code from the end of message
 
-    return "An error occurred during authentication. Please check your credentials.";
+    return `${displayCode}${cleanMsg.trim()}`;
   };
 
   const handleAuth = async (e: React.FormEvent) => {
@@ -404,7 +410,7 @@ export default function DedicatedAuth({
       }, 1500);
     } catch (err: any) {
       console.error("Instant bypass failed", err);
-      setError(err instanceof Error ? err.message : getCleanAuthError(err));
+      setError(err?.code ? getCleanAuthError(err) : (err?.message || String(err)));
     } finally {
       setLoading(false);
     }
@@ -538,13 +544,13 @@ export default function DedicatedAuth({
 
               {/* Alerts / Feedback Log messages */}
               {error && (
-                <div className="p-3 bg-red-50 border border-red-200 text-red-800 text-[11px] uppercase font-mono tracking-wide leading-relaxed animate-fadeIn text-left">
+                <div className="p-3 bg-red-50 border border-red-200 text-red-800 text-xs font-sans font-medium leading-relaxed animate-fadeIn text-left">
                   ⚠️ {error}
                 </div>
               )}
 
               {success && (
-                <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-[11px] uppercase font-mono tracking-wide leading-relaxed animate-fadeIn text-left">
+                <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-850 text-xs font-sans font-medium leading-relaxed animate-fadeIn text-left">
                   ⭐ {success}
                 </div>
               )}
