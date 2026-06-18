@@ -103,6 +103,9 @@ function getMailTransporter() {
           user: rawUser,
           pass: rawPass,
         },
+        connectionTimeout: 4000, // wait up to 4 seconds to connect
+        greetingTimeout: 3000,   // wait up to 3 seconds for greeting
+        socketTimeout: 4000      // socket inactivity timeout of 4 seconds
       };
 
       // Handle ESM default import or CJS require fallback differences
@@ -1036,18 +1039,31 @@ export async function initializeOpayPayment(paymentData: {
   };
 
   console.log(`[initializeOpayPayment] Contacting OPay Cashier API. Ref: ${paymentData.orderId}`);
+  console.log({
+    merchantId,
+    publicKeyExists: !!publicKey,
+    secretKeyExists: !!secretKey,
+    environment
+  });
+
+  const signature = generateOpayApiSignature(requestData, secretKey);
+  console.log(`[initializeOpayPayment] Generated signature for request:`, signature);
 
   const response = await fetch(opayBaseUrl, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "Authorization": `Bearer ${publicKey}`,
+      "Authorization": `Bearer ${signature}`,
       "MerchantId": merchantId
     },
     body: JSON.stringify(requestData)
   });
 
+  console.log("OPay status:", response.status);
+
   const responseText = await response.text();
+
+  console.log("OPay raw response:", responseText);
   let opayRes;
   try {
     opayRes = JSON.parse(responseText);
@@ -1320,6 +1336,23 @@ app.post("/api/opay/create-payment", async (req: any, res: any) => {
   }
 });
 
+// Route: Debug OPay configuration and verify server variables
+app.get("/api/opay/debug", async (req: any, res: any) => {
+  try {
+    const cfg = await getOpayConfig();
+    return res.json({
+      merchantId: cfg.merchantId,
+      publicKeyExists: !!cfg.publicKey,
+      secretKeyExists: !!cfg.secretKey,
+      environment: cfg.environment
+    });
+  } catch (e: any) {
+    return res.status(500).json({
+      error: e.message || "An error occurred checking OPay config."
+    });
+  }
+});
+
 // Route: Query / Verify OPay Checkout
 app.post("/api/opay/verify-payment", async (req: any, res: any) => {
   try {
@@ -1491,18 +1524,6 @@ app.post("/api/opay/callback", async (req: any, res: any) => {
   return app._router.handle(req, res);
 });
 
-// Global error handler middleware to prevent unhandled express exceptions from returning non-JSON responses
-app.use((err: any, req: any, res: any, next: any) => {
-  console.error("[GLOBAL SERVER ERROR HANDLER] Uncaught server exception:", err);
-  if (res.headersSent) {
-    return next(err);
-  }
-  res.status(500).json({
-    error: err?.message || "An internal gateway error occurred on the identity server.",
-    details: process.env.NODE_ENV !== "production" ? err?.stack : undefined
-  });
-});
-
 // Serve frontend assets
 async function serveApp() {
   if (process.env.VERCEL) {
@@ -1529,10 +1550,14 @@ async function serveApp() {
       }
       try {
         const htmlPath = path.join(process.cwd(), "index.html");
-        let html = fs.readFileSync(htmlPath, "utf-8");
-        // Run Vite HTML transformations to insert client-side modules correctly
-        html = await vite.transformIndexHtml(req.url, html);
-        res.status(200).set({ "Content-Type": "text/html" }).end(html);
+        if (fs.existsSync(htmlPath)) {
+          let html = fs.readFileSync(htmlPath, "utf-8");
+          // Run Vite HTML transformations to insert client-side modules correctly
+          html = await vite.transformIndexHtml(req.url, html);
+          res.status(200).set({ "Content-Type": "text/html" }).end(html);
+        } else {
+          res.status(404).send("index.html not found");
+        }
       } catch (err) {
         vite.ssrFixStacktrace(err as Error);
         next(err);
@@ -1547,7 +1572,40 @@ async function serveApp() {
       if (req.path.startsWith("/api/")) {
         return next();
       }
-      res.sendFile(path.join(distPath, "index.html"));
+      
+      const indexPath = path.join(distPath, "index.html");
+      if (fs.existsSync(indexPath)) {
+        res.sendFile(indexPath);
+      } else {
+        console.warn(`[SERVER WARNING] dist/index.html not found at ${indexPath}. Falling back dynamically.`);
+        const fallbackPath = path.join(process.cwd(), "index.html");
+        if (fs.existsSync(fallbackPath)) {
+          res.sendFile(fallbackPath);
+        } else {
+          res.status(200).send(`
+            <!DOCTYPE html>
+            <html>
+            <head>
+              <meta charset="utf-8">
+              <title>Upside Restaurant & Café</title>
+              <meta name="viewport" content="width=device-width, initial-scale=1">
+              <style>
+                body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; background-color: #fcfbf9; color: #1c1917; }
+                h1 { font-size: 24px; margin-bottom: 8px; }
+                p { color: #666; }
+              </style>
+            </head>
+            <body>
+              <h1>Upside Restaurant & Café</h1>
+              <p>Establishing secure connection... Please refresh in a moment.</p>
+              <script>
+                setTimeout(() => { window.location.reload(); }, 2000);
+              </script>
+            </body>
+            </html>
+          `);
+        }
+      }
     });
   }
 
@@ -1557,5 +1615,17 @@ async function serveApp() {
 }
 
 serveApp();
+
+// Global error handler middleware registered after all routes to capture express exceptions gracefully as JSON responses
+app.use((err: any, req: any, res: any, next: any) => {
+  console.error("[GLOBAL SERVER ERROR HANDLER] Uncaught server exception:", err);
+  if (res.headersSent) {
+    return next(err);
+  }
+  res.status(500).json({
+    error: err?.message || "An internal gateway error occurred on the identity server.",
+    details: process.env.NODE_ENV !== "production" ? err?.stack : undefined
+  });
+});
 
 export default app;
