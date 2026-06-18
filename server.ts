@@ -1068,15 +1068,97 @@ app.get("/api/opay/callback", async (req, res) => {
 });
 
 // Dynamic configuration wrapper to bind local environments safely without causing execution blocks on cloud servers
-function serveApp() {
-  // CRITICAL VERCEL ROUTING IMPLEMENTATION: 
-  // Vercel serverless platforms take control of connections natively. 
-  // Do not instantiate active listening connections on cloud runtimes.
-  if (process.env.NODE_ENV !== "production") {
-    const PORT = process.env.PORT || 3000;
+async function serveApp() {
+  const distPath = path.join(process.cwd(), "dist");
+  const isProduction = process.env.NODE_ENV === "production" || fs.existsSync(path.join(distPath, "index.html"));
+
+  if (!isProduction) {
+    console.log("[SERVER] Starting App in development mode (using Vite middleware)...");
+    const { createServer: createViteServer } = await import("vite");
+    const vite = await createViteServer({
+      server: { middlewareMode: true },
+      appType: "spa",
+    });
+    app.use(vite.middlewares);
+
+    // Dynamic wildcard fallback in development for SPA client-side routes (e.g. /menu)
+    app.get("*", async (req, res, next) => {
+      if (req.path.startsWith("/api/")) {
+        return next();
+      }
+      try {
+        const htmlPath = path.join(process.cwd(), "index.html");
+        if (fs.existsSync(htmlPath)) {
+          let html = fs.readFileSync(htmlPath, "utf-8");
+          // Run Vite HTML transformations to insert client-side modules correctly
+          html = await vite.transformIndexHtml(req.url, html);
+          res.status(200).set({ "Content-Type": "text/html" }).end(html);
+        } else {
+          res.status(404).send("index.html not found");
+        }
+      } catch (err) {
+        if (vite && vite.ssrFixStacktrace) {
+          vite.ssrFixStacktrace(err as Error);
+        }
+        next(err);
+      }
+    });
+  } else {
+    console.log("[SERVER] Starting App in production mode (serving pre-built dist)...");
+    app.use(express.static(distPath));
+    
+    // Catch-all route for SPA client-side routes in production
+    app.get("*", (req, res, next) => {
+      if (req.path.startsWith("/api/")) {
+        return next();
+      }
+      
+      const indexPath = path.join(distPath, "index.html");
+      if (fs.existsSync(indexPath)) {
+        res.sendFile(indexPath);
+      } else {
+        console.warn(`[SERVER WARNING] dist/index.html not found at ${indexPath}. Falling back dynamically.`);
+        const fallbackPath = path.join(process.cwd(), "index.html");
+        if (fs.existsSync(fallbackPath)) {
+          res.sendFile(fallbackPath);
+        } else {
+          res.status(200).send(`
+            <!DOCTYPE html>
+            <html>
+            <head>
+              <meta charset="utf-8">
+              <title>Upside Restaurant & Café</title>
+              <meta name="viewport" content="width=device-width, initial-scale=1">
+              <style>
+                body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; background-color: #fcfbf9; color: #1c1917; }
+                h1 { font-size: 24px; margin-bottom: 8px; }
+                p { color: #666; }
+              </style>
+            </head>
+            <body>
+              <h1>Upside Restaurant & Café</h1>
+              <p>Establishing secure connection... Please refresh in a moment.</p>
+              <script>
+                setTimeout(() => { window.location.reload(); }, 2000);
+              </script>
+            </body>
+            </html>
+          `);
+        }
+      }
+    });
+  }
+
+  // CRITICAL PLATFORM BINDING CODE:
+  // Vercel serverless functions handle connections natively; they don't boot an active listening process.
+  // However, Cloud Run containers MUST run a web server listening on port 3000 to pass health check validation.
+  if (!process.env.VERCEL) {
+    const PORT = 3000;
     app.listen(PORT, "0.0.0.0", () => {
       console.log(`Express server executing on http://0.0.0.0:${PORT}`);
     });
+  } else {
+    console.log("[SERVER] Loaded inside Vercel serverless context. Skipping local listen port registration.");
   }
 }
 

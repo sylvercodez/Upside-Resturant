@@ -90,13 +90,31 @@ export function generateOpayApiSignature(payload: any, secretKey: string): strin
 }
 
 /**
- * Verifies if a callback or webhook payload signature is authentic.
+ * Verifies if a callback or webhook payload signature is authentic. Supports both 3-argument and 4-argument overloads.
  */
-export function verifyWebhookSignature(paramContent: string, timestamp: string, clientAuthKey: string, secretKey: string): boolean {
+export function verifyWebhookSignature(
+  paramContent: any,
+  timestampOrSignature: string,
+  clientAuthKeyOrSecretKey: string,
+  maybeSecretKey?: string
+): boolean {
   try {
-    const expected = generateSignature(paramContent, timestamp, secretKey);
+    let expected = "";
+    let actual = "";
+
+    if (maybeSecretKey === undefined) {
+      // 3-argument overload: verifyWebhookSignature(payloadObj, signature, secretKey)
+      const payloadObj = typeof paramContent === "string" ? JSON.parse(paramContent) : paramContent;
+      expected = generateOpayApiSignature(payloadObj, clientAuthKeyOrSecretKey);
+      actual = timestampOrSignature;
+    } else {
+      // 4-argument overload: verifyWebhookSignature(paramContentString, timestamp, clientAuthKey, secretKey)
+      expected = generateSignature(paramContent, timestampOrSignature, maybeSecretKey);
+      actual = clientAuthKeyOrSecretKey;
+    }
+
     const bufferExpected = Buffer.from(expected, "hex");
-    const bufferActual = Buffer.from(clientAuthKey, "hex");
+    const bufferActual = Buffer.from(actual, "hex");
     
     if (bufferExpected.length !== bufferActual.length) {
       return false;
