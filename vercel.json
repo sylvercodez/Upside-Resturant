@@ -5,18 +5,3 @@
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]
 }
-// {
-//   "version": 2,
-//   "builds": [
-//     {
-//       "src": "index.ts", 
-//       "use": "@vercel/node",
-//       "config": {
-//         "includeFiles": ["src/data/**", "firebase-applet-config.json"]
-//       }
-//     }
-//   ],
-//   "routes": [
-//     { "src": "/api/(.*)", "dest": "index.ts" }
-//   ]
-// }
