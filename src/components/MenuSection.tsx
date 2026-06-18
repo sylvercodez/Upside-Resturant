@@ -13,7 +13,7 @@ interface MenuSectionProps {
 
 export default function MenuSection({ onAddToCart, favorites, onToggleFavorite, onViewAllMenu, menuItems, categories }: MenuSectionProps) {
   const displayCategories = (categories || CATEGORIES).filter(c => !(c as any).disabled);
-  const [selectedCategory, setSelectedCategory] = useState<string>("best-sellers");
+  const [selectedCategory, setSelectedCategory] = useState<string>("starter");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [selectedItemForModal, setSelectedItemForModal] = useState<MenuItem | null>(null);
 
@@ -50,6 +50,16 @@ export default function MenuSection({ onAddToCart, favorites, onToggleFavorite, 
         // "best-sellers" fallback: items tagged "Best Seller" or "Signature" or arbitrary selected
         list = list.filter((item) => item.tags?.includes("Best Seller") || item.tags?.includes("Signature"));
       }
+    }
+
+    // List of food categories to limit to 6 items on the home page
+    const FOOD_CATEGORIES = [
+      "starter", "sandwich", "breakfast", "pasta", "burger", 
+      "grilled-steaks", "grilled-fish", "platters", "cookies", "pizza", "salad"
+    ];
+
+    if (FOOD_CATEGORIES.includes(selectedCategory) && searchQuery.trim().length === 0) {
+      return list.slice(0, 6);
     }
 
     return list;

@@ -34,29 +34,34 @@ app.use((req, res, next) => {
 
 // App Check verification middleware - gracefully handles verification to support all sandboxes and custom setups without blocking logins
 async function appCheckVerification(req: any, res: any, next: any) {
-  const path = req.path;
-
-  // Exempt external callbacks, webhooks or redirects
-  const isExempt = 
-    path === "/opay/webhook" ||
-    path === "/opay/callback" ||
-    path === "/instagram/callback" ||
-    path === "/api/opay/webhook" ||
-    path === "/api/opay/callback" ||
-    path === "/api/instagram/callback";
-
-  if (isExempt) {
-    return next();
-  }
-
-  const appCheckToken = req.header("X-Firebase-AppCheck");
-
-  if (!appCheckToken) {
-    console.warn(`[App Check Warning] Missing App Check token from IP ${req.ip} for URI ${req.originalUrl} (Gracefully allowed)`);
-    return next();
-  }
-
   try {
+    const path = req.path;
+
+    // Exempt external callbacks, webhooks or redirects
+    const isExempt = 
+      path === "/opay/webhook" ||
+      path === "/opay/callback" ||
+      path === "/instagram/callback" ||
+      path === "/api/opay/webhook" ||
+      path === "/api/opay/callback" ||
+      path === "/api/instagram/callback";
+
+    if (isExempt) {
+      return next();
+    }
+
+    const appCheckToken = req.header("X-Firebase-AppCheck");
+
+    if (!appCheckToken) {
+      console.warn(`[App Check Warning] Missing App Check token from IP ${req.ip} for URI ${req.originalUrl} (Gracefully allowed)`);
+      return next();
+    }
+
+    if (!admin || typeof admin.appCheck !== "function") {
+      console.warn(`[App Check Warning] Firebase Admin App Check is not initialized or not supported. Gracefully allowing.`);
+      return next();
+    }
+
     const decodedToken = await admin.appCheck().verifyToken(appCheckToken);
     req.appCheckToken = decodedToken;
     next();
@@ -130,7 +135,7 @@ function getFromEmailAddress(): string {
   // Simple email matcher
   const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/;
 
-  // Validate rawFrom
+  // Validate rawFrom if it is a fully qualified email address or has one formatted in <>
   if (rawFrom && emailRegex.test(rawFrom)) {
     // If it has a clean pattern with no < >, wrap it properly
     if (!rawFrom.includes("<") && !rawFrom.includes(">")) {
@@ -139,19 +144,18 @@ function getFromEmailAddress(): string {
     return rawFrom;
   }
 
+  // If rawFrom has a display name like "Upside Fine Dining" but no email address,
+  // pair it with the custom verified domain "noreply@upside-restaurant-cafe.com" instead of the sandbox default!
+  if (rawFrom && !emailRegex.test(rawFrom)) {
+    return `"${rawFrom}" <noreply@upside-restaurant-cafe.com>`;
+  }
+
   // Validate SMTP_USER if it is a valid email
   if (rawUser && emailRegex.test(rawUser)) {
     return `"Upside Fine Dining" <${rawUser}>`;
   }
 
-  // If using Resend SMTP and no valid custom verified SMTP_FROM is specified,
-  // we must fallback to the official "onboarding@resend.dev" address, as Resend
-  // blocks all unverified custom domains.
-  if (rawHost.includes("resend")) {
-    return `"Upside Fine Dining" <onboarding@resend.dev>`;
-  }
-
-  // Pure generic fallback that meets standard syntactical formatting requirements
+  // Pure generic domain fallback (which matches their verified domain name on Resend!)
   return `"Upside Fine Dining" <noreply@upside-restaurant-cafe.com>`;
 }
 
@@ -1512,7 +1516,7 @@ async function serveApp() {
   }
 
   const distPath = path.join(process.cwd(), "dist");
-  const isProduction = process.env.NODE_ENV === "production" && fs.existsSync(path.join(distPath, "index.html"));
+  const isProduction = process.env.NODE_ENV === "production" || fs.existsSync(path.join(distPath, "index.html"));
 
   if (!isProduction) {
     console.log("[SERVER] Starting App in development mode (using Vite middleware)...");

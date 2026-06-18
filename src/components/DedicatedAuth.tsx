@@ -7,7 +7,8 @@ import {
   updateProfile,
   signInWithPopup,
   GoogleAuthProvider,
-  User as FirebaseUser
+  User as FirebaseUser,
+  sendPasswordResetEmail
 } from "firebase/auth";
 import { doc, setDoc } from "firebase/firestore";
 import { getApiUrl } from "../types";
@@ -23,7 +24,7 @@ export default function DedicatedAuth({
   onBackToLobby,
   onNavigate
 }: DedicatedAuthProps) {
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
+  const [mode, setMode] = useState<"signin" | "signup" | "forgot">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
@@ -120,6 +121,24 @@ export default function DedicatedAuth({
     e.preventDefault();
     setError("");
     setSuccess("");
+
+    if (mode === "forgot") {
+      if (!email.trim()) {
+        setError("Email sanctuary address is required to dispatch the passkey reset.");
+        return;
+      }
+      setLoading(true);
+      try {
+        await sendPasswordResetEmail(auth, email);
+        setSuccess("Success! A secure credential recovery link has been dispatched to your email address. Please follow the instructions to reset your password.");
+      } catch (err: any) {
+        console.error("Password reset dispatch failed", err);
+        setError(getCleanAuthError(err));
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
 
     if (mode === "signup" && !displayName.trim()) {
       setError("Full name is required to create an account.");
@@ -504,11 +523,13 @@ export default function DedicatedAuth({
 
               <div className="space-y-1 text-left">
                 <h3 className="text-xl font-bold font-mono tracking-wider text-neutral-955 uppercase animate-fadeIn">
-                  {mode === "signin" ? "SIGN IN" : "CREATE AN ACCOUNT"}
+                  {mode === "signin" ? "SIGN IN" : mode === "signup" ? "CREATE AN ACCOUNT" : "FORGOT PASSWORD"}
                 </h3>
                 <p className="text-[11px] text-neutral-500 font-sans leading-normal animate-fadeIn">
                   {isVerifyingOtp
                     ? `A security PIN check is required. Enter the 6-digit confirmation code sent to ${email} to authorize.`
+                    : mode === "forgot"
+                    ? "Enter your registered email address and we'll dispatch a link to securely reset your credentials."
                     : mode === "signin"
                     ? "Gain access to your custom order histories, favorites drawer, and fast checkout suites."
                     : "Register with Upside to track current orders in real-time, view your order histories, and expedite checkouts."}
@@ -598,34 +619,36 @@ export default function DedicatedAuth({
               ) : (
                 <div className="pt-2">
                   {/* Tab Option Selection with clean grey borders */}
-                  <div className="flex border-b border-neutral-200 mb-6">
-                    <button
-                      onClick={() => {
-                        setMode("signin");
-                        setError("");
-                      }}
-                      className={`flex-1 pb-3 text-[11px] tracking-widest font-mono uppercase font-bold text-center transition-all cursor-pointer ${
-                        mode === "signin"
-                          ? "text-amber-500 border-b-2 border-amber-500 font-bold"
-                          : "text-neutral-400 hover:text-neutral-600"
-                      }`}
-                    >
-                      Sign In
-                    </button>
-                    <button
-                      onClick={() => {
-                        setMode("signup");
-                        setError("");
-                      }}
-                      className={`flex-1 pb-3 text-[11px] tracking-widest font-mono uppercase font-bold text-center transition-all cursor-pointer ${
-                        mode === "signup"
-                          ? "text-amber-500 border-b-2 border-amber-500 font-bold"
-                          : "text-neutral-400 hover:text-neutral-600"
-                      }`}
-                    >
-                      Sign Up
-                    </button>
-                  </div>
+                  {mode !== "forgot" && (
+                    <div className="flex border-b border-neutral-200 mb-6">
+                      <button
+                        onClick={() => {
+                          setMode("signin");
+                          setError("");
+                        }}
+                        className={`flex-1 pb-3 text-[11px] tracking-widest font-mono uppercase font-bold text-center transition-all cursor-pointer ${
+                          mode === "signin"
+                            ? "text-amber-500 border-b-2 border-amber-500 font-bold"
+                            : "text-neutral-400 hover:text-neutral-600"
+                        }`}
+                      >
+                        Sign In
+                      </button>
+                      <button
+                        onClick={() => {
+                          setMode("signup");
+                          setError("");
+                        }}
+                        className={`flex-1 pb-3 text-[11px] tracking-widest font-mono uppercase font-bold text-center transition-all cursor-pointer ${
+                          mode === "signup"
+                            ? "text-amber-500 border-b-2 border-amber-500 font-bold"
+                            : "text-neutral-400 hover:text-neutral-600"
+                        }`}
+                      >
+                        Sign Up
+                      </button>
+                    </div>
+                  )}
 
                   <form onSubmit={handleAuth} className="space-y-4">
                     {mode === "signup" && (
@@ -664,29 +687,46 @@ export default function DedicatedAuth({
                       </div>
                     </div>
 
-                    <div className="space-y-1.5 text-left">
-                      <label className="text-[10px] tracking-widest text-neutral-550 font-mono uppercase block text-neutral-500">
-                        Select Password
-                      </label>
-                      <div className="relative">
-                        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
-                        <input
-                          type={showPassword ? "text" : "password"}
-                          required
-                          value={password}
-                          onChange={(e) => setPassword(e.target.value)}
-                          placeholder="Minimum 6 premium characters"
-                          className="w-full bg-neutral-50 hover:bg-neutral-50/50 border border-neutral-300 pl-10 pr-12 py-3 text-xs text-neutral-900 placeholder-neutral-400 focus:outline-none focus:bg-white focus:border-amber-500 transition-colors rounded-none"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowPassword(!showPassword)}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-700 transition-colors"
-                        >
-                          {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                        </button>
+                    {mode !== "forgot" && (
+                      <div className="space-y-1.5 text-left">
+                        <div className="flex justify-between items-center">
+                          <label className="text-[10px] tracking-widest text-neutral-550 font-mono uppercase block text-neutral-500">
+                            Select Password
+                          </label>
+                          {mode === "signin" && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setMode("forgot");
+                                setError("");
+                                setSuccess("");
+                              }}
+                              className="text-[10px] font-mono tracking-wider text-amber-600 hover:text-amber-500 hover:underline cursor-pointer"
+                            >
+                              Forgot Password?
+                            </button>
+                          )}
+                        </div>
+                        <div className="relative">
+                          <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
+                          <input
+                            type={showPassword ? "text" : "password"}
+                            required
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            placeholder="Minimum 6 premium characters"
+                            className="w-full bg-neutral-50 hover:bg-neutral-50/50 border border-neutral-300 pl-10 pr-12 py-3 text-xs text-neutral-900 placeholder-neutral-400 focus:outline-none focus:bg-white focus:border-amber-500 transition-colors rounded-none"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowPassword(!showPassword)}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-700 transition-colors"
+                          >
+                            {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                          </button>
+                        </div>
                       </div>
-                    </div>
+                    )}
 
                     {/* Custom CTA Submit Button */}
                     <button
@@ -698,6 +738,11 @@ export default function DedicatedAuth({
                         <>
                           <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                           <span>Dispatching verification...</span>
+                        </>
+                      ) : mode === "forgot" ? (
+                        <>
+                          <Mail className="w-4 h-4" />
+                          <span>SEND RESET EMAIL</span>
                         </>
                       ) : mode === "signin" ? (
                         <>
@@ -711,6 +756,22 @@ export default function DedicatedAuth({
                         </>
                       )}
                     </button>
+
+                    {mode === "forgot" && (
+                      <div className="text-center pt-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setMode("signin");
+                            setError("");
+                            setSuccess("");
+                          }}
+                          className="text-[11px] font-mono uppercase tracking-wider text-amber-600 hover:underline hover:text-amber-500 transition-colors cursor-pointer"
+                        >
+                          Cancel and Return to Sign In
+                        </button>
+                      </div>
+                    )}
                   </form>
                 </div>
               )}
