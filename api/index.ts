@@ -9,9 +9,20 @@ import fs from "fs";
 import { initializeApp as initClientApp } from "firebase/app";
 import { getFirestore as getClientFirestore, doc, getDoc, setDoc, updateDoc, serverTimestamp as clientServerTimestamp } from "firebase/firestore";
 import { CATEGORIES, MENU_ITEMS } from "../src/data/menu";
+import { encryptPayload, decryptPayload, generateSignature, verifyWebhookSignature, generateOpayApiSignature } from "../src/utils/opayHelpers";
 
 // Load environment variables
 dotenv.config();
+
+// Helper to strip any leading or trailing single/double quotes from environment secrets configuration
+const stripQuotes = (str: string): string => {
+  if (!str) return "";
+  let s = str.trim();
+  while ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'"))) {
+    s = s.substring(1, s.length - 1).trim();
+  }
+  return s;
+};
 
 // Ensure standard and VITE_ prefixed environment variables are correctly mapped for production deployments
 const envKeysToMap = [
@@ -29,10 +40,11 @@ const envKeysToMap = [
 
 for (const key of envKeysToMap) {
   const viteKey = `VITE_${key}`;
-  if (process.env[key] && !process.env[viteKey]) {
-    process.env[viteKey] = process.env[key];
-  } else if (process.env[viteKey] && !process.env[key]) {
-    process.env[key] = process.env[viteKey];
+  const rawVal = process.env[key] || process.env[viteKey];
+  if (rawVal !== undefined) {
+    const cleanVal = stripQuotes(rawVal);
+    process.env[key] = cleanVal;
+    process.env[viteKey] = cleanVal;
   }
 }
 
@@ -95,16 +107,6 @@ async function appCheckVerification(req: any, res: any, next: any) {
 }
 
 app.use("/api", appCheckVerification);
-
-// Helper to strip any leading or trailing single/double quotes from environment secrets configuration
-const stripQuotes = (str: string): string => {
-  if (!str) return "";
-  let s = str.trim();
-  while ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'"))) {
-    s = s.substring(1, s.length - 1).trim();
-  }
-  return s;
-};
 
 // Create email transporter dynamically based on configured environment variables
 function getMailTransporter() {
@@ -964,7 +966,7 @@ try {
 // SECURE OPAY GATEWAY EXCEL-FIDELITY CLOUD FUNCTIONS & ROUTES
 // ==========================================================
 
-import { encryptPayload, decryptPayload, generateSignature, verifyWebhookSignature, generateOpayApiSignature } from "../src/utils/opayHelpers";
+
 
 /**
  * Helper to securely retrieve OPay integration settings.
