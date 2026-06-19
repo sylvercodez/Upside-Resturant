@@ -13,6 +13,29 @@ import { CATEGORIES, MENU_ITEMS } from "./src/data/menu";
 // Load environment variables
 dotenv.config();
 
+// Ensure standard and VITE_ prefixed environment variables are correctly mapped for production deployments
+const envKeysToMap = [
+  "OPAY_MERCHANT_ID",
+  "OPAY_PUBLIC_KEY",
+  "OPAY_SECRET_KEY",
+  "OPAY_ENVIRONMENT",
+  "SMTP_HOST",
+  "SMTP_PORT",
+  "SMTP_SECURE",
+  "SMTP_USER",
+  "SMTP_PASS",
+  "SMTP_FROM"
+];
+
+for (const key of envKeysToMap) {
+  const viteKey = `VITE_${key}`;
+  if (process.env[key] && !process.env[viteKey]) {
+    process.env[viteKey] = process.env[key];
+  } else if (process.env[viteKey] && !process.env[key]) {
+    process.env[key] = process.env[viteKey];
+  }
+}
+
 const app = express();
 const PORT = 3000;
 
@@ -1196,8 +1219,9 @@ export async function verifyOpayPayment(reference: string) {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "Authorization": `Bearer ${signature}`,
-      "MerchantId": merchantId
+      "Authorization": `Bearer ${publicKey}`,
+      "MerchantId": merchantId,
+      "Signature": signature
     },
     body: JSON.stringify(requestData)
   });
