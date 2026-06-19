@@ -111,7 +111,34 @@ export default function CartDrawer({
           },
           body: JSON.stringify({ reference: ref })
         });
-        const data = await response.json();
+        
+        let data: any;
+        const contentType = response.headers.get("content-type");
+        if (contentType && contentType.includes("application/json")) {
+          data = await response.json();
+        } else {
+          const text = await response.text();
+          let excerpt = text.trim();
+          if (excerpt.includes("<pre>")) {
+            const preMatch = excerpt.match(/<pre>([\s\S]*?)<\/pre>/i);
+            if (preMatch && preMatch[1]) {
+              excerpt = preMatch[1].trim();
+            }
+          } else if (excerpt.includes("<title>")) {
+            const titleMatch = excerpt.match(/<title>([\s\S]*?)<\/title>/i);
+            if (titleMatch && titleMatch[1]) {
+              excerpt = `Page Title: ${titleMatch[1].trim()}`;
+            }
+          }
+          if (excerpt.length > 300) {
+            excerpt = excerpt.substring(0, 300) + "...";
+          }
+          throw new Error(`Server returned non-JSON error (status ${response.status}). Diagnostic details: ${excerpt || "No response body returned."}`);
+        }
+
+        if (!response.ok) {
+          throw new Error(data?.error || "Payment verification API response error.");
+        }
         console.log("[OPay Verification Polling]", data);
         if (data.paymentStatus === "PAID" || data.paymentStatus === "SUCCESS" || data.paymentStatus === "payment_successful") {
           setPollingStatus("passed");
@@ -222,8 +249,9 @@ export default function CartDrawer({
           }
           return true; // ends loop
         }
-      } catch (pollErr) {
+      } catch (pollErr: any) {
         console.warn("Retrying status lookup after error:", pollErr);
+        setPollingError(`Payment verification system notice: ${pollErr?.message || "Verification system offline or returned a transient error."}`);
       }
       return false;
     };

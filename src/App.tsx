@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { AnimatePresence, motion } from "motion/react";
 import Header from "./components/Header";
 import Hero from "./components/Hero";
 import MenuSection from "./components/MenuSection";
@@ -26,6 +27,17 @@ export default function App() {
   const [allMenuItems, setAllMenuItems] = useState<MenuItem[]>(MENU_ITEMS);
   const [allCategories, setAllCategories] = useState<Category[]>(CATEGORIES);
   const [shippingLocations, setShippingLocations] = useState<ShippingLocation[]>(LAGOS_AREAS);
+
+  const [toast, setToast] = useState<{ message: string; type: "error" | "success" | "info" } | null>(null);
+
+  useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => {
+        setToast(null);
+      }, 9000);
+      return () => clearTimeout(timer);
+    }
+  }, [toast]);
 
 
   useEffect(() => {
@@ -494,12 +506,18 @@ export default function App() {
           handleNavigate("/dashboard");
         } else {
           // Block the track operation and notify the user about unsuccessful payment status
-          alert(`Unable to track order: OPay payment status is non-successful ("${data.paymentStatus || 'PENDING'}"). Only successfully paid orders can be tracked.`);
+          setToast({
+            message: `Unable to track order: OPay payment status is non-successful ("${data.paymentStatus || 'PENDING'}"). Only successfully paid orders can be tracked.`,
+            type: "error"
+          });
           console.warn(`[handleTrackOrder] Order tracking blocked for ref ${order.id}. Non-successful payment status:`, data.paymentStatus);
         }
       } catch (err: any) {
         console.error("OPay payment track validation failed:", err);
-        alert(`Payment validation check error: ${err.message || 'Verification system offline. Please retry.'}`);
+        setToast({
+          message: `Payment validation check error: ${err.message || 'Verification system offline. Please retry.'}`,
+          type: "error"
+        });
       }
     } else {
       // For standard orders / non-OPay checkouts, track normally
@@ -730,6 +748,60 @@ export default function App() {
         onClose={() => setIsReservationOpen(false)}
       />
 
+      {/* Dynamic Luxury System Alert / Webhook Response Toast Notification Banner */}
+      <AnimatePresence>
+        {toast && (
+          <motion.div
+            initial={{ opacity: 0, y: 50, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 20, scale: 0.95 }}
+            transition={{ duration: 0.3, ease: "easeOut" }}
+            className="fixed bottom-24 right-4 md:right-8 z-[10000] max-w-sm md:max-w-md w-[calc(100vw-2rem)] bg-neutral-900/95 backdrop-blur border border-neutral-800 rounded shadow-2xl p-4 font-sans text-left"
+          >
+            <div className="flex items-start gap-4">
+              <div className={`p-2 rounded-full ${
+                toast.type === "error" ? "bg-red-955/40 border border-red-500/30 text-red-400" :
+                toast.type === "success" ? "bg-emerald-955/40 border border-emerald-500/30 text-emerald-400" :
+                "bg-amber-955/40 border border-amber-500/30 text-amber-400"
+              }`}>
+                {toast.type === "error" ? (
+                  <svg className="w-5 h-5 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                ) : toast.type === "success" ? (
+                  <svg className="w-5 h-5 animate-bounce" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                ) : (
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                )}
+              </div>
+              
+              <div className="flex-1 space-y-1">
+                <h4 className="text-xs font-mono font-bold tracking-widest uppercase text-neutral-200">
+                  {toast.type === "error" ? "OPay / OTP Gateway Notice" : "System Notification"}
+                </h4>
+                <p className="text-xs text-neutral-400 leading-relaxed font-sans">
+                  {toast.message}
+                </p>
+                <div className="flex items-center gap-2 pt-2">
+                  <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                  <span className="text-[9px] text-neutral-500 font-mono uppercase tracking-wider">Upside Restaurant Diagnostics</span>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setToast(null)}
+                className="text-neutral-500 hover:text-neutral-300 font-bold transition-colors cursor-pointer text-sm"
+              >
+                ✕
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
     </div>
   );
