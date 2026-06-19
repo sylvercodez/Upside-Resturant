@@ -8,6 +8,7 @@ import { getFirestore } from "firebase-admin/firestore";
 import fs from "fs";
 import { initializeApp as initClientApp } from "firebase/app";
 import { getFirestore as getClientFirestore, doc, getDoc, setDoc, updateDoc, serverTimestamp as clientServerTimestamp } from "firebase/firestore";
+import { CATEGORIES, MENU_ITEMS } from "./src/data/menu";
 
 // Load environment variables
 dotenv.config();
@@ -85,11 +86,11 @@ const stripQuotes = (str: string): string => {
 // Create email transporter dynamically based on configured environment variables
 function getMailTransporter() {
   try {
-    const rawHost = stripQuotes(process.env.VITE_SMTP_HOST || "");
-    const rawUser = stripQuotes(process.env.VITE_SMTP_USER || "");
-    const rawPass = stripQuotes(process.env.VITE_SMTP_PASS || "");
-    const rawPortStr = stripQuotes(process.env.VITE_SMTP_PORT || "");
-    const rawSecureStr = stripQuotes(process.env.VITE_SMTP_SECURE || "");
+    const rawHost = stripQuotes(process.env.VITE_SMTP_HOST || process.env.SMTP_HOST || "");
+    const rawUser = stripQuotes(process.env.VITE_SMTP_USER || process.env.SMTP_USER || "");
+    const rawPass = stripQuotes(process.env.VITE_SMTP_PASS || process.env.SMTP_PASS || "");
+    const rawPortStr = stripQuotes(process.env.VITE_SMTP_PORT || process.env.SMTP_PORT || "");
+    const rawSecureStr = stripQuotes(process.env.VITE_SMTP_SECURE || process.env.SMTP_SECURE || "");
 
     if (rawHost && rawUser && rawPass) {
       const portVal = parseInt(rawPortStr || "587", 10);
@@ -130,9 +131,9 @@ function getMailTransporter() {
 
 // Generate the fully valid header "from" address
 function getFromEmailAddress(): string {
-  let rawFrom = stripQuotes(process.env.VITE_SMTP_FROM || "");
-  let rawUser = stripQuotes(process.env.VITE_SMTP_USER || "");
-  const rawHost = stripQuotes(process.env.VITE_SMTP_HOST || "").toLowerCase();
+  let rawFrom = stripQuotes(process.env.VITE_SMTP_FROM || process.env.SMTP_FROM || "");
+  let rawUser = stripQuotes(process.env.VITE_SMTP_USER || process.env.SMTP_USER || "");
+  const rawHost = stripQuotes(process.env.VITE_SMTP_HOST || process.env.SMTP_HOST || "").toLowerCase();
 
   // Simple email matcher
   const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/;
@@ -194,7 +195,6 @@ app.get("/api/seed-menu", async (req, res) => {
 
     const { initializeApp: seedInitApp } = await import("firebase/app");
     const { getFirestore: seedGetFirestore, doc: seedDoc, getDocs: seedGetDocs, collection: seedCollection, setDoc: seedSetDoc } = await import("firebase/firestore");
-    const { CATEGORIES, MENU_ITEMS } = await import("./src/data/menu");
 
     const clientApp = seedInitApp(firebaseConfig, "seed-menu-app");
     const db = seedGetFirestore(clientApp, databaseId);
@@ -264,11 +264,16 @@ app.get("/api/seed-menu", async (req, res) => {
 });
 
 app.get("/api/otp/status", (req, res) => {
-  const isConfigured = !!(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
+  const smtpHost = process.env.VITE_SMTP_HOST || process.env.SMTP_HOST;
+  const smtpUser = process.env.VITE_SMTP_USER || process.env.SMTP_USER;
+  const smtpPass = process.env.VITE_SMTP_PASS || process.env.SMTP_PASS;
+  const smtpFrom = process.env.VITE_SMTP_FROM || process.env.SMTP_FROM;
+
+  const isConfigured = !!(smtpHost && smtpUser && smtpPass);
   res.json({
     configured: isConfigured,
-    host: process.env.SMTP_HOST || null,
-    from: process.env.SMTP_FROM || null
+    host: smtpHost || null,
+    from: smtpFrom || null
   });
 });
 
@@ -946,10 +951,10 @@ async function getOpayConfig() {
   console.log("=== [VERCEL LOG] OPAY CONFIGURATION RESOLUTION INITIATED ===");
   
   // Respect process.env as primary configurations first
-  let merchantId = process.env.VITE_OPAY_MERCHANT_ID;
-  let publicKey = process.env.VITE_OPAY_PUBLIC_KEY;
-  let secretKey = process.env.VITE_OPAY_SECRET_KEY;
-  let environment = process.env.VITE_OPAY_ENVIRONMENT || "sandbox";
+  let merchantId = process.env.VITE_OPAY_MERCHANT_ID || process.env.OPAY_MERCHANT_ID;
+  let publicKey = process.env.VITE_OPAY_PUBLIC_KEY || process.env.OPAY_PUBLIC_KEY;
+  let secretKey = process.env.VITE_OPAY_SECRET_KEY || process.env.OPAY_SECRET_KEY;
+  let environment = process.env.VITE_OPAY_ENVIRONMENT || process.env.OPAY_ENVIRONMENT || "sandbox";
 
   console.log("[VERCEL LOG] Checked Environment Variables in Process:");
   console.log(` - OPAY_MERCHANT_ID: ${merchantId ? `Present (length: ${merchantId.length}, partial: ${merchantId.substring(0, 4)}...${merchantId.substring(Math.max(0, merchantId.length - 4))})` : "MISSING"}`);
@@ -1086,8 +1091,9 @@ export async function initializeOpayPayment(paymentData: {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "Authorization": `Bearer ${signature}`,
-      "MerchantId": merchantId
+      "Authorization": `Bearer ${publicKey}`,
+      "MerchantId": merchantId,
+      "Signature": signature
     },
     body: JSON.stringify(requestData)
   });
