@@ -6,7 +6,7 @@
     "api/index.ts": {
       "memory": 1024,
       "maxDuration": 15,
-      "includeFiles": "{src/data/**,firebase-applet-config.json}"
+      "includeFiles": "{src/data/**,src/utils/**,firebase-applet-config.json}"
     }
   },
   "rewrites": [
