@@ -40,7 +40,7 @@ export default function DedicatedAuth({
   const [smtpSendError, setSmtpSendError] = useState<string | null>(null);
   const [smtpStatus, setSmtpStatus] = useState<{ configured: boolean; host: string | null; from: string | null } | null>(null);
 
-  // Load SMTP status check on mount
+  // Load SMTP status check on mount with resilient error handling and safe diagnostics
   useEffect(() => {
     fetch(getApiUrl("/api/otp/status"))
       .then(async (res) => {
@@ -48,10 +48,34 @@ export default function DedicatedAuth({
         if (contentType && contentType.includes("application/json")) {
           return res.json();
         }
-        throw new Error(`Server returned non-JSON response (status ${res.status}).`);
+        const text = await res.text();
+        let excerpt = text.trim();
+        if (excerpt.includes("<pre>")) {
+          const preMatch = excerpt.match(/<pre>([\s\S]*?)<\/pre>/i);
+          if (preMatch && preMatch[1]) {
+            excerpt = preMatch[1].trim();
+          }
+        } else if (excerpt.includes("<title>")) {
+          const titleMatch = excerpt.match(/<title>([\s\S]*?)<\/title>/i);
+          if (titleMatch && titleMatch[1]) {
+            excerpt = `Page Title: ${titleMatch[1].trim()}`;
+          }
+        }
+        if (excerpt.length > 200) {
+          excerpt = excerpt.substring(0, 200) + "...";
+        }
+        throw new Error(`Server returned non-JSON response (status ${res.status}). Details: ${excerpt || "No response body"}`);
       })
       .then((data) => setSmtpStatus(data))
-      .catch((err) => console.warn("Could not load SMTP configuration status:", err));
+      .catch((err) => {
+        console.warn("[SMTP Status Fallback Activated] Could not load SMTP configuration status:", err.message || err);
+        // Fallback to offline defaults so that authentication checks and OTP simulator is accessible
+        setSmtpStatus({
+          configured: false,
+          host: null,
+          from: null
+        });
+      });
   }, []);
 
   // Automatically redirect if already logged in
@@ -594,6 +618,19 @@ export default function DedicatedAuth({
                     <div className="p-2.5 bg-amber-50/50 border border-amber-200/60 text-center font-mono">
                       <span className="text-[10px] text-[#78350f] uppercase tracking-wider font-bold">Simulator Code: </span>
                       <span className="text-[13px] font-bold text-neutral-900 font-mono select-all ml-1 bg-amber-50 px-2.5 py-0.5 border border-amber-200">{otpDemoCode}</span>
+                    </div>
+                  )}
+
+                  {/* Dynamic Luxury Real-time SMTP Dispatch Warn Box */}
+                  {smtpSendError && (
+                    <div className="p-2.5 bg-neutral-900/95 border border-amber-500/20 text-left font-sans text-xs">
+                      <div className="flex items-center gap-1.5 text-[9px] text-amber-500 uppercase tracking-widest font-bold mb-1 font-mono">
+                        <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                        Gate Status: Sandbox Mode Initiated
+                      </div>
+                      <p className="text-[10px] text-neutral-400 font-mono leading-relaxed">
+                        SMTP courier report: <span className="text-neutral-300 font-semibold">"{smtpSendError}"</span>. Since the email channel is currently offline or unconfigured, we have activated the secure guest pass generator above. Use the simulation PIN to continue seamlessly.
+                      </p>
                     </div>
                   )}
 

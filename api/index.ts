@@ -155,6 +155,38 @@ const PORT = 3000;
 
 app.use(express.json());
 
+// Path normalizer to handle Vercel serverless routing variations gracefully (where Vercel might strip /api prefix from the routed request)
+app.use((req: any, res: any, next: any) => {
+  const url = req.url || "";
+  const path = req.path || "";
+  if (!url.startsWith("/api") && (
+    path.startsWith("/otp/") ||
+    path.startsWith("/opay/") ||
+    path.startsWith("/seed-menu") ||
+    path.startsWith("/instagram/") ||
+    path.startsWith("/smtp/") ||
+    path.startsWith("/test/")
+  )) {
+    console.log(`[Vercel Router Compatibility] Normalizing request path to start with /api (from "${req.url}" to "/api${req.url}")`);
+    try {
+      req.url = `/api${req.url}`;
+    } catch (e: any) {
+      console.warn("[Vercel Router Compatibility] Failed to assign req.url directly. Attempting Object.defineProperty:", e.message);
+      try {
+        Object.defineProperty(req, "url", {
+          value: `/api${req.url}`,
+          writable: true,
+          configurable: true,
+          enumerable: true
+        });
+      } catch (defineErr: any) {
+        console.error("[Vercel Router Compatibility] Ultimate failure defining req.url:", defineErr.message);
+      }
+    }
+  }
+  next();
+});
+
 // Enable Cross-Origin Resource Sharing (CORS) for all routes,
 // allowing our live domain (upside-restaurant-cafe.com) to seamlessly communicate with the server
 app.use((req, res, next) => {
@@ -1587,7 +1619,7 @@ app.post("/api/opay/verify-payment", async (req: any, res: any) => {
  * Webhook that receives notifications, validates callback signature,
  * implements idempotency checks, and commits Firestore states.
  */
-app.post("/api/opay/webhook", async (req: any, res: any) => {
+const handleOpayWebhook = async (req: any, res: any) => {
   try {
     const headers = req.headers;
     const body = req.body;
@@ -1727,14 +1759,14 @@ app.post("/api/opay/webhook", async (req: any, res: any) => {
     console.error("[handleOpayWebhook] Execution failure:", err);
     return res.status(500).json({ status: "fail", error: err.message });
   }
-});
+};
+
+app.post("/api/opay/webhook", handleOpayWebhook);
 
 // Keep backward compatibility wrapper for existing callback path if hit
 app.post("/api/opay/callback", async (req: any, res: any) => {
   console.log("[OPAY CALLBACK FLOW] Forwarding request to standard webhook logic...");
-  // Forward query to the main webhook route logic
-  req.url = "/api/opay/webhook";
-  return app._router.handle(req, res);
+  return handleOpayWebhook(req, res);
 });
 
 // Serve frontend assets
