@@ -626,10 +626,10 @@ export default function DedicatedAuth({
                     <div className="p-2.5 bg-neutral-900/95 border border-amber-500/20 text-left font-sans text-xs">
                       <div className="flex items-center gap-1.5 text-[9px] text-amber-500 uppercase tracking-widest font-bold mb-1 font-mono">
                         <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-                        Gate Status: Sandbox Mode Initiated
+                        Verification System Notice
                       </div>
-                      <p className="text-[10px] text-neutral-400 font-mono leading-relaxed">
-                        SMTP courier report: <span className="text-neutral-300 font-semibold">"{smtpSendError}"</span>. Since the email channel is currently offline or unconfigured, we have activated the secure guest pass generator above. Use the simulation PIN to continue seamlessly.
+                      <p className="text-[10px] text-neutral-400 font-sans leading-relaxed">
+                        Notice: <span className="text-neutral-300 font-semibold">{smtpSendError}</span> Since direct email dispatch has been bypassed, we have provided an instant simulator passcode above. Please use this temporary code to sign in and proceed seamlessly.
                       </p>
                     </div>
                   )}

@@ -53,28 +53,61 @@ export async function getAppCheckToken(): Promise<string | null> {
 // Global fetch wrapper/interceptor to automatically inject the token in all client-side /api/ requests
 if (typeof window !== "undefined") {
   const originalFetch = window.fetch;
-  window.fetch = async function (input: RequestInfo | URL, init?: RequestInit) {
-    const urlString = typeof input === "string" ? input : (input instanceof URL ? input.toString() : input.url);
-    
-    // Check if targeting our own server API endpoints
-    const isLocalApi = urlString.includes("/api/") && 
-                       !urlString.includes("/api/opay/webhook") && 
-                       !urlString.includes("/api/instagram/callback");
-                       
-    if (isLocalApi) {
-      try {
-        const token = await getAppCheckToken();
-        if (token) {
-          const headers = new Headers(init?.headers || {});
-          headers.set("X-Firebase-AppCheck", token);
-          init = { ...init, headers };
+  try {
+    window.fetch = async function (input: RequestInfo | URL, init?: RequestInit) {
+      const urlString = typeof input === "string" ? input : (input instanceof URL ? input.toString() : input.url);
+      
+      // Check if targeting our own server API endpoints
+      const isLocalApi = urlString.includes("/api/") && 
+                         !urlString.includes("/api/opay/webhook") && 
+                         !urlString.includes("/api/instagram/callback");
+                         
+      if (isLocalApi) {
+        try {
+          const token = await getAppCheckToken();
+          if (token) {
+            const headers = new Headers(init?.headers || {});
+            headers.set("X-Firebase-AppCheck", token);
+            init = { ...init, headers };
+          }
+        } catch (err) {
+          console.warn("[App Check Interceptor] Failed to attach App Check token:", err);
         }
-      } catch (err) {
-        console.warn("[App Check Interceptor] Failed to attach App Check token:", err);
       }
+      return originalFetch(input, init);
+    };
+  } catch (assignErr: any) {
+    console.warn("[App Check Warning] Assigning window.fetch directly holds readonly restrictions in this environment. Attempting Object.defineProperty bypass...", assignErr);
+    try {
+      Object.defineProperty(window, "fetch", {
+        value: async function (input: RequestInfo | URL, init?: RequestInit) {
+          const urlString = typeof input === "string" ? input : (input instanceof URL ? input.toString() : input.url);
+          const isLocalApi = urlString.includes("/api/") && 
+                             !urlString.includes("/api/opay/webhook") && 
+                             !urlString.includes("/api/instagram/callback");
+                             
+          if (isLocalApi) {
+            try {
+              const token = await getAppCheckToken();
+              if (token) {
+                const headers = new Headers(init?.headers || {});
+                headers.set("X-Firebase-AppCheck", token);
+                init = { ...init, headers };
+              }
+            } catch (err) {
+              console.warn("[App Check Interceptor] Failed to attach App Check token:", err);
+            }
+          }
+          return originalFetch(input, init);
+        },
+        writable: true,
+        configurable: true,
+        enumerable: true
+      });
+    } catch (defineErr: any) {
+      console.error("[App Check Fatal Intercept Bypass] Global window.fetch is heavily serialized and locked in this sandbox host:", defineErr);
     }
-    return originalFetch(input, init);
-  };
+  }
 }
 
 // The exact high-fidelity representative brand image URL wrapped in a responsive block element
