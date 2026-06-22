@@ -7,6 +7,8 @@ import { otpRouter } from "./routes/otp.js";
 import { opayRouter } from "./routes/opay.js";
 import { instagramRouter } from "./routes/instagram.js";
 import { menuRouter } from "./routes/menu.js";
+import { mysqlRouter } from "./routes/mysql.js";
+import { deliveryRouter } from "./routes/delivery.js";
 
 // Ensure standard and VITE_ prefixed environment variables are correctly mapped
 mapEnvVariables();
@@ -25,6 +27,8 @@ app.use((req: any, res: any, next: any) => {
     path.startsWith("/opay/") ||
     path.startsWith("/seed-menu") ||
     path.startsWith("/instagram/") ||
+    path.startsWith("/mysql/") ||
+    path.startsWith("/delivery/") ||
     path.startsWith("/smtp/") ||
     path.startsWith("/test/")
   )) {
@@ -70,6 +74,8 @@ app.use("/api/otp", otpRouter);
 app.use("/api/opay", opayRouter);
 app.use("/api/instagram", instagramRouter);
 app.use("/api/seed-menu", menuRouter);
+app.use("/api/mysql", mysqlRouter);
+app.use("/api/delivery", deliveryRouter);
 
 // Serve frontend assets
 async function serveApp() {

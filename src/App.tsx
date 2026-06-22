@@ -6,6 +6,7 @@ import MenuSection from "./components/MenuSection";
 import CartDrawer from "./components/CartDrawer";
 import ReservationSection from "./components/ReservationSection";
 import AboutAndReviews from "./components/AboutAndReviews";
+import ScanSection from "./components/ScanSection";
 import HomeReservation from "./components/HomeReservation";
 import Footer from "./components/Footer";
 import BottomNav from "./components/BottomNav";
@@ -21,7 +22,8 @@ import { doc, getDoc, setDoc, updateDoc, collection, query, onSnapshot } from "f
 import { logCustomEvent } from "./utils/analytics";
 
 export default function App() {
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [isMySQLActive, setIsMySQLActive] = useState<boolean>(false);
+  const [currentUser, setCurrentUser] = useState<any>(null);
   const [userRole, setUserRole] = useState<string>("user");
   const [userDisabled, setUserDisabled] = useState<boolean>(false);
   const [allMenuItems, setAllMenuItems] = useState<MenuItem[]>(MENU_ITEMS);
@@ -39,8 +41,94 @@ export default function App() {
     }
   }, [toast]);
 
-
+  // 1. MySQL connection status poller & listener
   useEffect(() => {
+    const checkMySQL = async () => {
+      try {
+        const res = await fetch(getApiUrl("/api/mysql/status"));
+        if (res.ok) {
+          const data = await res.json();
+          if (data.connected) {
+            setIsMySQLActive(true);
+            console.log("MySQL Database Engine Detected Active. Cloud routing operational.");
+          } else {
+            setIsMySQLActive(false);
+          }
+        }
+      } catch (_) {
+        setIsMySQLActive(false);
+      }
+    };
+
+    checkMySQL();
+    
+    // Periodically re-check connection status (every 8 seconds)
+    const intv = setInterval(checkMySQL, 8000);
+    return () => clearInterval(intv);
+  }, []);
+
+  // 2. MySQL Auth Loader
+  useEffect(() => {
+    const syncUser = () => {
+      const stored = localStorage.getItem("upside_mysql_user");
+      if (stored) {
+        try {
+          const u = JSON.parse(stored);
+          setCurrentUser(u);
+          setUserRole(u.role || "user");
+          setUserDisabled(!!u.disabled);
+        } catch (_) {}
+      }
+    };
+
+    if (isMySQLActive) {
+      syncUser();
+    }
+
+    window.addEventListener("mysql-login", syncUser);
+    return () => window.removeEventListener("mysql-login", syncUser);
+  }, [isMySQLActive]);
+
+  // 3. MySQL Background Data Synchronization
+  useEffect(() => {
+    if (!isMySQLActive) return;
+
+    const fetchMySQLData = async () => {
+      try {
+        // Fetch menus
+        const mRes = await fetch(getApiUrl("/api/mysql/menus"));
+        if (mRes.ok) {
+          const mData = await mRes.json();
+          setAllMenuItems(mData);
+        }
+
+        // Fetch categories
+        const cRes = await fetch(getApiUrl("/api/mysql/categories"));
+        if (cRes.ok) {
+          const cData = await cRes.json();
+          setAllCategories(cData);
+        }
+
+        // Fetch shipping areas
+        const sRes = await fetch(getApiUrl("/api/mysql/shipping-areas"));
+        if (sRes.ok) {
+          const sData = await sRes.json();
+          setShippingLocations(sData);
+        }
+      } catch (err) {
+        console.warn("MySQL sync background error:", err);
+      }
+    };
+
+    fetchMySQLData();
+    const interval = setInterval(fetchMySQLData, 4000); // 4s polling for high responsiveness
+    return () => clearInterval(interval);
+  }, [isMySQLActive]);
+
+  // Firebase listeners (only active if MySQL is not active)
+  useEffect(() => {
+    if (isMySQLActive) return;
+
     // Build real-time custom menu items observer
     const q = query(collection(db, "menus"));
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -48,7 +136,6 @@ export default function App() {
       snapshot.forEach((docSnap) => {
         customMenus.push({ id: docSnap.id, ...docSnap.data() } as MenuItem);
       });
-      // Combine stable static MENU_ITEMS with retrieved custom menus, avoiding duplicates and deleted items
       const nonDeletedCustom = customMenus.filter(item => !(item as any).deleted);
       const deletedCustomIds = new Set(customMenus.filter(item => (item as any).deleted).map(item => item.id));
       
@@ -59,17 +146,17 @@ export default function App() {
       console.error("Menus loading snap error:", err);
     });
     return () => unsubscribe();
-  }, []);
+  }, [isMySQLActive]);
 
   useEffect(() => {
-    // Build real-time custom categories observer
+    if (isMySQLActive) return;
+
     const q = query(collection(db, "categories"));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const customCats: Category[] = [];
       snapshot.forEach((docSnap) => {
         customCats.push({ id: docSnap.id, ...docSnap.data() } as Category);
       });
-      // Combine stable static CATEGORIES with retrieved custom categories, avoiding duplicates and deleted items
       const nonDeletedCustom = customCats.filter(item => !(item as any).deleted);
       const deletedCustomIds = new Set(customCats.filter(item => (item as any).deleted).map(item => item.id));
       
@@ -80,10 +167,11 @@ export default function App() {
       console.error("Categories loading snap error:", err);
     });
     return () => unsubscribe();
-  }, []);
+  }, [isMySQLActive]);
 
   useEffect(() => {
-    // Build real-time custom shipping areas observer
+    if (isMySQLActive) return;
+
     const q = query(collection(db, "shipping_areas"));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const customAreas: ShippingLocation[] = [];
@@ -91,7 +179,6 @@ export default function App() {
         customAreas.push({ id: docSnap.id, ...docSnap.data() } as ShippingLocation);
       });
       
-      // Filter out deleted
       const nonDeletedCustom = customAreas.filter(item => !item.deleted);
       const deletedCustomIds = new Set(customAreas.filter(item => item.deleted).map(item => item.id));
       
@@ -103,9 +190,30 @@ export default function App() {
       console.error("Shipping areas loading snap error:", err);
     });
     return () => unsubscribe();
-  }, []);
+  }, [isMySQLActive]);
 
   useEffect(() => {
+    if (isMySQLActive) {
+      // For active MySQL, session storage checks represent log in profile state
+      const checkProfileSync = () => {
+        const stored = localStorage.getItem("upside_mysql_user");
+        if (stored) {
+          try {
+            const u = JSON.parse(stored);
+            setCurrentUser(u);
+            setUserRole(u.role || "user");
+            setUserDisabled(!!u.disabled);
+          } catch (_) {}
+        } else {
+          setCurrentUser(null);
+          setUserRole("user");
+          setUserDisabled(false);
+        }
+      };
+      checkProfileSync();
+      return;
+    }
+
     let unsubUserDoc: (() => void) | null = null;
 
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -120,7 +228,6 @@ export default function App() {
           emailLower.includes("mophethecommerce");
         const targetRole = isAdminEmail ? "admin" : "user";
         
-        // 1. Ensure user record exists in Firebase (bootstrap)
         try {
           const snap = await getDoc(userRef);
           if (!snap.exists()) {
@@ -135,7 +242,6 @@ export default function App() {
             await setDoc(userRef, initialProfile);
           } else {
             const dbData = snap.data();
-            // If the user's email should be status admin but database doesn't reflect it, sync it.
             if (isAdminEmail && dbData.role !== "admin") {
               await updateDoc(userRef, { role: "admin" });
             }
@@ -144,7 +250,6 @@ export default function App() {
           console.warn("User bootstrap profile sync warning:", bootstrapErr);
         }
 
-        // 2. Set up real-time observer for user roles and disabled status
         unsubUserDoc = onSnapshot(userRef, (docSnap) => {
           if (docSnap.exists()) {
             const data = docSnap.data();
@@ -174,11 +279,18 @@ export default function App() {
         unsubUserDoc();
       }
     };
-  }, []);
+  }, [isMySQLActive]);
 
   const handleLogout = async () => {
     try {
-      await signOut(auth);
+      if (isMySQLActive) {
+        localStorage.removeItem("upside_mysql_user");
+        setCurrentUser(null);
+        setUserRole("user");
+        setUserDisabled(false);
+      } else {
+        await signOut(auth);
+      }
     } catch (err) {
       console.error("Sign out fail", err);
     }
@@ -586,7 +698,7 @@ export default function App() {
           <Hero
             onOrderNow={() => handleScrollToElement("menu-fast")}
             onExploreMenu={() => {
-              handleNavigate("/menu");
+              handleScrollToElement("qr-ordering-section");
             }}
             onBookTable={() => handleScrollToElement("home-reservation-section")}
             onAddToCart={handleAddToCart}
@@ -602,6 +714,13 @@ export default function App() {
             }}
             menuItems={allMenuItems}
             categories={allCategories}
+          />
+
+          {/* INSTANT PHONE ORDERING QR CODE SCAN SECTION */}
+          <ScanSection
+            onViewMenu={() => {
+              handleNavigate("/menu");
+            }}
           />
 
           {/* DETAILED BRAND LEGACY & LIVE EVENTS */}
@@ -646,6 +765,7 @@ export default function App() {
           currentUser={currentUser}
           userRole={userRole}
           menuItems={allMenuItems}
+          isMySQLActive={isMySQLActive}
           onBackToLobby={() => {
             handleNavigate("/");
           }}
@@ -684,6 +804,7 @@ export default function App() {
             menuItems={allMenuItems}
             isPage={true}
             shippingLocations={shippingLocations}
+            isMySQLActive={isMySQLActive}
           />
         </div>
       )}

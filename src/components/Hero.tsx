@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from "react";
-import { ArrowRight, Compass, Calendar, Flame, ChevronLeft, ChevronRight, ShoppingBag } from "lucide-react";
+import { ArrowRight, Compass, Calendar, Flame, ChevronLeft, ChevronRight, ShoppingBag, QrCode } from "lucide-react";
 import { MENU_ITEMS, MenuItem } from "../data/menu";
+
+const gourmetDrinksHero = "/src/assets/images/gourmet_drinks_hero_1782059009940.jpg";
 
 interface HeroProps {
   onExploreMenu: () => void;
@@ -71,15 +73,16 @@ export default function Hero({ onExploreMenu, onBookTable, onOrderNow, onAddToCa
   };
 
   return (
-    <section id="hero" className="relative min-h-[85vh] flex items-center justify-center bg-black overflow-hidden py-16 px-4">
+    <section id="hero" className="relative min-h-[85vh] flex items-center justify-center bg-neutral-950 overflow-hidden py-16 px-4">
       {/* Background cinematic visuals with gradient styling */}
       <div className="absolute inset-0 z-0">
-        <div className="absolute inset-0 bg-gradient-to-r from-black via-black/85 to-transparent z-10" />
-        <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-black/30 z-10" />
+        <div className="absolute inset-0 bg-gradient-to-r from-black via-black/60 to-transparent z-10" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-black/35 z-10" />
         <img
-          src="https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&q=80&w=1600"
-          alt="Premium Lagos Gastronomy"
-          className="w-full h-full object-cover object-center scale-105 animate-[pulse_8s_infinite] opacity-65"
+          src={gourmetDrinksHero}
+          alt="Premium Boutique Bar Drinks"
+          referrerPolicy="no-referrer"
+          className="w-full h-full object-cover object-center scale-105 animate-[pulse_10s_infinite] opacity-85"
         />
       </div>
 
@@ -119,13 +122,13 @@ export default function Hero({ onExploreMenu, onBookTable, onOrderNow, onAddToCa
               <ArrowRight className="w-4.5 h-4.5 group-hover:translate-x-1 transition-transform" />
             </button>
 
-            {/* Secondary Action: Explore Menu */}
+            {/* Secondary Action: Scan Menu */}
             <button
               onClick={onExploreMenu}
               className="px-8 py-4 bg-transparent border border-white text-white font-semibold text-xs tracking-widest font-mono uppercase hover:bg-white hover:text-black transition-all flex items-center justify-center gap-3 cursor-pointer"
             >
-              <Compass className="w-4.5 h-4.5" />
-              <span>Explore Menu</span>
+              <QrCode className="w-4.5 h-4.5" />
+              <span>Scan Menu</span>
             </button>
 
             {/* Tertiary Action: Reservations */}

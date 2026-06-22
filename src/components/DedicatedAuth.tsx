@@ -78,6 +78,21 @@ export default function DedicatedAuth({
       });
   }, []);
 
+  const [isMySQLActive, setIsMySQLActive] = useState(false);
+
+  // Load SMTP and MySQL configured status
+  useEffect(() => {
+    fetch(getApiUrl("/api/mysql/status"))
+      .then(res => res.json())
+      .then(data => {
+        if (data.connected) {
+          setIsMySQLActive(true);
+          console.log("SQL Engine Active inside login portal.");
+        }
+      })
+      .catch((e) => console.log("MySQL connection check skipped:", e.message));
+  }, []);
+
   // Automatically redirect if already logged in
   useEffect(() => {
     if (currentUser) {
@@ -181,13 +196,31 @@ export default function DedicatedAuth({
 
     setLoading(true);
     try {
-      if (mode === "signin") {
-        try {
-          const userCred = await signInWithEmailAndPassword(auth, email, password);
-          await auth.signOut();
-        } catch (authErr: any) {
-          console.error("Credentials verification failed before OTP:", authErr);
-          throw new Error(getCleanAuthError(authErr));
+      if (isMySQLActive) {
+        if (mode === "signin") {
+          try {
+            const authCheck = await fetch(getApiUrl("/api/mysql/auth/login"), {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ email, password })
+            });
+            const checkData = await authCheck.json();
+            if (!authCheck.ok) {
+              throw new Error(checkData.error || "Incorrect email or password combination.");
+            }
+          } catch (err: any) {
+            throw new Error(err.message || "MySQL account verification failed. Please try again.");
+          }
+        }
+      } else {
+        if (mode === "signin") {
+          try {
+            const userCred = await signInWithEmailAndPassword(auth, email, password);
+            await auth.signOut();
+          } catch (authErr: any) {
+            console.error("Credentials verification failed before OTP:", authErr);
+            throw new Error(getCleanAuthError(authErr));
+          }
         }
       }
 
@@ -293,44 +326,74 @@ export default function DedicatedAuth({
 
       setSuccess("OTP validated successfully! Establishing secure credential session...");
 
-      // Finalize authenticating actual user session in Firebase
-      if (mode === "signup") {
-        try {
-          const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-          await updateProfile(userCredential.user, {
-            displayName: displayName
+      // Finalize authenticating actual user session in Firebase or MySQL based on engine mode
+      if (isMySQLActive) {
+        if (mode === "signup") {
+          const sRes = await fetch(getApiUrl("/api/mysql/auth/register"), {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email, password, displayName })
           });
-          
-          // Sync record
-          try {
-            const userRef = doc(db, "users", userCredential.user.uid);
-            await setDoc(userRef, {
-              uid: userCredential.user.uid,
-              email: email,
-              displayName: displayName,
-              role: "user",
-              createdAt: new Date().toISOString()
-            });
-          } catch (dbErr) {
-            console.warn("DB write failed in background:", dbErr);
+          const sData = await sRes.json();
+          if (!sRes.ok) {
+            throw new Error(sData.error || "Failed registration inside cPanel MySQL Database.");
           }
-          setSuccess("Magnificent! Your premium account has been created successfully!");
-        } catch (signupErr: any) {
-          if (signupErr.code === "auth/email-already-in-use") {
-            try {
-              await signInWithEmailAndPassword(auth, email, password);
-              setSuccess("Account already exists. Welcome back! Authenticated successfully.");
-            } catch (signInErr: any) {
-              console.error("Auto sign-in after already-in-use failed:", signInErr);
-              throw new Error("This email is already registered. If it is your account, please check the password and try again.");
-            }
-          } else {
-            throw signupErr;
+          localStorage.setItem("upside_mysql_user", JSON.stringify(sData.user));
+          window.dispatchEvent(new Event("mysql-login"));
+          setSuccess("Magnificent! Your account has been registered successfully in local MySQL!");
+        } else {
+          const lRes = await fetch(getApiUrl("/api/mysql/auth/login"), {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email, password })
+          });
+          const lData = await lRes.json();
+          if (!lRes.ok) {
+            throw new Error(lData.error || "Authentication failed inside cPanel MySQL Database.");
           }
+          localStorage.setItem("upside_mysql_user", JSON.stringify(lData.user));
+          window.dispatchEvent(new Event("mysql-login"));
+          setSuccess("Welcome back! Authenticated successfully in local MySQL Database.");
         }
       } else {
-        await signInWithEmailAndPassword(auth, email, password);
-        setSuccess("Welcome back! Authenticated successfully.");
+        if (mode === "signup") {
+          try {
+            const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+            await updateProfile(userCredential.user, {
+              displayName: displayName
+            });
+            
+            // Sync record
+            try {
+              const userRef = doc(db, "users", userCredential.user.uid);
+              await setDoc(userRef, {
+                uid: userCredential.user.uid,
+                email: email,
+                displayName: displayName,
+                role: "user",
+                createdAt: new Date().toISOString()
+              });
+            } catch (dbErr) {
+              console.warn("DB write failed in background:", dbErr);
+            }
+            setSuccess("Magnificent! Your premium account has been created successfully!");
+          } catch (signupErr: any) {
+            if (signupErr.code === "auth/email-already-in-use") {
+              try {
+                await signInWithEmailAndPassword(auth, email, password);
+                setSuccess("Account already exists. Welcome back! Authenticated successfully.");
+              } catch (signInErr: any) {
+                console.error("Auto sign-in after already-in-use failed:", signInErr);
+                throw new Error("This email is already registered. If it is your account, please check the password and try again.");
+              }
+            } else {
+              throw signupErr;
+            }
+          }
+        } else {
+          await signInWithEmailAndPassword(auth, email, password);
+          setSuccess("Welcome back! Authenticated successfully.");
+        }
       }
 
       setTimeout(() => {

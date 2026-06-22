@@ -4,6 +4,7 @@ import { MenuItem, MENU_ITEMS, CATEGORIES, Category } from "../data/menu";
 import OrderHistory from "./OrderHistory";
 import OrderTracker from "./OrderTracker";
 import AdminAnalyticsPanel from "./AdminAnalyticsPanel";
+import RidersManagementPanel from "./RidersManagementPanel";
 import { 
   ShieldCheck, 
   MapPin, 
@@ -47,6 +48,7 @@ interface DedicatedDashboardProps {
   onReorder?: (items: any[]) => void;
   categories?: Category[];
   shippingLocations?: ShippingLocation[];
+  isMySQLActive?: boolean;
 }
 
 const PRESET_IMAGES = [
@@ -73,7 +75,8 @@ export default function DedicatedDashboard({
   onTrackOrder,
   onReorder,
   categories,
-  shippingLocations = []
+  shippingLocations = [],
+  isMySQLActive = false
 }: DedicatedDashboardProps) {
   const finalMenuItems = menuItems || MENU_ITEMS;
   const displayCategories = categories || CATEGORIES;
@@ -99,6 +102,7 @@ export default function DedicatedDashboard({
   
   // Real-time pipeline order logs
   const [allOrders, setAllOrders] = useState<any[]>([]);
+  const [ridersList, setRidersList] = useState<any[]>([]);
   const [ordersSearchText, setOrdersSearchText] = useState("");
   const [selectedOrderTab, setSelectedOrderTab] = useState<string>("all");
 
@@ -300,6 +304,146 @@ export default function DedicatedDashboard({
       setOpayActionError(err.message || "Failed to save secure gateway configurations.");
     } finally {
       setIsOpayLoading(false);
+    }
+  };
+
+  // MYSQL HOST DATABASE MANAGEMENT PANEL
+  const [mysqlHost, setMysqlHost] = useState("");
+  const [mysqlPort, setMysqlPort] = useState("3306");
+  const [mysqlUser, setMysqlUser] = useState("");
+  const [mysqlPassword, setMysqlPassword] = useState("");
+  const [mysqlDatabase, setMysqlDatabase] = useState("");
+  const [mysqlStatus, setMysqlStatus] = useState<"connected" | "disconnected" | "loading">("loading");
+  const [mysqlStatusMessage, setMysqlStatusMessage] = useState("");
+  const [mysqlTables, setMysqlTables] = useState<{ tableName: string; rows: number }[]>([]);
+  const [mysqlActionSuccess, setMysqlActionSuccess] = useState("");
+  const [mysqlActionError, setMysqlActionError] = useState("");
+  const [isMysqlLoading, setIsMysqlLoading] = useState(false);
+  const [isSchemaSetupWorking, setIsSchemaSetupWorking] = useState(false);
+  const [isDataSyncWorking, setIsDataSyncWorking] = useState(false);
+
+  // Poll MySQL status on mount and when role is admin
+  const fetchMySQLStatus = async () => {
+    try {
+      const res = await fetch(getApiUrl("/api/mysql/status"));
+      if (res.ok) {
+        const data = await res.json();
+        if (data.connected) {
+          setMysqlStatus("connected");
+          setMysqlStatusMessage(data.message);
+          setMysqlTables(data.tables || []);
+        } else {
+          setMysqlStatus("disconnected");
+          setMysqlStatusMessage(data.message || "MySQL is currently offline or unconfigured.");
+          setMysqlTables([]);
+        }
+        // Pre-populate input configurations returned from process env safely
+        if (data.config) {
+          if (data.config.host) setMysqlHost(data.config.host);
+          if (data.config.port) setMysqlPort(data.config.port);
+          if (data.config.user) setMysqlUser(data.config.user);
+          if (data.config.database) setMysqlDatabase(data.config.database);
+        }
+      }
+    } catch (err: any) {
+      setMysqlStatus("disconnected");
+      setMysqlStatusMessage(`Gateway API error fetching database status: ${err.message}`);
+    }
+  };
+
+  useEffect(() => {
+    if (currentUser && userRole === "admin" && activeTab === "mysql_panel") {
+      setMysqlStatus("loading");
+      fetchMySQLStatus();
+    }
+  }, [currentUser, userRole, activeTab]);
+
+  const handleSaveMySQLConfig = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setMysqlActionError("");
+    setMysqlActionSuccess("");
+    setIsMysqlLoading(true);
+
+    try {
+      const payload = {
+        host: mysqlHost.trim(),
+        port: parseInt(mysqlPort.trim() || "3306", 10),
+        user: mysqlUser.trim(),
+        password: mysqlPassword.trim(),
+        database: mysqlDatabase.trim()
+      };
+
+      const res = await fetch(getApiUrl("/api/mysql/convert-to-env"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to save MySQL configurations.");
+      }
+
+      setMysqlActionSuccess("MySQL settings saved and app database worker restarted successfully!");
+      // Live query status of new credentials
+      setTimeout(() => fetchMySQLStatus(), 1000);
+    } catch (err: any) {
+      console.error("Save MySQL config failed:", err);
+      setMysqlActionError(err.message || "Failed to apply dynamic MySQL secrets.");
+    } finally {
+      setIsMysqlLoading(false);
+    }
+  };
+
+  const handleMySQLSchemaSetup = async () => {
+    if (!window.confirm("Are you absolutely sure you want to initialize the MySQL schemas on your cPanel database? This will execute CREATE TABLE statements and seed the structural product lists.")) {
+      return;
+    }
+    setMysqlActionError("");
+    setMysqlActionSuccess("");
+    setIsSchemaSetupWorking(true);
+
+    try {
+      const res = await fetch(getApiUrl("/api/mysql/setup"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" }
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Schema setup crashed on target host.");
+      }
+      setMysqlActionSuccess(`Success: ${data.message} Seeded categories and menus.`);
+      fetchMySQLStatus();
+    } catch (err: any) {
+      setMysqlActionError(err.message || "Could not complete SQL table setup.");
+    } finally {
+      setIsSchemaSetupWorking(false);
+    }
+  };
+
+  const handleMySQLDataSync = async () => {
+    if (!window.confirm("Replicate all active reservations, registers, users profiles, and dynamic order logs from Cloud Firestore into MySQL?")) {
+      return;
+    }
+    setMysqlActionError("");
+    setMysqlActionSuccess("");
+    setIsDataSyncWorking(true);
+
+    try {
+      const res = await fetch(getApiUrl("/api/mysql/sync"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" }
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Data sync aborted.");
+      }
+      setMysqlActionSuccess(`Replication Success! Synchronized ${data.synced.users} users, ${data.synced.orders} orders, and ${data.synced.payments} payments into MySQL!`);
+      fetchMySQLStatus();
+    } catch (err: any) {
+      setMysqlActionError(err.message || "Data synchronization error.");
+    } finally {
+      setIsDataSyncWorking(false);
     }
   };
 
@@ -684,7 +828,18 @@ export default function DedicatedDashboard({
         icon: newCatData.icon,
         updatedAt: new Date().toISOString()
       };
-      await setDoc(doc(db, "categories", parsedId), payload);
+      if (isMySQLActive) {
+        const res = await fetch(getApiUrl("/api/mysql/categories"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        if (!res.ok) {
+          throw new Error("Unable to execute category write within MySQL host.");
+        }
+      } else {
+        await setDoc(doc(db, "categories", parsedId), payload);
+      }
       if (editingCatId) {
         setCatFormSuccess(`"${payload.name}" updated successfully.`);
         setEditingCatId(null);
@@ -706,7 +861,16 @@ export default function DedicatedDashboard({
   const handleUnhideCategory = async (cat: Category) => {
     if (!window.confirm(`Are you sure you want to unhide/enable Category "${cat.name}"? It will immediately show on the live store.`)) return;
     try {
-      await deleteDoc(doc(db, "categories", cat.id));
+      if (isMySQLActive) {
+        const res = await fetch(getApiUrl("/api/mysql/categories"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...cat, deleted: 0 })
+        });
+        if (!res.ok) throw new Error("Failed to restore category state inside MySQL.");
+      } else {
+        await deleteDoc(doc(db, "categories", cat.id));
+      }
       setCatFormSuccess(`"${cat.name}" has been enabled/unhidden successfully!`);
     } catch (err: any) {
       console.error("Unhide category failed:", err);
@@ -717,19 +881,26 @@ export default function DedicatedDashboard({
   const handleDeleteCategory = async (cat: Category) => {
     if (!window.confirm(`Are you absolutely sure you want to delete Category "${cat.name}"? This won't delete menu items but will remove the category filter.`)) return;
     try {
-      const isNativeStatic = CATEGORIES.some(s => s.id === cat.id);
-      if (isNativeStatic) {
-        // Soft delete preset static categories by writing custom deleted status
-        await setDoc(doc(db, "categories", cat.id), {
-          id: cat.id,
-          name: cat.name,
-          icon: cat.icon,
-          description: cat.description,
-          deleted: true,
-          updatedAt: new Date().toISOString()
+      if (isMySQLActive) {
+        const res = await fetch(getApiUrl(`/api/mysql/categories/${cat.id}`), {
+          method: "DELETE"
         });
+        if (!res.ok) throw new Error("Failed to soft delete category on MySQL host.");
       } else {
-        await deleteDoc(doc(db, "categories", cat.id));
+        const isNativeStatic = CATEGORIES.some(s => s.id === cat.id);
+        if (isNativeStatic) {
+          // Soft delete preset static categories by writing custom deleted status
+          await setDoc(doc(db, "categories", cat.id), {
+            id: cat.id,
+            name: cat.name,
+            icon: cat.icon,
+            description: cat.description,
+            deleted: true,
+            updatedAt: new Date().toISOString()
+          });
+        } else {
+          await deleteDoc(doc(db, "categories", cat.id));
+        }
       }
       setCatFormSuccess(`"${cat.name}" deleted successfully.`);
       if (editingCatId === cat.id) {
@@ -746,21 +917,30 @@ export default function DedicatedDashboard({
     const actionText = currentDisabled ? "enable" : "disable";
     if (!window.confirm(`Are you sure you want to ${actionText} the Category "${cat.name}"?`)) return;
     try {
-      const isNativeStatic = CATEGORIES.some(s => s.id === cat.id);
-      if (isNativeStatic) {
-        // For static core categories, write or merge the disabled flag
-        await setDoc(doc(db, "categories", cat.id), {
-          id: cat.id,
-          name: cat.name,
-          icon: cat.icon,
-          description: cat.description,
-          disabled: !currentDisabled,
-          updatedAt: new Date().toISOString()
-        }, { merge: true });
+      if (isMySQLActive) {
+        const res = await fetch(getApiUrl("/api/mysql/categories"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...cat, disabled: !currentDisabled ? 1 : 0 })
+        });
+        if (!res.ok) throw new Error("Unable to save status inside MySQL database.");
       } else {
-        // For custom categories, update the disabled property
-        const catRef = doc(db, "categories", cat.id);
-        await updateDoc(catRef, { disabled: !currentDisabled });
+        const isNativeStatic = CATEGORIES.some(s => s.id === cat.id);
+        if (isNativeStatic) {
+          // For static core categories, write or merge the disabled flag
+          await setDoc(doc(db, "categories", cat.id), {
+            id: cat.id,
+            name: cat.name,
+            icon: cat.icon,
+            description: cat.description,
+            disabled: !currentDisabled,
+            updatedAt: new Date().toISOString()
+          }, { merge: true });
+        } else {
+          // For custom categories, update the disabled property
+          const catRef = doc(db, "categories", cat.id);
+          await updateDoc(catRef, { disabled: !currentDisabled });
+        }
       }
       setCatFormSuccess(`"${cat.name}" category has been ${currentDisabled ? "enabled" : "disabled"} successfully!`);
     } catch (err: any) {
@@ -815,6 +995,23 @@ export default function DedicatedDashboard({
       return () => unsubscribe();
     }
   }, [currentUser, userRole, isPrivileged]);
+
+  // Read riders real-time for dropdown selection
+  useEffect(() => {
+    if (currentUser && isPrivileged) {
+      const q = query(collection(db, "riders"));
+      const unsubscribe = onSnapshot(q, (snapshot) => {
+        const list: any[] = [];
+        snapshot.forEach((docSnap) => {
+          list.push({ id: docSnap.id, ...docSnap.data() });
+        });
+        setRidersList(list);
+      }, (err) => {
+        console.error("Riders reading error:", err);
+      });
+      return () => unsubscribe();
+    }
+  }, [currentUser, isPrivileged]);
 
   // Handle setting a user role directly
   const handleSetUserRole = async (userId: string, targetRole: string) => {
@@ -884,21 +1081,28 @@ export default function DedicatedDashboard({
   const handleDeleteMenuItem = async (item: MenuItem) => {
     if (!window.confirm(`Are you absolutely sure you want to delete "${item.name}" from the menu?`)) return;
     try {
-      const isNativeStatic = MENU_ITEMS.some(s => s.id === item.id);
-      if (isNativeStatic) {
-        // To delete a static preset, write a document to Firestore under the exact same ID with deleted = true
-        await setDoc(doc(db, "menus", item.id), {
-          id: item.id,
-          name: item.name,
-          category: item.category,
-          price: item.price,
-          image: item.image,
-          deleted: true,
-          updatedAt: new Date().toISOString()
+      if (isMySQLActive) {
+        const res = await fetch(getApiUrl(`/api/mysql/menus/${item.id}`), {
+          method: "DELETE"
         });
+        if (!res.ok) throw new Error("Unable to delete menu item from MySQL database.");
       } else {
-        // Dynamic items are completely deleted or marked deleted in Firestore
-        await deleteDoc(doc(db, "menus", item.id));
+        const isNativeStatic = MENU_ITEMS.some(s => s.id === item.id);
+        if (isNativeStatic) {
+          // To delete a static preset, write a document to Firestore under the exact same ID with deleted = true
+          await setDoc(doc(db, "menus", item.id), {
+            id: item.id,
+            name: item.name,
+            category: item.category,
+            price: item.price,
+            image: item.image,
+            deleted: true,
+            updatedAt: new Date().toISOString()
+          });
+        } else {
+          // Dynamic items are completely deleted or marked deleted in Firestore
+          await deleteDoc(doc(db, "menus", item.id));
+        }
       }
       setMenuFormSuccess(`"${item.name}" was successfully deleted from the database.`);
       if (editingItemId === item.id) {
@@ -1008,7 +1212,18 @@ export default function DedicatedDashboard({
         updatedAt: new Date().toISOString()
       };
 
-      await setDoc(doc(db, "menus", parsedId), itemPayload);
+      if (isMySQLActive) {
+        const res = await fetch(getApiUrl("/api/mysql/menus"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(itemPayload)
+        });
+        if (!res.ok) {
+          throw new Error("Unable to save menu item inside MySQL Database.");
+        }
+      } else {
+        await setDoc(doc(db, "menus", parsedId), itemPayload);
+      }
       
       if (editingItemId) {
         setMenuFormSuccess(`Magnificent! "${itemPayload.name}" was successfully saved and updated in real-time.`);
@@ -1304,6 +1519,16 @@ export default function DedicatedDashboard({
                         💳 OPay Gateway Settings
                       </button>
                       <button
+                        onClick={() => setActiveTab("mysql_panel")}
+                        className={`px-6 py-3 text-xs tracking-wider uppercase font-bold text-center transition-all cursor-pointer flex items-center gap-1.5 ${
+                          activeTab === "mysql_panel"
+                            ? "bg-amber-600 text-white"
+                            : "text-neutral-600 hover:text-neutral-900 hover:bg-neutral-200"
+                        }`}
+                      >
+                        🗄️ MySQL Database Console
+                      </button>
+                      <button
                         onClick={() => setActiveTab("shipping_panel")}
                         className={`px-6 py-3 text-xs tracking-wider uppercase font-bold text-center transition-all cursor-pointer flex items-center gap-1.5 ${
                           activeTab === "shipping_panel"
@@ -1323,6 +1548,16 @@ export default function DedicatedDashboard({
                         }`}
                       >
                         📊 Analytics & Conversions
+                      </button>
+                      <button
+                        onClick={() => setActiveTab("riders_panel")}
+                        className={`px-6 py-3 text-xs tracking-wider uppercase font-bold text-center transition-all cursor-pointer flex items-center gap-1.5 ${
+                          activeTab === "riders_panel"
+                            ? "bg-amber-600 text-white"
+                            : "text-neutral-600 hover:text-neutral-900 hover:bg-neutral-200"
+                        }`}
+                      >
+                        🚴 Logistics & Riders
                       </button>
                     </>
                   )}
@@ -1512,7 +1747,7 @@ export default function DedicatedDashboard({
                                 </div>
 
                                 {/* Main client Info grid */}
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 text-[11px] bg-neutral-950/40 p-3 border border-neutral-850">
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 text-[11px] bg-neutral-950/40 p-3 border border-neutral-850">
                                   <div>
                                     <p className="text-[8px] text-neutral-500 uppercase tracking-widest font-bold">Client</p>
                                     <p className="text-neutral-200 mt-0.5">{ord.customerName}</p>
@@ -1522,6 +1757,10 @@ export default function DedicatedDashboard({
                                   <div className="md:col-span-2">
                                     <p className="text-[8px] text-neutral-500 uppercase tracking-widest font-bold">Fulfillment Sanctuary</p>
                                     <p className="text-neutral-200 mt-0.5 line-clamp-2">{ord.address}</p>
+                                  </div>
+                                  <div className="bg-neutral-900 border border-neutral-800 p-2 text-center flex flex-col justify-center">
+                                    <p className="text-[7.5px] text-amber-500 uppercase tracking-widest font-bold">Verification Key</p>
+                                    <span className="text-xs font-black text-amber-400 mt-1 block select-all font-mono tracking-widest">{ord.verificationCode || "N/A"}</span>
                                   </div>
                                 </div>
 
@@ -1559,6 +1798,86 @@ export default function DedicatedDashboard({
                                     })()}
                                   </div>
                                 </div>
+
+                                {/* Rider assignment panel of the dispatch section (Oven Section) */}
+                                {userRole === "admin" && (
+                                  <div className="bg-neutral-900/60 p-3.5 border border-neutral-800 space-y-2 mt-4 text-left">
+                                    <div className="flex justify-between items-center flex-wrap gap-2">
+                                      <span className="text-[9px] text-amber-500 uppercase tracking-widest font-bold">
+                                        🚴 Rider Allocation (Oven section)
+                                      </span>
+                                      {ord.assignedRiderName ? (
+                                        <span className="text-[9px] text-[#22c55e] font-extrabold uppercase bg-emerald-950/20 border border-emerald-950/30 px-2 py-0.5">
+                                          ✓ Dispatched: {ord.assignedRiderName}
+                                        </span>
+                                      ) : (
+                                        <span className="text-[9px] text-neutral-500 font-extrabold uppercase bg-neutral-950 px-2 py-0.5 border border-neutral-850">
+                                          Awaiting allocation...
+                                        </span>
+                                      )}
+                                    </div>
+                                    
+                                    <div className="flex gap-2">
+                                      <select
+                                        className="flex-grow bg-black border border-neutral-800 text-[11px] text-[#cccccc] p-2 focus:outline-none focus:border-amber-500 cursor-pointer"
+                                        value={ord.assignedRiderId || ""}
+                                        onChange={async (e) => {
+                                          const val = e.target.value;
+                                          if (val === "") {
+                                            // Reset rider assignment
+                                            try {
+                                              const res = await fetch("/api/delivery/orders/assign", {
+                                                method: "POST",
+                                                headers: { "Content-Type": "application/json" },
+                                                body: JSON.stringify({
+                                                  orderId: ord.id,
+                                                  riderId: null,
+                                                  riderName: null,
+                                                  riderPhone: null
+                                                })
+                                              });
+                                              const data = await res.json();
+                                              if (!data.success) {
+                                                alert(`Error: ${data.error}`);
+                                              }
+                                            } catch (err) {
+                                              console.error("Nullifying rider failed:", err);
+                                            }
+                                            return;
+                                          }
+                                          const chosen = ridersList.find(r => r.id === val);
+                                          if (chosen) {
+                                            try {
+                                              const res = await fetch("/api/delivery/orders/assign", {
+                                                method: "POST",
+                                                headers: { "Content-Type": "application/json" },
+                                                body: JSON.stringify({
+                                                  orderId: ord.id,
+                                                  riderId: chosen.id,
+                                                  riderName: chosen.fullName,
+                                                  riderPhone: chosen.phoneNumber || chosen.phone || "N/A"
+                                                })
+                                              });
+                                              const data = await res.json();
+                                              if (!data.success) {
+                                                alert(`Error: ${data.error}`);
+                                              }
+                                            } catch (err) {
+                                              console.error("Assigning rider failed:", err);
+                                            }
+                                          }
+                                        }}
+                                      >
+                                        <option value="">-- Click to assign courier --</option>
+                                        {ridersList.map((ri: any) => (
+                                          <option key={ri.id} value={ri.id}>
+                                            {ri.fullName} ({ri.phoneNumber || ri.phone || "No phone"}) {ri.active === false ? "[Deactivated]" : ""}
+                                          </option>
+                                        ))}
+                                      </select>
+                                    </div>
+                                  </div>
+                                )}
                               </div>
 
                               {/* Progress modification panel (sales) */}
@@ -3004,6 +3323,223 @@ export default function DedicatedDashboard({
 
                 {userRole === "admin" && activeTab === "analytics_panel" && (
                   <AdminAnalyticsPanel />
+                )}
+
+                {userRole === "admin" && activeTab === "riders_panel" && (
+                  <RidersManagementPanel />
+                )}
+
+                {userRole === "admin" && activeTab === "mysql_panel" && (
+                  <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 text-left" id="dashboard-mysql-control">
+                    
+                    {/* Left Column: Connection Check and Schema Monitor */}
+                    <div className="xl:col-span-5 space-y-6">
+                      <div className="bg-[#121212] border border-neutral-850 p-6 space-y-4 rounded">
+                        <div className="flex justify-between items-center pb-2 border-b border-neutral-850">
+                          <h2 className="text-xs font-mono font-bold tracking-widest text-white uppercase">
+                            🗄️ CONNECTION STATUS
+                          </h2>
+                          <button
+                            onClick={fetchMySQLStatus}
+                            className="text-[9px] uppercase font-bold text-amber-500 hover:text-amber-400 bg-neutral-900 px-2 py-1 border border-neutral-800 rounded transition-all cursor-pointer"
+                          >
+                            🔄 REFRESH
+                          </button>
+                        </div>
+
+                        {mysqlStatus === "loading" && (
+                          <div className="py-6 text-center space-y-2">
+                            <div className="animate-spin inline-block w-6 h-6 border-2 border-amber-500 border-t-transparent rounded-full" />
+                            <p className="text-[10px] text-neutral-400 font-mono">Pinging host server...</p>
+                          </div>
+                        )}
+
+                        {mysqlStatus === "connected" && (
+                          <div className="space-y-4">
+                            <div className="flex items-center gap-2 text-emerald-400 font-mono text-xs bg-emerald-950/20 border border-emerald-900/30 p-3 rounded">
+                              <span className="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-pulse" />
+                              <span className="font-extrabold uppercase">● ONLINE & CONNECTED</span>
+                            </div>
+                            <p className="text-[10px] text-neutral-400 leading-relaxed font-sans">
+                              {mysqlStatusMessage}
+                            </p>
+                          </div>
+                        )}
+
+                        {mysqlStatus === "disconnected" && (
+                          <div className="space-y-4">
+                            <div className="flex items-center gap-2 text-red-400 font-mono text-xs bg-red-950/20 border border-red-900/30 p-3 rounded">
+                              <span className="w-2.5 h-2.5 bg-red-500 rounded-full" />
+                              <span className="font-extrabold uppercase">● OFFLINE / UNCONFIGURED</span>
+                            </div>
+                            <p className="text-[10px] text-neutral-400 leading-relaxed font-sans">
+                              {mysqlStatusMessage}
+                            </p>
+                          </div>
+                        )}
+
+                        {mysqlStatus === "connected" && mysqlTables.length > 0 && (
+                          <div className="space-y-3 pt-2">
+                            <h3 className="text-[9px] font-mono uppercase tracking-widest text-neutral-400 font-extrabold">
+                              📚 LATEST CPANEL ROW COUNTS
+                            </h3>
+                            <div className="space-y-1 bg-black/40 p-3 border border-neutral-850 rounded text-[10px] font-mono">
+                              {mysqlTables.map((tbl) => (
+                                <div key={tbl.tableName} className="flex justify-between py-1 border-b border-neutral-900 last:border-0 font-normal">
+                                  <span className="text-neutral-300">{tbl.tableName}</span>
+                                  <span className="text-amber-500 font-bold">{tbl.rows} rows</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        
+                        <div className="bg-[#0e0c0b] border border-neutral-900 p-4 rounded font-mono text-[9.5px] space-y-2">
+                          <span className="text-neutral-500 font-bold block uppercase border-b border-neutral-850 pb-1">Migration Utilities:</span>
+                          <p className="text-neutral-400 font-sans font-normal leading-relaxed">
+                            Once configured and populated, click below to generate and download a standard SQL dump that you can import with a single click inside cPanel's phpMyAdmin workspace.
+                          </p>
+                          <a 
+                            href={getApiUrl("/api/mysql/export")} 
+                            download="upside_restaurant_mysql_dump.sql"
+                            className={`w-full py-2.5 bg-neutral-900 hover:bg-neutral-850 text-amber-500 hover:text-amber-400 border border-neutral-800 text-[9.5px] font-bold uppercase text-center cursor-pointer transition-all flex items-center justify-center gap-1.5`}
+                          >
+                            📥 EXPORT CPANEL SQL DUMP (.SQL)
+                          </a>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Right Column: Schema Control & Environment Key Config */}
+                    <div className="xl:col-span-7 space-y-6">
+                      <div className="bg-[#121212] border border-neutral-850 p-6 space-y-6 rounded font-bold font-mono">
+                        <div>
+                          <h2 className="text-xs font-mono font-bold tracking-widest text-amber-500 uppercase">
+                            ⚙️ MYSQL CONNECTION SETTINGS
+                          </h2>
+                          <p className="text-[10px] text-neutral-500 font-sans mt-0.5">
+                            Enter credentials matching your hosting cPanel MySQL user database attributes. Database operations are run securely on the server side.
+                          </p>
+                        </div>
+
+                        {mysqlActionError && (
+                          <div className="p-3 bg-red-950/20 border border-red-900/30 text-red-300 text-[10px] font-mono font-normal">
+                            ⚠️ {mysqlActionError}
+                          </div>
+                        )}
+
+                        {mysqlActionSuccess && (
+                          <div className="p-3 bg-emerald-950/20 border border-emerald-900/30 text-emerald-400 text-[10px] font-mono font-normal">
+                            ✓ {mysqlActionSuccess}
+                          </div>
+                        )}
+
+                        <form onSubmit={handleSaveMySQLConfig} className="space-y-4 text-xs font-mono">
+                          <div className="grid grid-cols-1 md:grid-cols-12 gap-4 font-normal">
+                            <div className="md:col-span-8 space-y-1">
+                              <label className="text-neutral-400 font-bold block uppercase text-[10px]">Database Host</label>
+                              <input
+                                type="text"
+                                required
+                                value={mysqlHost}
+                                onChange={(e) => setMysqlHost(e.target.value)}
+                                placeholder="e.g. localhost or mysql.yourdomain.com"
+                                className="w-full bg-[#1e1e1e] border border-neutral-800 text-white text-[11px] p-2.5 font-mono focus:border-amber-500 outline-none rounded"
+                              />
+                            </div>
+
+                            <div className="md:col-span-4 space-y-1">
+                              <label className="text-neutral-400 font-bold block uppercase text-[10px]">Port</label>
+                              <input
+                                type="text"
+                                required
+                                value={mysqlPort}
+                                onChange={(e) => setMysqlPort(e.target.value)}
+                                placeholder="3306"
+                                className="w-full bg-[#1e1e1e] border border-neutral-800 text-white text-[11px] p-2.5 font-mono focus:border-amber-500 outline-none rounded"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 font-normal">
+                            <div className="space-y-1">
+                              <label className="text-neutral-400 font-bold block uppercase text-[10px]">Database User</label>
+                              <input
+                                type="text"
+                                required
+                                value={mysqlUser}
+                                onChange={(e) => setMysqlUser(e.target.value)}
+                                placeholder="e.g. user_wp"
+                                className="w-full bg-[#1e1e1e] border border-neutral-800 text-white text-[11px] p-2.5 font-mono focus:border-amber-500 outline-none rounded"
+                              />
+                            </div>
+
+                            <div className="space-y-1">
+                              <label className="text-neutral-400 font-bold block uppercase text-[10px]">Database Password</label>
+                              <input
+                                type="password"
+                                value={mysqlPassword}
+                                onChange={(e) => setMysqlPassword(e.target.value)}
+                                placeholder="••••••••••••"
+                                className="w-full bg-[#1e1e1e] border border-neutral-800 text-white text-[11px] p-2.5 font-mono focus:border-amber-500 outline-none rounded"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="space-y-1 font-normal">
+                            <label className="text-neutral-400 font-bold block uppercase text-[10px]">Database Name (Schema)</label>
+                            <input
+                              type="text"
+                              required
+                              value={mysqlDatabase}
+                              onChange={(e) => setMysqlDatabase(e.target.value)}
+                              placeholder="e.g. database_name"
+                              className="w-full bg-[#1e1e1e] border border-neutral-800 text-white text-[11px] p-2.5 font-mono focus:border-amber-500 outline-none rounded"
+                            />
+                          </div>
+
+                          <button
+                            type="submit"
+                            disabled={isMysqlLoading}
+                            className="w-full py-3 bg-amber-600 hover:bg-amber-500 disabled:bg-neutral-850 disabled:text-neutral-500 text-black font-extrabold uppercase tracking-wider text-[10px] transition-all cursor-pointer rounded"
+                          >
+                            {isMysqlLoading ? "SAVING DB PARAMETERS..." : "✓ SAVE CONNECTION PARAMETERS"}
+                          </button>
+                        </form>
+
+                        <div className="border-t border-neutral-850 pt-6 space-y-4">
+                          <div>
+                            <h3 className="text-[11px] font-mono font-bold uppercase text-amber-500 tracking-wider">
+                              🛠️ ADMINISTRATIVE OPERATIONS
+                            </h3>
+                            <p className="text-[10px] text-neutral-500 font-sans font-normal">
+                              Installs target table structure (categories, menu items, shipping zones, orders, transactions, users profiles) and seeds static products to prepare the server schema.
+                            </p>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <button
+                              onClick={handleMySQLSchemaSetup}
+                              disabled={mysqlStatus !== "connected" || isSchemaSetupWorking}
+                              className="py-3 bg-neutral-900 border border-neutral-800 hover:bg-neutral-850 text-white hover:text-amber-500 disabled:bg-neutral-950/40 disabled:text-neutral-600 disabled:border-neutral-900 font-bold uppercase text-[9.5px] cursor-pointer rounded transition-all select-none"
+                            >
+                              {isSchemaSetupWorking ? "EXECUTING CONSOLE DDL..." : "🚀 CREATE TABLES & STATIC SEEDS"}
+                            </button>
+
+                            <button
+                              onClick={handleMySQLDataSync}
+                              disabled={mysqlStatus !== "connected" || isDataSyncWorking}
+                              className="py-3 bg-neutral-900 border border-neutral-850 hover:bg-neutral-850 text-white hover:text-amber-500 disabled:bg-neutral-950/40 disabled:text-neutral-600 disabled:border-neutral-900 font-bold uppercase text-[9.5px] cursor-pointer rounded transition-all select-none"
+                            >
+                              {isDataSyncWorking ? "LIVE REPLICATING DATA..." : "🔄 SYNC & REPLICATE FIRESTORE DATA"}
+                            </button>
+                          </div>
+                        </div>
+
+                      </div>
+                    </div>
+
+                  </div>
                 )}
               </div>
             </div>

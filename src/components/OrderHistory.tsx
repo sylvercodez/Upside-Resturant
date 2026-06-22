@@ -35,48 +35,90 @@ export default function OrderHistory({ onReorderClick, onTrackClick }: OrderHist
   const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
 
   useEffect(() => {
-    const user = auth.currentUser;
-    if (!user) {
-      setLoading(false);
-      return;
-    }
+    let unsubscribe: (() => void) | null = null;
+    let isMounted = true;
 
-    setLoading(true);
-    setError("");
-
-    const orderCollectionPath = "orders";
-    const q = query(
-      collection(db, orderCollectionPath),
-      where("userId", "==", user.uid),
-      orderBy("timestamp", "desc")
-    );
-
-    const unsubscribe = onSnapshot(
-      q,
-      (snapshot) => {
-        const fetchedOrders: Order[] = [];
-        snapshot.forEach((snapshotDoc) => {
-          const data = snapshotDoc.data();
-          if (!data.isArchived && !data.archived) {
-            fetchedOrders.push({ id: snapshotDoc.id, ...data } as Order);
+    const initOrderHistory = async () => {
+      setLoading(true);
+      setError("");
+      
+      try {
+        const statsCheck = await fetch("/api/mysql/status");
+        const statusRes = await statsCheck.json();
+        
+        if (statusRes.connected) {
+          // MySQL is connected! Fetch user orders from MySQL
+          const storedUser = localStorage.getItem("upside_mysql_user");
+          if (!storedUser) {
+            if (isMounted) {
+              setOrders([]);
+              setLoading(false);
+            }
+            return;
           }
-        });
-        setOrders(fetchedOrders);
-        setLoading(false);
-      },
-      (err) => {
-        console.error("Failed to load real-time order history from Firestore:", err);
-        setError("Could not load your order history. Please ensure safe connection.");
-        setLoading(false);
-        try {
-          handleFirestoreError(err, OperationType.LIST, orderCollectionPath);
-        } catch (wrappedErr) {
-          // caught and logged by handleFirestoreError
+          const userObj = JSON.parse(storedUser);
+          
+          const fetchMysqlOrders = async () => {
+            try {
+              const res = await fetch(`/api/mysql/orders?userId=${userObj.uid}`);
+              if (res.ok) {
+                const data = await res.json();
+                if (isMounted) {
+                  setOrders(data);
+                  setLoading(false);
+                }
+              }
+            } catch (err) {}
+          };
+          fetchMysqlOrders();
+          return;
         }
-      }
-    );
+      } catch (err) {}
 
-    return () => unsubscribe();
+      const user = auth.currentUser;
+      if (!user) {
+        if (isMounted) setLoading(false);
+        return;
+      }
+
+      const orderCollectionPath = "orders";
+      const q = query(
+        collection(db, orderCollectionPath),
+        where("userId", "==", user.uid),
+        orderBy("timestamp", "desc")
+      );
+
+      unsubscribe = onSnapshot(
+        q,
+        (snapshot) => {
+          const fetchedOrders: Order[] = [];
+          snapshot.forEach((snapshotDoc) => {
+            const data = snapshotDoc.data();
+            if (!data.isArchived && !data.archived) {
+              fetchedOrders.push({ id: snapshotDoc.id, ...data } as Order);
+            }
+          });
+          if (isMounted) {
+            setOrders(fetchedOrders);
+            setLoading(false);
+          }
+        },
+        (err) => {
+          console.error("Failed to load real-time order history from Firestore:", err);
+          if (isMounted) {
+            setError("Could not load your order history. Please ensure safe connection.");
+            setLoading(false);
+          }
+        }
+      );
+    };
+
+    initOrderHistory();
+
+    return () => {
+      isMounted = false;
+      if (unsubscribe) unsubscribe();
+    };
   }, []);
 
   const handleDeleteOrder = async (orderId: string) => {

@@ -21,6 +21,7 @@ interface CartDrawerProps {
   menuItems?: MenuItem[];
   isPage?: boolean;
   shippingLocations?: ShippingLocation[];
+  isMySQLActive?: boolean;
 }
 
 export default function CartDrawer({
@@ -35,7 +36,8 @@ export default function CartDrawer({
   onAuthClick,
   menuItems,
   isPage = false,
-  shippingLocations = []
+  shippingLocations = [],
+  isMySQLActive = false
 }: CartDrawerProps) {
   const [activeTab, setActiveTab] = useState<"checkout">("checkout");
   const [promoInput, setPromoInput] = useState("");
@@ -180,6 +182,7 @@ export default function CartDrawer({
                 orderPayload = JSON.parse(savedOrderRaw);
               } catch (_) {}
             }
+            const verificationCode = orderPayload?.verificationCode || Math.floor(100000 + Math.random() * 900000).toString();
             const cleanOrder = {
               id: ref,
               userId: orderPayload?.userId || auth.currentUser?.uid || "guest",
@@ -194,15 +197,47 @@ export default function CartDrawer({
               type: orderPayload?.type || "delivery",
               orderStatus: "payment_successful",
               paymentStatus: "payment_successful",
+              verificationCode,
               updatedAt: new Date().toISOString()
             };
             // Ensure full record is securely written on OPay verification success
-            await setDoc(doc(db, "orders", ref), cleanOrder, { merge: true });
+            if (isMySQLActive) {
+              await fetch(getApiUrl(`/api/mysql/orders/${ref}`), {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  status: "Prepping",
+                  paymentStatus: "PAID"
+                })
+              });
+            } else {
+              await setDoc(doc(db, "orders", ref), cleanOrder, { merge: true });
+            }
+
+            // Trigger confirmation e-mail asynchronously
+            const targetEmail = orderPayload?.email || auth.currentUser?.email || "";
+            if (targetEmail && targetEmail !== "guest@example.com" && targetEmail.includes("@")) {
+              fetch(getApiUrl("/api/delivery/notify/order-placed"), {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  orderId: ref,
+                  email: targetEmail,
+                  customerName: orderPayload?.customerName || "Vanguard Guest",
+                  verificationCode,
+                  totalPrice: orderPayload?.totalPrice || 0,
+                  items: orderPayload?.items || [],
+                  address: orderPayload?.address || "Boutique Self-Pickup"
+                })
+              }).catch(err => console.error("Could not trigger email:", err));
+            }
             
-            await updateDoc(doc(db, "payments", ref), {
-              paymentStatus: "PAID",
-              updatedAt: serverTimestamp()
-            });
+            if (!isMySQLActive) {
+              await updateDoc(doc(db, "payments", ref), {
+                paymentStatus: "PAID",
+                updatedAt: serverTimestamp()
+              });
+            }
             console.log("[FRONTEND SYNCHRONIZATION] Live order & payment status synced as PAID in client-side Firestore! Ref:", ref);
           } catch (syncErr) {
             console.warn("[FRONTEND SYNCHRONIZATION] Could not sync PAID state directly in Client Firestore:", syncErr);
@@ -227,14 +262,24 @@ export default function CartDrawer({
           
           // Synchronize failure statuses securely on Frontend
           try {
-            await updateDoc(doc(db, "orders", ref), {
-              paymentStatus: data.paymentStatus.toLowerCase(),
-              updatedAt: new Date().toISOString()
-            });
-            await updateDoc(doc(db, "payments", ref), {
-              paymentStatus: data.paymentStatus,
-              updatedAt: serverTimestamp()
-            });
+            if (isMySQLActive) {
+              await fetch(getApiUrl(`/api/mysql/orders/${ref}`), {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  paymentStatus: data.paymentStatus.toLowerCase()
+                })
+              });
+            } else {
+              await updateDoc(doc(db, "orders", ref), {
+                paymentStatus: data.paymentStatus.toLowerCase(),
+                updatedAt: new Date().toISOString()
+              });
+              await updateDoc(doc(db, "payments", ref), {
+                paymentStatus: data.paymentStatus,
+                updatedAt: serverTimestamp()
+              });
+            }
             console.log(`[FRONTEND SYNCHRONIZATION] Live order & payment status synced to ${data.paymentStatus} in client-side Firestore! Ref:`, ref);
           } catch (syncErr) {
             console.warn(`[FRONTEND SYNCHRONIZATION] Could not sync ${data.paymentStatus} state directly in Client Firestore:`, syncErr);
@@ -459,6 +504,7 @@ export default function CartDrawer({
     
     const currentUserId = auth.currentUser?.uid || "guest";
     const orderId = `order_${Date.now()}`;
+    const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
     const activeOrderPayload = {
       id: orderId,
       userId: currentUserId,
@@ -470,16 +516,56 @@ export default function CartDrawer({
       address: formData.type === "delivery" ? `${formData.address}, ${formData.area}` : "Boutique Self-Pickup",
       status: "Prepping",
       timestamp: Date.now(),
-      type: formData.type
+      type: formData.type,
+      verificationCode
     };
     localStorage.setItem("upside_active_order", JSON.stringify(activeOrderPayload));
 
-    if (auth.currentUser) {
+    if (isMySQLActive) {
+      try {
+        await fetch(getApiUrl("/api/mysql/orders"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: orderId,
+            userId: currentUserId || "guest",
+            customerName: formData.customerName,
+            email: formData.email || "guest@example.com",
+            phone: formData.phone,
+            totalPrice: finalTotal,
+            items: JSON.stringify(cartItems.map(item => ({ name: item.name, quantity: item.quantity, price: item.price }))),
+            address: formData.type === "delivery" ? `${formData.address}, ${formData.area}` : "Boutique Self-Pickup",
+            status: "Prepping",
+            paymentStatus: "PENDING",
+            verificationCode
+          })
+        });
+      } catch (mysqlErr) {
+        console.error("Failed to persist order to MySQL:", mysqlErr);
+      }
+    } else {
       try {
         await setDoc(doc(db, "orders", orderId), activeOrderPayload);
       } catch (dbErr) {
         console.error("Failed to persist order to Firestore:", dbErr);
       }
+    }
+
+    // Trigger confirmation e-mail asynchronously
+    if (formData.email && formData.email !== "guest@example.com" && formData.email.includes("@")) {
+      fetch(getApiUrl("/api/delivery/notify/order-placed"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          orderId,
+          email: formData.email,
+          customerName: formData.customerName,
+          verificationCode,
+          totalPrice: finalTotal,
+          items: cartItems.map(item => ({ name: item.name, quantity: item.quantity, price: item.price })),
+          address: formData.type === "delivery" ? `${formData.address}, ${formData.area}` : "Boutique Self-Pickup"
+        })
+      }).catch(err => console.error("Could not trigger email:", err));
     }
 
     window.open(whatsappUrl, "_blank");
@@ -518,6 +604,7 @@ export default function CartDrawer({
 
     const currentUserId = auth.currentUser?.uid || "guest";
     const orderId = `order_${Date.now()}`;
+    const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
     const activeOrderPayload = {
       id: orderId,
       userId: currentUserId,
@@ -529,7 +616,8 @@ export default function CartDrawer({
       address: formData.type === "delivery" ? `${formData.address}, ${formData.area}` : "Boutique Self-Pickup",
       status: "Prepping",
       timestamp: Date.now(),
-      type: formData.type
+      type: formData.type,
+      verificationCode
     };
 
     // Store details locally prior to checkout redirection to handle success return receipt smoothly
@@ -656,6 +744,7 @@ export default function CartDrawer({
 
     const currentUserId = auth.currentUser?.uid || "guest";
     const orderId = `order_${Date.now()}`;
+    const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
     const activeOrderPayload = {
       id: orderId,
       userId: currentUserId,
@@ -667,16 +756,56 @@ export default function CartDrawer({
       address: formData.type === "delivery" ? `${formData.address}, ${formData.area}` : "Boutique Self-Pickup",
       status: "Prepping",
       timestamp: Date.now(),
-      type: formData.type
+      type: formData.type,
+      verificationCode
     };
     localStorage.setItem("upside_active_order", JSON.stringify(activeOrderPayload));
 
-    if (auth.currentUser) {
+    if (isMySQLActive) {
+      try {
+        await fetch(getApiUrl("/api/mysql/orders"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: orderId,
+            userId: currentUserId || "guest",
+            customerName: formData.customerName,
+            email: formData.email || "guest@example.com",
+            phone: formData.phone,
+            totalPrice: finalTotal,
+            items: JSON.stringify(cartItems.map(item => ({ name: item.name, quantity: item.quantity, price: item.price }))),
+            address: formData.type === "delivery" ? `${formData.address}, ${formData.area}` : "Boutique Self-Pickup",
+            status: "Prepping",
+            paymentStatus: "PENDING",
+            verificationCode
+          })
+        });
+      } catch (mysqlErr) {
+        console.error("Failed to persist order to MySQL:", mysqlErr);
+      }
+    } else {
       try {
         await setDoc(doc(db, "orders", orderId), activeOrderPayload);
       } catch (dbErr) {
         console.error("Failed to persist order to Firestore:", dbErr);
       }
+    }
+
+    // Trigger confirmation e-mail asynchronously
+    if (formData.email && formData.email !== "guest@example.com" && formData.email.includes("@")) {
+      fetch(getApiUrl("/api/delivery/notify/order-placed"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          orderId,
+          email: formData.email,
+          customerName: formData.customerName,
+          verificationCode,
+          totalPrice: finalTotal,
+          items: cartItems.map(item => ({ name: item.name, quantity: item.quantity, price: item.price })),
+          address: formData.type === "delivery" ? `${formData.address}, ${formData.area}` : "Boutique Self-Pickup"
+        })
+      }).catch(err => console.error("Could not trigger email:", err));
     }
 
     setTimeout(() => {

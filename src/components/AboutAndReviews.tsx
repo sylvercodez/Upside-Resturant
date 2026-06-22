@@ -19,6 +19,8 @@ interface AboutAndReviewsProps {
 }
 
 export default function AboutAndReviews({ onReadMoreExperience, onViewMenu }: AboutAndReviewsProps) {
+  const [reviewsList, setReviewsList] = useState<any[]>(REVIEWS);
+  const [loadingReviews, setLoadingReviews] = useState(false);
   const [activeReviewIndex, setActiveReviewIndex] = useState(0);
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   const [instagramFeed, setInstagramFeed] = useState<InstagramPost[]>([]);
@@ -26,6 +28,43 @@ export default function AboutAndReviews({ onReadMoreExperience, onViewMenu }: Ab
   const [isPlaying, setIsPlaying] = useState(true);
   const [isMuted, setIsMuted] = useState(true);
   const videoRef = React.useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    async function fetchGoogleReviews() {
+      try {
+        setLoadingReviews(true);
+        const reviewsRef = collection(db, "reviews");
+        const q = query(reviewsRef, orderBy("createdAt", "desc"), limit(5));
+        const snapshot = await getDocs(q);
+        const fbReviews: any[] = [];
+        snapshot.forEach((snapshotDoc) => {
+          const data = snapshotDoc.data();
+          fbReviews.push({ id: snapshotDoc.id, ...data });
+        });
+
+        if (fbReviews.length > 0) {
+          setReviewsList(fbReviews.slice(0, 5));
+        } else {
+          const googleReviewsRef = collection(db, "google_reviews");
+          const q2 = query(googleReviewsRef, orderBy("createdAt", "desc"), limit(5));
+          const snapshot2 = await getDocs(q2);
+          const fbGReviews: any[] = [];
+          snapshot2.forEach((snapshotDoc) => {
+            const data = snapshotDoc.data();
+            fbGReviews.push({ id: snapshotDoc.id, ...data });
+          });
+          if (fbGReviews.length > 0) {
+            setReviewsList(fbGReviews.slice(0, 5));
+          }
+        }
+      } catch (err) {
+        console.warn("Could not fetch reviews from Firestore, using fallbacks:", err);
+      } finally {
+        setLoadingReviews(false);
+      }
+    }
+    fetchGoogleReviews();
+  }, []);
 
   const togglePlay = () => {
     if (videoRef.current) {
@@ -326,148 +365,86 @@ export default function AboutAndReviews({ onReadMoreExperience, onViewMenu }: Ab
         </div>
       </section>
 
-      {/* INSTANT PHONE ORDERING QR CODE SECTION */}
-      <section id="qr-ordering-section" className="max-w-7xl mx-auto px-4 md:px-8 mt-12 mb-4">
-        <div className="relative border border-neutral-200 bg-neutral-50 p-6 md:p-10 shadow-sm overflow-hidden">
-          <div className="absolute top-0 right-0 w-64 h-64 bg-amber-500/5 rounded-full blur-3xl pointer-events-none" />
-          
-          <div className="relative z-10 grid grid-cols-1 md:grid-cols-12 gap-8 items-center">
-            {/* Text details column */}
-            <div className="md:col-span-7 space-y-6 text-left">
-              <div className="space-y-2">
-                <span className="text-[10px] tracking-[0.3em] text-amber-600 font-mono uppercase block">
-                  Scan & Taste
-                </span>
-                <h2 className="text-2xl md:text-3xl text-neutral-950 font-serif font-light leading-tight">
-                  Browse Menu & Order <br />Directly on Your Phone
-                </h2>
-                <p className="text-neutral-600 font-mono text-xs max-w-lg mt-3 leading-relaxed">
-                  Join our distinguished guests using our integrated smartphone experiences. Scanning our physical or digital QR codes loads our full, authentic Lagos culinary offerings with express secure checkout instantly on your mobile browser.
-                </p>
-              </div>
-
-              {/* Instructions steps */}
-              <div className="space-y-4 pt-1">
-                <div className="flex gap-3">
-                  <div className="w-5 h-5 bg-neutral-900 text-white font-mono text-[9px] flex items-center justify-center font-bold flex-shrink-0 mt-0.5">1</div>
-                  <p className="text-[11px] text-neutral-700 font-mono leading-relaxed">
-                    Open your smartphone's built-in camera or QR scanner.
-                  </p>
-                </div>
-                <div className="flex gap-3">
-                  <div className="w-5 h-5 bg-neutral-900 text-white font-mono text-[9px] flex items-center justify-center font-bold flex-shrink-0 mt-0.5">2</div>
-                  <p className="text-[11px] text-neutral-700 font-mono leading-relaxed">
-                    Point the lens at the QR code shown to lock and sync.
-                  </p>
-                </div>
-                <div className="flex gap-3">
-                  <div className="w-5 h-5 bg-neutral-900 text-white font-mono text-[9px] flex items-center justify-center font-bold flex-shrink-0 mt-0.5">3</div>
-                  <p className="text-[11px] text-neutral-700 font-mono leading-relaxed">
-                    Tap the recognized link to customize, add selections to your basket, and trigger local secure fulfillment.
-                  </p>
-                </div>
-              </div>
-
-              {/* Optional click-through call to action button */}
-              {onViewMenu && (
-                <div className="pt-2">
-                  <button
-                    onClick={onViewMenu}
-                    className="group px-4 py-3 bg-neutral-950 hover:bg-amber-600 hover:text-black text-white font-mono text-[9px] sm:text-[10px] tracking-widest uppercase transition-all duration-300 flex items-center gap-2 cursor-pointer shadow whitespace-nowrap"
-                  >
-                    <span>View Digital Menu Online</span>
-                    <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform shrink-0" />
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {/* QR Code Presentation Box */}
-            <div className="md:col-span-5 flex flex-col items-center justify-center bg-white border border-neutral-200 p-6 md:p-8 space-y-4 shadow-sm relative">
-              <div className="absolute top-0 left-4 -translate-y-1/2 bg-neutral-950 text-white border border-neutral-800 font-mono text-[8px] uppercase tracking-widest px-3 py-1">
-                Live Store Sync
-              </div>
-
-              {/* QR Frame Container */}
-              <div className="relative p-3 bg-neutral-50 border-2 border-dashed border-neutral-200 group hover:border-amber-500/55 transition-colors">
-                <img 
-                  src="https://api.qrserver.com/v1/create-qr-code/?size=350x350&data=https://upside-restaurant-cafe.com/menu&color=000000"
-                  alt="Upside Menu Direct Scan QR Code"
-                  className="w-40 h-40 md:w-48 bg-white border border-neutral-200"
-                  referrerPolicy="no-referrer"
-                />
-                
-                {/* Micro tech corners around the picture */}
-                <div className="absolute top-0 left-0 w-2 h-2 border-t-2 border-l-2 border-amber-600" />
-                <div className="absolute top-0 right-0 w-2 h-2 border-t-2 border-r-2 border-amber-600" />
-                <div className="absolute bottom-0 left-0 w-2 h-2 border-b-2 border-l-2 border-amber-600" />
-                <div className="absolute bottom-0 right-0 w-2 h-2 border-b-2 border-r-2 border-amber-600" />
-              </div>
-
-              <div className="text-center space-y-1">
-                <p className="text-[10px] font-sans font-bold text-neutral-900 tracking-wider uppercase flex items-center justify-center gap-1.5">
-                  <Smartphone className="w-3.5 h-3.5 text-amber-600" />
-                  <span>Scan to order on mobile</span>
-                </p>
-                <p className="text-[8.5px] text-neutral-500 font-mono uppercase tracking-widest">
-                  Secure Connection &bull; Upside Hospitality
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
       {/* REAL CUSTOMER AUDITS & REVIEWS */}
       <section id="reviews" className="bg-neutral-50 py-20 border-y border-neutral-200 px-4">
         <div className="max-w-4xl mx-auto text-center space-y-8">
           <div className="space-y-2">
             <span className="text-[10px] tracking-[0.3em] text-amber-600 font-mono uppercase block">
-              Direct Audits from Lagos Elite
+              Direct Google Reviews & Audits
             </span>
+            <div className="flex items-center justify-center gap-1.5 text-xs font-mono text-neutral-500">
+              <span className="inline-flex gap-0.5 font-sans text-xs font-bold mr-1">
+                <span className="text-blue-600">G</span>
+                <span className="text-red-600">o</span>
+                <span className="text-yellow-500">o</span>
+                <span className="text-blue-600">g</span>
+                <span className="text-green-500">l</span>
+                <span className="text-red-600">e</span>
+              </span>
+              <span>Review Rating &bull; 4.9 / 5.0 Stars</span>
+            </div>
             <h2 className="text-2xl md:text-4xl text-neutral-950 font-serif font-light">
-              Guest Testimonials
+              Lagos Guest Testimonials
             </h2>
           </div>
 
           {/* Large layout review card carousel switcher */}
-          <div className="bg-white border border-neutral-200 p-8 md:p-12 relative text-left space-y-6 shadow-sm">
-            <div className="flex items-center gap-1">
-              {[1, 2, 3, 4, 5].map((s) => (
-                <Star key={s} className="w-4.5 h-4.5 fill-amber-500 text-amber-500" />
-              ))}
-            </div>
-
-            <p className="text-sm md:text-lg text-neutral-800 leading-relaxed font-mono">
-              &ldquo;{REVIEWS[activeReviewIndex].text}&rdquo;
-            </p>
-
-            <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 pt-4 border-t border-neutral-200">
-              <div>
-                <p className="text-xs text-neutral-900 uppercase font-mono font-semibold">
-                  {REVIEWS[activeReviewIndex].name}
-                </p>
-                <p className="text-[10px] text-amber-600 font-mono mt-1">
-                  {REVIEWS[activeReviewIndex].role} &bull; {REVIEWS[activeReviewIndex].date}
-                </p>
+          {reviewsList.length > 0 && (
+            <div className="bg-white border border-neutral-200 p-8 md:p-12 relative text-left space-y-6 shadow-sm">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-1">
+                  {[1, 2, 3, 4, 5].map((s) => (
+                    <Star key={s} className="w-4.5 h-4.5 fill-amber-500 text-amber-500" />
+                  ))}
+                  <span className="text-[9px] font-mono uppercase bg-neutral-100 px-2 py-0.5 text-neutral-600 ml-2 tracking-widest font-bold">Recommended</span>
+                </div>
+                
+                <span className="text-[9.5px] font-mono uppercase tracking-widest text-neutral-400 flex items-center gap-1.5">
+                  <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-blue-600 text-white font-sans text-[9px] font-bold">G</span>
+                  <span>Verified Google Review</span>
+                </span>
               </div>
 
-              {/* Share review button */}
-              <button
-                onClick={() => handleShareReview(REVIEWS[activeReviewIndex].text, activeReviewIndex)}
-                className="p-2 sm:p-2.5 bg-transparent hover:bg-neutral-100 text-neutral-800 transition-colors cursor-pointer text-[10px] sm:text-xs font-mono flex items-center justify-center gap-1.5 border border-neutral-200 uppercase tracking-widest whitespace-nowrap w-full sm:w-auto"
-              >
-                <Share2 className="w-3.5 h-3.5 text-neutral-700 shrink-0" />
-                <span>{copiedIndex === activeReviewIndex ? "Copied Link!" : "Copy Audit"}</span>
-              </button>
+              <p className="text-sm md:text-lg text-neutral-800 leading-relaxed font-mono">
+                &ldquo;{reviewsList[activeReviewIndex % reviewsList.length]?.text}&rdquo;
+              </p>
+
+              <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 pt-4 border-t border-neutral-200">
+                <div>
+                  <p className="text-xs text-neutral-900 uppercase font-mono font-semibold">
+                    {reviewsList[activeReviewIndex % reviewsList.length]?.name}
+                  </p>
+                  <p className="text-[10px] text-amber-600 font-mono mt-1">
+                    {reviewsList[activeReviewIndex % reviewsList.length]?.role} &bull; {reviewsList[activeReviewIndex % reviewsList.length]?.date}
+                  </p>
+                </div>
+
+                {/* View More Reviews Link on Google Search page */}
+                <button
+                  onClick={() => {
+                    window.open("https://www.google.com/search?q=upside+restaurant+and+cafe+review&oq=upside+restaurant+and+cafe+review&gs_lcrp=EgZjaHJvbWUyBggAEEUYOTIHCAEQIRigAdIBCTEwMTIzajBqN6gCALACAA&sourceid=chrome&ie=UTF-8#lrd=0x103bf53bc1bafc11:0x862e561d3c1caad2,1,,,,", "_blank");
+                  }}
+                  className="p-2 sm:p-2.5 bg-neutral-950 hover:bg-neutral-900 text-white transition-all cursor-pointer text-[10px] sm:text-xs font-mono flex items-center justify-center gap-1.5 border border-transparent uppercase tracking-widest whitespace-nowrap w-full sm:w-auto hover:text-amber-500 active:scale-95"
+                >
+                  <span className="inline-flex gap-0.5 font-sans font-bold text-[9px] mr-1.5">
+                    <span className="text-blue-400">G</span>
+                    <span className="text-red-400">o</span>
+                    <span className="text-yellow-400">o</span>
+                    <span className="text-blue-400">g</span>
+                    <span className="text-green-400">l</span>
+                    <span className="text-red-400">e</span>
+                  </span>
+                  <span>View More Reviews</span>
+                </button>
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Dots Indicator */}
           <div className="flex justify-center gap-2">
-            {REVIEWS.map((r, i) => (
+            {reviewsList.map((r, i) => (
               <button
-                key={r.id}
+                key={r.id || i}
                 onClick={() => setActiveReviewIndex(i)}
                 className={`w-2 h-2 transition-all ${
                   activeReviewIndex === i ? "bg-black w-6" : "bg-neutral-300"
