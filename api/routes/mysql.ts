@@ -1,7 +1,7 @@
 import express from "express";
 import path from "path";
 import fs from "fs";
-import { getMySQLPool, querySql, resetMySQLPool } from "../utils/mysqlDb.js";
+import { getMySQLPool, querySql, resetMySQLPool, sanitizeMySQLHost } from "../utils/mysqlDb.js";
 import { CATEGORIES, MENU_ITEMS } from "../../src/data/menu.js";
 import { LAGOS_AREAS } from "../../src/types.js";
 
@@ -15,6 +15,8 @@ mysqlRouter.post("/convert-to-env", async (req: any, res: any) => {
       return res.status(400).json({ error: "Missing required MySQL credentials: host, user, database are required." });
     }
 
+    const cleanHost = sanitizeMySQLHost(host);
+
     const envPath = path.join(process.cwd(), ".env");
     let envContent = "";
     if (fs.existsSync(envPath)) {
@@ -22,7 +24,7 @@ mysqlRouter.post("/convert-to-env", async (req: any, res: any) => {
     }
 
     const keysMap: Record<string, string> = {
-      MYSQL_HOST: host.trim(),
+      MYSQL_HOST: cleanHost,
       MYSQL_PORT: (port || "3306").toString().trim(),
       MYSQL_USER: user.trim(),
       MYSQL_PASSWORD: (password || "").trim(),
@@ -55,7 +57,7 @@ mysqlRouter.post("/convert-to-env", async (req: any, res: any) => {
 
 // 2. Route: Check MySQL connection status and query statistics
 mysqlRouter.get("/status", async (req: any, res: any) => {
-  const host = process.env.MYSQL_HOST;
+  const host = sanitizeMySQLHost(process.env.MYSQL_HOST || "");
   const user = process.env.MYSQL_USER;
   const database = process.env.MYSQL_DATABASE;
   const port = process.env.MYSQL_PORT || "3306";
@@ -97,6 +99,85 @@ mysqlRouter.get("/status", async (req: any, res: any) => {
       connected: false,
       message: `Failed to connect to MySQL host: ${err.message}`,
       config: { host, port, user, database }
+    });
+  }
+});
+
+// 2b. Route: Detailed database connectivity diagnostic with shorter timeout and verbose error logging
+mysqlRouter.get("/diagnostic", async (req: any, res: any) => {
+  const host = sanitizeMySQLHost(process.env.MYSQL_HOST || "");
+  const user = process.env.MYSQL_USER;
+  const database = process.env.MYSQL_DATABASE;
+  const port = parseInt(process.env.MYSQL_PORT || "3306", 10);
+  const password = process.env.MYSQL_PASSWORD || "";
+
+  if (!host || !user || !database) {
+    return res.status(400).json({
+      success: false,
+      errorCategory: "UNCONFIGURED",
+      message: "MySQL configuration environment variables are not fully configured yet."
+    });
+  }
+
+  console.log(`[MYSQL DIAGNOSTIC] Initiating connection handshake to ${host}:${port}, database: ${database}, user: ${user}...`);
+  
+  let connection: any = null;
+  try {
+    const mysql = await import("mysql2/promise");
+    
+    // Create connection with an explicit 5-second socket handshake timeout
+    connection = await mysql.default.createConnection({
+      host,
+      port,
+      user,
+      password,
+      database,
+      connectTimeout: 5000
+    });
+
+    console.log("[MYSQL DIAGNOSTIC] TCP connection established successfully. Running validation test query 'SELECT 1 AS diagnostic_test'...");
+    const [rows]: any = await connection.execute("SELECT 1 AS diagnostic_test");
+    
+    console.log("[MYSQL DIAGNOSTIC] Validation query succeeded. Result rows:", rows);
+
+    await connection.end();
+
+    return res.json({
+      success: true,
+      message: "MySQL Connection Diagnostic passed successfully! Connection can be established.",
+      details: {
+        host,
+        port,
+        user,
+        database,
+        queryResult: rows
+      }
+    });
+  } catch (err: any) {
+    console.error("[MYSQL DIAGNOSTIC CRITICAL FAILURE] Detailed breakdown of connection error:", err);
+    
+    if (connection) {
+      try {
+        await connection.end();
+      } catch (_) {}
+    }
+
+    // Capture standard rich properties returned from Node runtime Net/DNS/MySQL drivers
+    const errorDetails = {
+      message: err.message || String(err),
+      code: err.code || null,         // e.g. 'ENOTFOUND', 'ETIMEDOUT', 'ECONNREFUSED'
+      errno: err.errno || null,       // error number
+      sqlState: err.sqlState || null, // ANSI SQL state standard
+      syscall: err.syscall || null,   // system call level failure
+      address: err.address || null,   // resolved IP target address
+      port: err.port || null          // remote target port
+    };
+
+    return res.status(500).json({
+      success: false,
+      errorCategory: "CONNECTION_FAILED",
+      message: `MySQL diagnostic connection failed: ${err.message || err}`,
+      errorDetails
     });
   }
 });

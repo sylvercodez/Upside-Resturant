@@ -322,6 +322,29 @@ export default function DedicatedDashboard({
   const [isSchemaSetupWorking, setIsSchemaSetupWorking] = useState(false);
   const [isDataSyncWorking, setIsDataSyncWorking] = useState(false);
 
+  const [isDiagnosticLoading, setIsDiagnosticLoading] = useState(false);
+  const [diagnosticInfo, setDiagnosticInfo] = useState<any | null>(null);
+  const [diagnosticError, setDiagnosticError] = useState<any | null>(null);
+
+  const runDatabaseDiagnostic = async () => {
+    setIsDiagnosticLoading(true);
+    setDiagnosticInfo(null);
+    setDiagnosticError(null);
+    try {
+      const res = await fetch(getApiUrl("/api/mysql/diagnostic"));
+      const data = await res.json();
+      if (!res.ok || data.success === false) {
+        setDiagnosticError(data.errorDetails || { message: data.message || "Failed to execute diagnostic." });
+      } else {
+        setDiagnosticInfo(data);
+      }
+    } catch (err: any) {
+      setDiagnosticError({ message: err.message || "Network request failed." });
+    } finally {
+      setIsDiagnosticLoading(false);
+    }
+  };
+
   // Poll MySQL status on mount and when role is admin
   const fetchMySQLStatus = async () => {
     try {
@@ -3377,6 +3400,57 @@ export default function DedicatedDashboard({
                             </p>
                           </div>
                         )}
+
+                        {/* Interactive Deep Diagnostic Section */}
+                        <div className="pt-2 border-t border-neutral-900 space-y-2">
+                          <button
+                            type="button"
+                            onClick={runDatabaseDiagnostic}
+                            disabled={isDiagnosticLoading}
+                            className="w-full py-2 bg-amber-500/10 hover:bg-amber-500/20 active:bg-amber-500/30 text-amber-500 border border-amber-500/30 text-[9.5px] uppercase font-bold tracking-wider cursor-pointer rounded transition-all flex items-center justify-center gap-2"
+                          >
+                            {isDiagnosticLoading ? (
+                              <>
+                                <div className="w-3.5 h-3.5 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
+                                Analyzing Sockets & DNS...
+                              </>
+                            ) : (
+                              "🔍 Run Deep Port Connectivity Diagnostic"
+                            )}
+                          </button>
+
+                          {diagnosticInfo && (
+                            <div className="p-3 bg-emerald-950/25 border border-emerald-900/30 rounded text-[9.5px] font-mono space-y-1.5 text-emerald-400">
+                              <p className="font-bold">✓ DIAGNOSTIC PASSED</p>
+                              <p className="text-neutral-400 leading-normal font-sans font-normal">
+                                Single-connection TCP socket validation handshaked and tested query successfully.
+                              </p>
+                              <div className="bg-black/50 p-1.5 border border-neutral-900/40 rounded text-[9px] text-neutral-300">
+                                Target: {diagnosticInfo.details?.host}:{diagnosticInfo.details?.port}
+                              </div>
+                            </div>
+                          )}
+
+                          {diagnosticError && (
+                            <div className="p-3.5 bg-red-950/25 border border-red-900/35 rounded text-[9.5px] font-mono space-y-2 text-red-450">
+                              <p className="font-bold text-red-400">⚠️ DIAGNOSTIC ANALYSIS REPORT</p>
+                              <p className="text-neutral-400 font-sans leading-normal font-normal">
+                                The connection handshake failed before executing the query. View error details below:
+                              </p>
+                              <div className="bg-black/60 p-2.5 border border-neutral-900 rounded text-[9px] text-[#f87171] space-y-1 break-all overflow-x-auto leading-relaxed">
+                                <div><strong className="text-neutral-400">Message:</strong> {diagnosticError.message}</div>
+                                {diagnosticError.code && <div><strong className="text-neutral-400">Error Code:</strong> {diagnosticError.code}</div>}
+                                {diagnosticError.errno && <div><strong className="text-neutral-400">Errno:</strong> {diagnosticError.errno}</div>}
+                                {diagnosticError.syscall && <div><strong className="text-neutral-400">Syscall:</strong> {diagnosticError.syscall}</div>}
+                                {diagnosticError.address && <div><strong className="text-neutral-400">Resolved Address:</strong> {diagnosticError.address}</div>}
+                                {diagnosticError.port && <div><strong className="text-neutral-400">Target Port:</strong> {diagnosticError.port}</div>}
+                              </div>
+                              <p className="text-neutral-500 text-[8.5px] font-sans leading-relaxed font-normal">
+                                <strong className="text-neutral-400">Recommendation:</strong> If the issue is ETIMEDOUT or ECONNREFUSED, make sure the database is active and allows incoming traffic from standard remote servers. Port 3306 or your custom port might require open firewall privileges in cPanel.
+                              </p>
+                            </div>
+                          )}
+                        </div>
 
                         {mysqlStatus === "connected" && mysqlTables.length > 0 && (
                           <div className="space-y-3 pt-2">

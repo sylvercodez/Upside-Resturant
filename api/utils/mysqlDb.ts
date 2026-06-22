@@ -2,12 +2,35 @@ import mysql from "mysql2/promise";
 
 let pool: mysql.Pool | null = null;
 
+export function sanitizeMySQLHost(h: string): string {
+  if (!h) return "";
+  let clean = h.trim();
+  // Strip http:// or https:// if provided
+  if (clean.toLowerCase().startsWith("http://")) {
+    clean = clean.substring(7);
+  } else if (clean.toLowerCase().startsWith("https://")) {
+    clean = clean.substring(8);
+  }
+  // Remove any trailing slash/paths like /phpmyadmin or page targets
+  const slashIdx = clean.indexOf("/");
+  if (slashIdx !== -1) {
+    clean = clean.substring(0, slashIdx);
+  }
+  // Remove trailing colon / port specifications if present
+  const colonIdx = clean.indexOf(":");
+  if (colonIdx !== -1) {
+    clean = clean.substring(0, colonIdx);
+  }
+  return clean.trim();
+}
+
 /**
  * Lazily configures and returns a thread-safe promise-based MySQL connection pool.
  * Does not crash at startup if environment variables are not yet registered.
  */
 export function getMySQLPool(): mysql.Pool {
-  const host = process.env.MYSQL_HOST || "";
+  const rawHost = process.env.MYSQL_HOST || "";
+  const host = sanitizeMySQLHost(rawHost);
   const port = parseInt(process.env.MYSQL_PORT || "3306", 10);
   const user = process.env.MYSQL_USER || "";
   const password = process.env.MYSQL_PASSWORD || "";
@@ -52,7 +75,10 @@ export async function querySql(sql: string, params: any[] = []): Promise<any> {
 export function resetMySQLPool() {
   if (pool) {
     console.log("[MYSQL POOL] Terminating existing connection pool (re-authentication sequence).");
-    pool.end().catch((err) => console.warn("[MYSQL POOL] Warn on pool end:", err));
+    pool.end().catch((err) => {
+      const errMsg = err && typeof err.message === "string" ? err.message : String(err || "");
+      console.log(`[MYSQL POOL] Notice: Active pool terminated. Status: ${errMsg || "closed"}`);
+    });
     pool = null;
   }
 }
