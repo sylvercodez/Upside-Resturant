@@ -1,20 +1,19 @@
 import express from "express";
 import path from "path";
 import fs from "fs";
-// CHANGED: Imports now route from your new root /server/ directory instead of ./
-import { mapEnvVariables } from "../server/utils/env.js";
-import { appCheckVerification } from "../server/middleware/appCheck.js";
-import { otpRouter } from "../server/_routes/otp.js";
-import { opayRouter } from "../server/_routes/opay.js";
-import { instagramRouter } from "../server/routes/instagram.js";
-import { menuRouter } from "../server/routes/menu.js";
-import { mysqlRouter } from "../server/_routes/mysql.js";
-import { deliveryRouter } from "../server/_routes/delivery.js";
+import { mapEnvVariables } from "./utils/env.js";
+import { appCheckVerification } from "./middleware/appCheck.js";
+import { otpRouter } from "./_routes/otp.js";
+import { opayRouter } from "./_routes/opay.js";
+import { instagramRouter } from "./routes/instagram.js";
+import { menuRouter } from "./routes/menu.js";
+import { mysqlRouter } from "./_routes/mysql.js";
+import { deliveryRouter } from "./_routes/delivery.js";
 
 // Ensure standard and VITE_ prefixed environment variables are correctly mapped
 mapEnvVariables();
 
-const app = express();
+const app = express(); 
 const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
