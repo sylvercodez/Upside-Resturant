@@ -1,14 +1,14 @@
 import express from "express";
 import path from "path";
 import fs from "fs";
-import { mapEnvVariables } from "./utils/env.js";
-import { appCheckVerification } from "./middleware/appCheck.js";
-import { otpRouter } from "./routes/otp.js";
-import { opayRouter } from "./routes/opay.js";
-import { instagramRouter } from "./routes/instagram.js";
-import { menuRouter } from "./routes/menu.js";
-import { mysqlRouter } from "./routes/mysql.js";
-import { deliveryRouter } from "./routes/delivery.js";
+import { mapEnvVariables } from "./_utils/env.js";
+import { appCheckVerification } from "./_middleware/appCheck.js";
+import { otpRouter } from "./_routes/otp.js";
+import { opayRouter } from "./_routes/opay.js";
+import { instagramRouter } from "./_routes/instagram.js";
+import { menuRouter } from "./_routes/menu.js";
+import { mysqlRouter } from "./_routes/mysql.js";
+import { deliveryRouter } from "./_routes/delivery.js";
 
 // Ensure standard and VITE_ prefixed environment variables are correctly mapped
 mapEnvVariables();
