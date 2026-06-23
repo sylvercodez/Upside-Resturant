@@ -2,20 +2,14 @@
   "version": 2,
   "cleanUrls": true,
   "outputDirectory": "dist",
-  "builds": [
-    {
-      "src": "api/index.ts",
-      "use": "@vercel/node"
-    },
-    {
-      "src": "package.json",
-      "use": "@vercel/static"
-    }
-  ],
   "functions": {
     "api/index.ts": {
       "maxDuration": 15,
-      "includeFiles": "{src/data/**,src/utils/**,firebase-applet-config.json}"
+      "includeFiles": "{api/_routes/**,api/routes/**,api/utils/**,api/middleware/**,firebase-applet-config.json}"
+    },
+    "api/!(*index.ts)": {
+      "memory": 1024,
+      "maxDuration": 1
     }
   },
   "rewrites": [
