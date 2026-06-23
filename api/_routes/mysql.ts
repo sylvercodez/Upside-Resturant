@@ -1,7 +1,7 @@
 import express from "express";
 import path from "path";
 import fs from "fs";
-import { getMySQLPool, querySql, resetMySQLPool, sanitizeMySQLHost } from "../utils/mysqlDb.js";
+import { getMySQLPool, querySql, resetMySQLPool, sanitizeMySQLHost } from "../_utils/mysqlDb.js";
 import { CATEGORIES, MENU_ITEMS } from "../../src/data/menu.js";
 import { LAGOS_AREAS } from "../../src/types.js";
 
