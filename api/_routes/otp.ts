@@ -1,7 +1,7 @@
 import express from "express";
 import crypto from "crypto";
-import { getMailTransporter, getFromEmailAddress } from "../_utils/smtp.js";
-import { stripQuotes } from "../_utils/env.js";
+import { getMailTransporter, getFromEmailAddress } from "../utils/smtp.js";
+import { stripQuotes } from "../utils/env.js";
 
 const activeOtps = new Map<string, { code: string; expiresAt: number }>();
 const OTP_SESSION_SALT = stripQuotes(process.env.OTP_SESSION_SALT || "UPSIDE_ROYAL_OTP_SECRET_COMPLEX_HASH_2026");
