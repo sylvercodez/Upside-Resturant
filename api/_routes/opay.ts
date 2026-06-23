@@ -1,12 +1,12 @@
 import express from "express";
 import path from "path";
 import fs from "fs";
-import { dbAdmin } from "../utils/db.js";
+import { dbAdmin } from "../_utils/db.js";
 import {
   generateOpayApiSignature,
   verifyWebhookSignature,
   decryptPayload
-} from "../utils/opayHelpers.js";
+} from "../_utils/opayHelpers.js";
 
 export const opayRouter = express.Router();
 

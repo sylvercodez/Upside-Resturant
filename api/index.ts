@@ -6,7 +6,7 @@ import { appCheckVerification } from "./_middleware/appCheck.js";
 import { otpRouter } from "./_routes/otp.js";
 import { opayRouter } from "./_routes/opay.js";
 import { instagramRouter } from "./_routes/instagram.js";
-import { menuRouter } from "./routes/menu.js";
+import { menuRouter } from "./_routes/menu.js";
 import { mysqlRouter } from "./_routes/mysql.js";
 import { deliveryRouter } from "./_routes/delivery.js";
 
