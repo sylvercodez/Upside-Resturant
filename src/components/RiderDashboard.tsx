@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { LogIn, LogOut, Clipboard, CheckCircle, Package, User, Phone, MapPin, Eye, ShieldAlert, Key } from "lucide-react";
 import { collection, query, where, onSnapshot, doc, updateDoc, getDocs } from "firebase/firestore";
 import { db } from "../firebase";
+import { getApiUrl } from "../types";
 
 export default function RiderDashboard() {
   const [username, setUsername] = useState("");
@@ -121,6 +122,17 @@ export default function RiderDashboard() {
         status: "Delivered",
         updatedAt: new Date().toISOString()
       });
+
+      // Dispatch status update trigger to backend to notify customer & admin
+      fetch(getApiUrl("/api/delivery/orders/update-status"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          orderId,
+          status: "Delivered"
+        })
+      }).catch(err => console.error("Could not trigger delivered status update emails:", err));
+
       setStatusSuccess(`Order #${orderId.slice(-8).toUpperCase()} marked as Delivered / Completed!`);
     } catch (err: any) {
       console.error("Error setting Delivered:", err);

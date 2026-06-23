@@ -21,6 +21,7 @@ interface Order {
   status: string;
   timestamp: number;
   type: string;
+  verificationCode?: string;
 }
 
 interface OrderHistoryProps {
@@ -321,6 +322,12 @@ export default function OrderHistory({ onReorderClick, onTrackClick }: OrderHist
                       <div className="font-sans">
                         Type: <span className="text-amber-500 font-mono uppercase tracking-wider font-bold text-[9px]">{order.type}</span>
                       </div>
+                      {order.verificationCode && (
+                        <div className="border-t border-neutral-800 mt-2.5 pt-2 flex items-center justify-between">
+                          <span className="font-sans text-[9px] text-neutral-400 uppercase font-black tracking-wide">Pickup Code:</span>
+                          <span className="text-amber-500 font-bold px-2 py-0.5 bg-neutral-950 border border-neutral-800 font-mono tracking-widest text-[11px] block select-all">{order.verificationCode}</span>
+                        </div>
+                      )}
                     </div>
                   </div>
 

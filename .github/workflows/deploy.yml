@@ -1,0 +1,50 @@
+name: Deploy Vite App to cPanel
+
+on:
+  push:
+    branches:
+      - main # Change this if your default branch is 'master'
+
+jobs:
+  web-deploy:
+    name: Build and Deploy
+    runs-on: ubuntu-latest
+    steps:
+    - name: Get latest code
+      uses: actions/checkout@v4
+
+    - name: Install Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: 20
+
+    - name: Install dependencies & Build
+      run: |
+        npm install
+        npm run build
+
+    - name: Prepare cPanel Deployment Directory
+      run: |
+        # Create a structured directory to hold the ready-to-run applet files
+        mkdir -p cpanel_deploy
+        
+        # Copy compiled static files and server.cjs bundle
+        cp -r dist cpanel_deploy/
+        
+        # Copy Passenger launcher, root htaccess, and configuration files
+        cp app.js cpanel_deploy/
+        cp .htaccess cpanel_deploy/
+        cp package.json cpanel_deploy/
+        
+        echo "[CI] Successfully compiled and prepared the payload inside ./cpanel_deploy/"
+
+    - name: Sync files to cPanel via FTP
+      uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+      with:
+        server: ${{ secrets.FTP_SERVER }}
+        username: ${{ secrets.FTP_USERNAME }}
+        password: ${{ secrets.FTP_PASSWORD }}
+        # Uploads only the prepared, clean deployment files
+        local-dir: ./cpanel_deploy/
+        server-dir: ./ # Placed inside the directory your FTP account points to
+

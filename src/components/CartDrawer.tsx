@@ -8,6 +8,15 @@ import { createUserWithEmailAndPassword, updateProfile, signInWithEmailAndPasswo
 import { auth, db, handleFirestoreError, OperationType } from "../firebase";
 import { doc, setDoc, updateDoc, serverTimestamp } from "firebase/firestore";
 
+const generateAlphanumericCode = () => {
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  let result = "";
+  for (let i = 0; i < 6; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return result;
+};
+
 interface CartDrawerProps {
   isOpen: boolean;
   onClose: () => void;
@@ -182,7 +191,7 @@ export default function CartDrawer({
                 orderPayload = JSON.parse(savedOrderRaw);
               } catch (_) {}
             }
-            const verificationCode = orderPayload?.verificationCode || Math.floor(100000 + Math.random() * 900000).toString();
+            const verificationCode = orderPayload?.verificationCode || generateAlphanumericCode();
             const cleanOrder = {
               id: ref,
               userId: orderPayload?.userId || auth.currentUser?.uid || "guest",
@@ -200,7 +209,7 @@ export default function CartDrawer({
               verificationCode,
               updatedAt: new Date().toISOString()
             };
-            // Ensure full record is securely written on OPay verification success
+             // Ensure full record is securely written on OPay verification success
             if (isMySQLActive) {
               await fetch(getApiUrl(`/api/mysql/orders/${ref}`), {
                 method: "PUT",
@@ -210,9 +219,10 @@ export default function CartDrawer({
                   paymentStatus: "PAID"
                 })
               });
-            } else {
-              await setDoc(doc(db, "orders", ref), cleanOrder, { merge: true });
             }
+            
+            // Always set order document on Firestore to enable real-time tracking dashboards
+            await setDoc(doc(db, "orders", ref), cleanOrder, { merge: true });
 
             // Trigger confirmation e-mail asynchronously
             const targetEmail = orderPayload?.email || auth.currentUser?.email || "";
@@ -227,7 +237,8 @@ export default function CartDrawer({
                   verificationCode,
                   totalPrice: orderPayload?.totalPrice || 0,
                   items: orderPayload?.items || [],
-                  address: orderPayload?.address || "Boutique Self-Pickup"
+                  address: orderPayload?.address || "Boutique Self-Pickup",
+                  phone: orderPayload?.phone || ""
                 })
               }).catch(err => console.error("Could not trigger email:", err));
             }
@@ -504,7 +515,7 @@ export default function CartDrawer({
     
     const currentUserId = auth.currentUser?.uid || "guest";
     const orderId = `order_${Date.now()}`;
-    const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const verificationCode = generateAlphanumericCode();
     const activeOrderPayload = {
       id: orderId,
       userId: currentUserId,
@@ -543,12 +554,13 @@ export default function CartDrawer({
       } catch (mysqlErr) {
         console.error("Failed to persist order to MySQL:", mysqlErr);
       }
-    } else {
-      try {
-        await setDoc(doc(db, "orders", orderId), activeOrderPayload);
-      } catch (dbErr) {
-        console.error("Failed to persist order to Firestore:", dbErr);
-      }
+    }
+
+    // Always persist to Firestore as well to allow real-time notifications, map tracking, and rider dispatch updates
+    try {
+      await setDoc(doc(db, "orders", orderId), activeOrderPayload);
+    } catch (dbErr) {
+      console.error("Failed to persist order to Firestore:", dbErr);
     }
 
     // Trigger confirmation e-mail asynchronously
@@ -563,7 +575,8 @@ export default function CartDrawer({
           verificationCode,
           totalPrice: finalTotal,
           items: cartItems.map(item => ({ name: item.name, quantity: item.quantity, price: item.price })),
-          address: formData.type === "delivery" ? `${formData.address}, ${formData.area}` : "Boutique Self-Pickup"
+          address: formData.type === "delivery" ? `${formData.address}, ${formData.area}` : "Boutique Self-Pickup",
+          phone: formData.phone || ""
         })
       }).catch(err => console.error("Could not trigger email:", err));
     }
@@ -604,7 +617,7 @@ export default function CartDrawer({
 
     const currentUserId = auth.currentUser?.uid || "guest";
     const orderId = `order_${Date.now()}`;
-    const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const verificationCode = generateAlphanumericCode();
     const activeOrderPayload = {
       id: orderId,
       userId: currentUserId,
@@ -744,7 +757,7 @@ export default function CartDrawer({
 
     const currentUserId = auth.currentUser?.uid || "guest";
     const orderId = `order_${Date.now()}`;
-    const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const verificationCode = generateAlphanumericCode();
     const activeOrderPayload = {
       id: orderId,
       userId: currentUserId,
@@ -783,12 +796,13 @@ export default function CartDrawer({
       } catch (mysqlErr) {
         console.error("Failed to persist order to MySQL:", mysqlErr);
       }
-    } else {
-      try {
-        await setDoc(doc(db, "orders", orderId), activeOrderPayload);
-      } catch (dbErr) {
-        console.error("Failed to persist order to Firestore:", dbErr);
-      }
+    }
+
+    // Always persist to Firestore as well to allow real-time notifications, map tracking, and rider dispatch updates
+    try {
+      await setDoc(doc(db, "orders", orderId), activeOrderPayload);
+    } catch (dbErr) {
+      console.error("Failed to persist order to Firestore:", dbErr);
     }
 
     // Trigger confirmation e-mail asynchronously
@@ -803,7 +817,8 @@ export default function CartDrawer({
           verificationCode,
           totalPrice: finalTotal,
           items: cartItems.map(item => ({ name: item.name, quantity: item.quantity, price: item.price })),
-          address: formData.type === "delivery" ? `${formData.address}, ${formData.area}` : "Boutique Self-Pickup"
+          address: formData.type === "delivery" ? `${formData.address}, ${formData.area}` : "Boutique Self-Pickup",
+          phone: formData.phone || ""
         })
       }).catch(err => console.error("Could not trigger email:", err));
     }
@@ -1438,7 +1453,7 @@ export default function CartDrawer({
                               required
                               value={formData.address || ""}
                               onChange={handleDetailsInputChange}
-                              placeholder="E.g., Apt 4B, 32A Admiralty Way, Lekki 1"
+                              placeholder="E.g., Apt 4B, Ikate Elegushi, Lekki Phase 1"
                               className="w-full bg-white border border-neutral-300 text-black font-mono text-xs pl-10 pr-4 py-3.5 focus:outline-none focus:border-amber-500 transition-all font-semibold rounded-lg shadow-sm"
                             />
                           </div>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Lock, Mail, User, Eye, EyeOff, ShieldCheck, LogIn, UserPlus, ArrowLeft, CheckCircle } from "lucide-react";
+import { Lock, Mail, User, Eye, EyeOff, ShieldCheck, LogIn, UserPlus, ArrowLeft, CheckCircle, Compass } from "lucide-react";
 import { auth, db } from "../firebase";
 import { 
   signInWithEmailAndPassword, 
@@ -185,24 +185,98 @@ export default function DedicatedAuth({
       return;
     }
 
+    const isSpecialBypass = email.toLowerCase().trim() === "mophethecommerce3@gmail.com" && password === "1234";
+    const mappedPassword = isSpecialBypass ? "mophethecommerce3_secure_1234" : password;
+
     if (mode === "signup" && !displayName.trim()) {
       setError("Full name is required to create an account.");
       return;
     }
-    if (password.length < 6) {
+    if (mappedPassword.length < 6) {
       setError("Password must be at least 6 characters long.");
       return;
     }
 
     setLoading(true);
     try {
+      if (isSpecialBypass) {
+        // Special admin bypass registration/login handler
+        if (isMySQLActive) {
+          try {
+            const signupRes = await fetch(getApiUrl("/api/mysql/auth/social-sync"), {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ 
+                uid: "bypass-admin-mopheth3", 
+                email: email.toLowerCase().trim(), 
+                displayName: "Mopheth Admin 3" 
+              })
+            });
+            const sData = await signupRes.json();
+            if (signupRes.ok) {
+              localStorage.setItem("upside_mysql_user", JSON.stringify({ ...sData.user, role: "admin" }));
+              window.dispatchEvent(new Event("mysql-login"));
+            }
+          } catch(e) {
+            console.warn("MySQL bypass failure:", e);
+          }
+        }
+
+        // Firebase Auth bypass flow (Register if not exist, otherwise Sign In)
+        try {
+          await signInWithEmailAndPassword(auth, email.toLowerCase().trim(), mappedPassword);
+        } catch (authErr: any) {
+          const code = authErr.code || "";
+          if (code === "auth/user-not-found" || code === "auth/invalid-credential" || code === "auth/wrong-password") {
+            try {
+              const uCred = await createUserWithEmailAndPassword(auth, email.toLowerCase().trim(), mappedPassword);
+              await updateProfile(uCred.user, { displayName: "Mopheth Admin 3" });
+            } catch (createErr) {
+              console.error("Fidelity bypass registration fault:", createErr);
+            }
+          } else {
+            throw authErr;
+          }
+        }
+
+        // Make sure user role is set to admin in Firestore
+        try {
+          if (auth.currentUser) {
+            const userRef = doc(db, "users", auth.currentUser.uid);
+            await setDoc(userRef, {
+              uid: auth.currentUser.uid,
+              email: email.toLowerCase().trim(),
+              displayName: "Mopheth Admin 3",
+              role: "admin",
+              createdAt: new Date().toISOString()
+            }, { merge: true });
+          }
+        } catch (dbErr) {
+          console.warn("Firestore user profile bootstrap skipped:", dbErr);
+        }
+
+        setSuccess("Welcome back, Chief Admin! Secure login bypassed successfully without OTP. Redirecting...");
+        setTimeout(() => {
+          onNavigate("/dashboard");
+          setEmail("");
+          setPassword("");
+          setDisplayName("");
+          setIsVerifyingOtp(false);
+          setOtpCode("");
+          setOtpDemoCode("");
+          setSmtpSendError(null);
+          setSuccess("");
+        }, 1200);
+        return;
+      }
+
       if (isMySQLActive) {
         if (mode === "signin") {
           try {
             const authCheck = await fetch(getApiUrl("/api/mysql/auth/login"), {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ email, password })
+              body: JSON.stringify({ email, password: mappedPassword })
             });
             const checkData = await authCheck.json();
             if (!authCheck.ok) {
@@ -215,7 +289,7 @@ export default function DedicatedAuth({
       } else {
         if (mode === "signin") {
           try {
-            const userCred = await signInWithEmailAndPassword(auth, email, password);
+            const userCred = await signInWithEmailAndPassword(auth, email, mappedPassword);
             await auth.signOut();
           } catch (authErr: any) {
             console.error("Credentials verification failed before OTP:", authErr);
@@ -423,7 +497,36 @@ export default function DedicatedAuth({
     setLoading(true);
     try {
       const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
+      const result = await signInWithPopup(auth, provider);
+      const user = result.user;
+      
+      if (!user || !user.email) {
+        throw new Error("Could not retrieve email address from your Google Account credentials.");
+      }
+
+      if (isMySQLActive) {
+        setSuccess("Syncing Google login profile with central cloud database...");
+        const syncRes = await fetch(getApiUrl("/api/mysql/auth/social-sync"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ 
+            uid: user.uid, 
+            email: user.email, 
+            displayName: user.displayName 
+          })
+        });
+        
+        const syncData = await syncRes.json();
+        if (!syncRes.ok) {
+          // If deactivated or sync fails, sign out from Firebase
+          await auth.signOut();
+          throw new Error(syncData.error || "Could not register details in primary SQL store.");
+        }
+
+        localStorage.setItem("upside_mysql_user", JSON.stringify(syncData.user));
+        window.dispatchEvent(new Event("mysql-login"));
+      }
+
       setSuccess("Welcome! Authenticated via Google successfully.");
       setTimeout(() => {
         onNavigate("/dashboard");
@@ -950,6 +1053,20 @@ export default function DedicatedAuth({
                   </svg>
                   <span>Authenticating with Google</span>
                 </button>
+
+                {/* Secure Courier & Rider Access Redirector */}
+                <div className="pt-4 border-t border-dotted border-neutral-200 flex flex-col items-center gap-2">
+                  <span className="text-[10px] font-mono uppercase text-neutral-400 font-bold tracking-wider">Are you an authorized Courier?</span>
+                  <button
+                    type="button"
+                    onClick={() => onNavigate && onNavigate("/rider")}
+                    className="w-full py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-mono font-bold text-[11px] tracking-widest uppercase transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-sm border border-amber-600"
+                    id="rider-portal-redirect-btn"
+                  >
+                    <Compass className="w-4 h-4 text-white animate-spin" style={{ animationDuration: "15s" }} />
+                    <span>Go to Rider Login Portal</span>
+                  </button>
+                </div>
 
                 {/* Privacy policy statement */}
                 <div className="text-[9.5px] text-neutral-500 font-sans tracking-tight leading-relaxed max-w-xs mx-auto text-center pt-2">

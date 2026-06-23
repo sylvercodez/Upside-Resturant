@@ -14,7 +14,7 @@ import { deliveryRouter } from "./routes/delivery.js";
 mapEnvVariables();
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
 
@@ -162,9 +162,17 @@ async function serveApp() {
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Express server executing on http://0.0.0.0:${PORT}`);
-  });
+  if (typeof PORT === "string" && (PORT.startsWith("/") || PORT.startsWith("\\"))) {
+    // Unix Socket pipe used by cPanel Passenger Phusion
+    app.listen(PORT, () => {
+      console.log(`Express server running on Passenger unix socket: ${PORT}`);
+    });
+  } else {
+    const bindPort = typeof PORT === "string" ? parseInt(PORT, 10) : PORT;
+    app.listen(bindPort, "0.0.0.0", () => {
+      console.log(`Express server executing on http://0.0.0.0:${bindPort}`);
+    });
+  }
 }
 
 serveApp();

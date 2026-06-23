@@ -1064,11 +1064,40 @@ export default function DedicatedDashboard({
     }
   };
 
+  // Handle deleting database user profile completely
+  const handleDeleteUserProfile = async (userId: string) => {
+    if (userId === currentUser?.uid) {
+      alert("Self deletion is locked to prevent administrative lockout.");
+      return;
+    }
+    if (!window.confirm("WARNING: Are you absolutely sure you want to permanently delete this user's profile database entry? This action is permanent and cannot be undone.")) {
+      return;
+    }
+    try {
+      const userRef = doc(db, "users", userId);
+      await deleteDoc(userRef);
+      alert("User profile permanently deleted from the database.");
+    } catch (e: any) {
+      console.error("User profile deletion failed:", e);
+      alert(`Failed to delete user profile: ${e.message}`);
+    }
+  };
+
   // Handle setting order progress state
   const handleSetOrderStatus = async (orderId: string, statusText: string) => {
     try {
       const orderRef = doc(db, "orders", orderId);
-      await updateDoc(orderRef, { status: statusText });
+      await updateDoc(orderRef, { status: statusText, updatedAt: new Date().toISOString() });
+
+      // Trigger server-side ERP update-status which emails the user and logs activity to the admin
+      fetch(getApiUrl("/api/delivery/orders/update-status"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          orderId,
+          status: statusText
+        })
+      }).catch(err => console.error("Could not dispatch status update ERP logs:", err));
     } catch (e: any) {
       console.error("Order status shift failed:", e);
       alert(`Could not transition order progress: ${e.message}`);
@@ -2057,6 +2086,12 @@ export default function DedicatedDashboard({
                                   }`}
                                 >
                                   {usr.disabled ? "Enable" : "Suspend"}
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteUserProfile(usr.id)}
+                                  className="px-2 py-1 text-[8.5px] uppercase font-bold border border-red-900/50 text-red-400 bg-red-950/15 hover:bg-red-900 hover:text-white transition-colors cursor-pointer"
+                                >
+                                  Delete ✕
                                 </button>
                               </td>
                               <td className="p-3.5 text-center">

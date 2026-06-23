@@ -736,6 +736,77 @@ mysqlRouter.post("/auth/login", async (req: any, res: any) => {
   }
 });
 
+// 5bb. MySQL Social/Google Auth Sync
+mysqlRouter.post("/auth/social-sync", async (req: any, res: any) => {
+  try {
+    const { uid, email, displayName } = req.body;
+    if (!uid || !email) {
+      return res.status(400).json({ error: "Google credentials UID and Email are required." });
+    }
+
+    const emailLower = email.toLowerCase().trim();
+    const cleanName = displayName ? displayName.trim() : emailLower.split("@")[0];
+
+    // Check if user already exists
+    const records: any[] = await querySql(
+      "SELECT * FROM users WHERE uid = ? OR LOWER(email) = ?", 
+      [uid, emailLower]
+    );
+
+    let user: any = null;
+
+    if (records && records.length > 0) {
+      user = records[0];
+      if (user.disabled || user.disabled === 1) {
+        return res.status(403).json({ error: "Your user account has been disabled by the system administrator." });
+      }
+
+      // If existing user has different UID (e.g. registered with email first, now logging in with same email via Google)
+      // or if displayName changed, let's update it.
+      if (user.uid !== uid) {
+        await querySql("UPDATE users SET uid = ? WHERE email = ?", [uid, emailLower]);
+        user.uid = uid;
+      }
+    } else {
+      // Create new user profile in MySQL
+      const isAdminEmail = 
+        emailLower === "tosinotenaike3@gmail.com" || 
+        emailLower === "tobi@gmail.com" || 
+        emailLower === "mophethecommerce@gmail.com" ||
+        emailLower.includes("mophethecommerce");
+      const role = isAdminEmail ? "admin" : "user";
+
+      await querySql(
+        "INSERT INTO users (uid, email, displayName, role, password_hash, disabled, createdAt) VALUES (?, ?, ?, ?, NULL, 0, ?)",
+        [uid, emailLower, cleanName, role, new Date().toISOString()]
+      );
+
+      user = {
+        uid,
+        email: emailLower,
+        displayName: cleanName,
+        role,
+        disabled: false
+      };
+    }
+
+    return res.json({
+      success: true,
+      user: {
+        uid: user.uid,
+        email: user.email,
+        displayName: user.displayName || user.email.split("@")[0],
+        role: user.role || "user",
+        disabled: false
+      }
+    });
+
+  } catch (err: any) {
+    console.error("[MYSQL AUTH SOCIAL SYNC ERROR]:", err);
+    return res.status(500).json({ error: err.message || "Social authentication sync failed." });
+  }
+});
+
 // 5c. Menus Endpoint Definitions
 mysqlRouter.get("/menus", async (req: any, res: any) => {
   try {
@@ -897,6 +968,34 @@ mysqlRouter.get("/orders", async (req: any, res: any) => {
     });
 
     return res.json(orders);
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// 5f'. Get Single Order by exact ID
+mysqlRouter.get("/orders/:id", async (req: any, res: any) => {
+  try {
+    const { id } = req.params;
+    const rows = await querySql("SELECT * FROM orders WHERE id = ?", [id]);
+    
+    if (!rows || rows.length === 0) {
+      return res.status(404).json({ error: "Order not found in MySQL database." });
+    }
+    
+    const r = rows[0];
+    let parsedItems = [];
+    try {
+      parsedItems = typeof r.items === "string" ? JSON.parse(r.items) : (r.items || []);
+    } catch (_) {
+      parsedItems = [];
+    }
+    
+    return res.json({
+      ...r,
+      items: parsedItems,
+      totalPrice: parseFloat(r.totalPrice || "0")
+    });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }

@@ -225,15 +225,22 @@ service cloud.firestore {
                     );
     }
 
+    // Rules for Riders Collection
+    match /riders/{riderId} {
+      allow read: if true;
+      allow write: if isAdmin() || isSystem();
+    }
+
     // Orders Collection Rules
     match /orders/{orderId} {
-      // Standard users can list/get their own orders (optimized, no exists/get lookups)
-      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
-      allow get: if isSignedIn() && resource.data.userId == request.auth.uid;
+      // Allow anyone with the exact Order ID to fetch and track it (guest order tracking)
+      allow get: if true;
 
-      // Sales/Admin staff can list/get all orders
+      // Standard users can list their own orders (optimized, no exists/get lookups)
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+
+      // Sales/Admin staff can list all orders
       allow list: if isSales();
-      allow get: if isSales();
       
       // Allow creation of order if the creator is the owner and the payload conforms to valid Order schemas
       allow create: if isSystem() || (
@@ -243,13 +250,17 @@ service cloud.firestore {
                     && isValidOrder(request.resource.data)
                     );
 
-      // Allow updates to own orders, or admin/sales pipeline updates (like cooking stages)
+      // Allow updates to own orders, or admin/sales pipeline updates,
+      // as well as unauthenticated updates by courier containing ONLY status and tracking coordinates
       allow update: if isSystem() || (
                     isSignedIn()
                     && (
                       (resource.data.userId == request.auth.uid && request.resource.data.userId == request.auth.uid && isValidOrder(request.resource.data))
                       || isSales()
                     )
+                    ) || (
+                      // Unauthenticated rider can only update status, updatedAt, and tracking coordinates
+                      request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt', 'riderLatitude', 'riderLongitude', 'riderLastTrackingTime'])
                     );
 
       // Admins can delete orders if necessary, standard users can delete their own if delivered

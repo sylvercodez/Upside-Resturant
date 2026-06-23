@@ -238,6 +238,20 @@
         }
       },
       "required": ["id", "name", "fee"]
+    },
+    "Rider": {
+      "title": "Rider",
+      "description": "Logistics dispatch rider profile with credentials and status",
+      "type": "object",
+      "properties": {
+        "fullName": { "type": "string" },
+        "phoneNumber": { "type": "string" },
+        "username": { "type": "string" },
+        "password": { "type": "string" },
+        "email": { "type": "string" },
+        "active": { "type": "boolean" }
+      },
+      "required": ["fullName", "phoneNumber", "username", "password", "active"]
     }
   },
   "firestore": {
@@ -276,6 +290,10 @@
     "analytics_events/{eventId}": {
       "schema": "AnalyticsEvent",
       "description": "Central collection housing user engagement log entries and conversion metrics"
+    },
+    "riders/{riderId}": {
+      "schema": "Rider",
+      "description": "Logistics dispatch rider credential accounts and active status toggles"
     }
   }
 }

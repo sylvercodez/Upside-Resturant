@@ -40,8 +40,8 @@ export default function Header({
       <div className="bg-neutral-950 border-b border-neutral-800 px-4 py-2.5 text-center text-[11px] text-neutral-300 font-mono tracking-wider flex items-center justify-between gap-4">
         <div className="flex items-center gap-1.5 shrink-0">
           <MapPin className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
-          <span className="hidden sm:inline">32A, Admiralty Way, Lekki Phase 1, Lagos</span>
-          <span className="inline sm:hidden">Lekki Phase 1, Lagos</span>
+          <span className="hidden sm:inline">CFRW+6W5, Ikate Elegushi, Lekki, Lagos</span>
+          <span className="inline sm:hidden">Ikate Elegushi, Lekki</span>
         </div>
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-1.5 font-sans">

@@ -73,7 +73,7 @@ export default function HomeReservation() {
                 </div>
                 <div>
                   <h4 className="text-xs font-mono font-bold text-white uppercase tracking-wider">Lekki Sanctuary Location</h4>
-                  <p className="text-xs text-neutral-400 font-light mt-0.5">Plot 12 Admiralty Way, Lekki Phase 1, Lagos</p>
+                  <p className="text-xs text-neutral-400 font-light mt-0.5">CFRW+6W5, Ikate Elegushi, Lekki, Lagos</p>
                 </div>
               </div>
 

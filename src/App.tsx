@@ -14,6 +14,9 @@ import DedicatedMenu from "./components/DedicatedMenu";
 import DedicatedExperience from "./components/DedicatedExperience";
 import DedicatedDashboard from "./components/DedicatedDashboard";
 import DedicatedAuth from "./components/DedicatedAuth";
+import DedicatedTrack from "./components/DedicatedTrack";
+import DedicatedLegal from "./components/DedicatedLegal";
+import DedicatedRiderDashboard from "./components/DedicatedRiderDashboard";
 import { CartItem, ShippingLocation, LAGOS_AREAS, getApiUrl } from "./types";
 import { MenuItem, MENU_ITEMS, Category, CATEGORIES } from "./data/menu";
 import { getBranding, auth, db } from "./firebase";
@@ -225,6 +228,7 @@ export default function App() {
           emailLower === "tosinotenaike3@gmail.com" || 
           emailLower === "tobi@gmail.com" || 
           emailLower === "mophethecommerce@gmail.com" ||
+          emailLower === "mophethecommerce3@gmail.com" ||
           emailLower.includes("mophethecommerce");
         const targetRole = isAdminEmail ? "admin" : "user";
         
@@ -304,10 +308,14 @@ export default function App() {
     if (hash === "#/dashboard" || path === "/dashboard") return "/dashboard";
     if (hash === "#/auth" || path === "/auth") return "/auth";
     if (hash === "#/cart" || path === "/cart") return "/cart";
+    if (hash === "#/track" || path === "/track") return "/track";
+    if (hash === "#/rider" || path === "/rider") return "/rider";
+    if (hash === "#/terms" || path === "/terms") return "/terms";
+    if (hash === "#/privacy" || path === "/privacy") return "/privacy";
     return "/";
   });
 
-  const activeView = currentPath === "/menu" ? "menu" : (currentPath === "/experience" ? "experience" : (currentPath === "/dashboard" ? "dashboard" : (currentPath === "/auth" ? "auth" : (currentPath === "/cart" ? "cart" : "landing"))));
+  const activeView = currentPath === "/menu" ? "menu" : (currentPath === "/experience" ? "experience" : (currentPath === "/dashboard" ? "dashboard" : (currentPath === "/auth" ? "auth" : (currentPath === "/cart" ? "cart" : (currentPath === "/track" ? "track" : (currentPath === "/rider" ? "rider" : (currentPath === "/terms" || currentPath === "/privacy" ? "legal" : "landing")))))));
 
   const handleNavigate = (path: string) => {
     window.history.pushState(null, "", path);
@@ -336,6 +344,14 @@ export default function App() {
         setCurrentPath("/auth");
       } else if (hash === "#/cart" || path === "/cart") {
         setCurrentPath("/cart");
+      } else if (hash === "#/track" || path === "/track") {
+        setCurrentPath("/track");
+      } else if (hash === "#/rider" || path === "/rider") {
+        setCurrentPath("/rider");
+      } else if (hash === "#/terms" || path === "/terms") {
+        setCurrentPath("/terms");
+      } else if (hash === "#/privacy" || path === "/privacy") {
+        setCurrentPath("/privacy");
       } else {
         setCurrentPath("/");
       }
@@ -675,21 +691,23 @@ export default function App() {
   const cartTotalQuantity = cartItems.reduce((acc, curr) => acc + curr.quantity, 0);
 
   return (
-    <div className="bg-black min-h-screen text-white select-none selection:bg-amber-500 selection:text-black antialiased">
+    <div className="bg-black min-h-screen text-white select-none selection:bg-amber-500 selection:text-black antialiased ">
       {/* Luxury Navigation Header */}
-      <Header
-        onOpenCart={() => handleNavigate("/cart")}
-        onScrollToElement={handleScrollToElement}
-        onOpenReservations={() => handleScrollToElement("home-reservation-section")}
-        cartCount={cartTotalQuantity}
-        favoritesCount={favorites.length}
-        branding={branding}
-        currentPath={currentPath}
-        onNavigate={handleNavigate}
-        currentUser={currentUser}
-        onAuthClick={() => handleNavigate("/auth")}
-        onLogout={handleLogout}
-      />
+      {activeView !== "rider" && (
+        <Header
+          onOpenCart={() => handleNavigate("/cart")}
+          onScrollToElement={handleScrollToElement}
+          onOpenReservations={() => handleScrollToElement("home-reservation-section")}
+          cartCount={cartTotalQuantity}
+          favoritesCount={favorites.length}
+          branding={branding}
+          currentPath={currentPath}
+          onNavigate={handleNavigate}
+          currentUser={currentUser}
+          onAuthClick={() => handleNavigate("/auth")}
+          onLogout={handleLogout}
+        />
+      )}
 
       {/* Conditionally mount Active page context */}
       {activeView === "landing" && (
@@ -809,27 +827,47 @@ export default function App() {
         </div>
       )}
 
+      {activeView === "track" && (
+        <DedicatedTrack
+          onBackToLobby={() => handleNavigate("/")}
+        />
+      )}
+
+      {activeView === "legal" && (
+        <DedicatedLegal
+          onBackToLobby={() => handleNavigate("/")}
+          initialTab={currentPath === "/privacy" ? "privacy" : "terms"}
+        />
+      )}
+
+      {activeView === "rider" && (
+        <DedicatedRiderDashboard />
+      )}
+
       {/* LUXURY COMPREHENSIVE FOOTER */}
-      {activeView !== "dashboard" && activeView !== "auth" && activeView !== "cart" && (
+      {activeView !== "dashboard" && activeView !== "auth" && activeView !== "cart" && activeView !== "rider" && (
         <Footer
           onScrollToElement={handleScrollToElement}
           onOpenReservations={() => handleScrollToElement("home-reservation-section")}
           branding={branding}
+          onNavigate={handleNavigate}
         />
       )}
 
       {/* MOBILE THUMB NAVIGATION CONTROLS */}
-      <BottomNav
-        onOpenCart={() => handleNavigate("/cart")}
-        onOpenReservations={() => handleScrollToElement("home-reservation-section")}
-        onScrollToElement={handleScrollToElement}
-        cartCount={cartTotalQuantity}
-        favoritesCount={favorites.length}
-        currentPath={currentPath}
-        onNavigate={handleNavigate}
-        currentUser={currentUser}
-        onAuthClick={() => handleNavigate("/auth")}
-      />
+      {activeView !== "rider" && (
+        <BottomNav
+          onOpenCart={() => handleNavigate("/cart")}
+          onOpenReservations={() => handleScrollToElement("home-reservation-section")}
+          onScrollToElement={handleScrollToElement}
+          cartCount={cartTotalQuantity}
+          favoritesCount={favorites.length}
+          currentPath={currentPath}
+          onNavigate={handleNavigate}
+          currentUser={currentUser}
+          onAuthClick={() => handleNavigate("/auth")}
+        />
+      )}
 
       {/* USER DISABLED GATEWAY BLOCK */}
       {userDisabled && (
