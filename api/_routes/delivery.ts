@@ -1,7 +1,7 @@
 import express from "express";
 import fs from "fs";
 import path from "path";
-import { getMailTransporter, getFromEmailAddress } from "../_utils/smtp.js";
+import { getMailTransporter, getFromEmailAddress } from "../utils/smtp.js";
 
 export const deliveryRouter = express.Router();
 
