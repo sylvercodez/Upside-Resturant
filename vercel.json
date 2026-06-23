@@ -4,12 +4,7 @@
   "outputDirectory": "dist",
   "functions": {
     "api/index.ts": {
-      "maxDuration": 15,
-      "includeFiles": "{api/_routes/**,api/routes/**,api/utils/**,api/middleware/**,firebase-applet-config.json}"
-    },
-    "api/!(*index.ts)": {
-      "memory": 1024,
-      "maxDuration": 1
+      "maxDuration": 15
     }
   },
   "rewrites": [
