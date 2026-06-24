@@ -674,7 +674,7 @@ export default function DedicatedAuth({
           <div 
             className="absolute inset-0 bg-cover bg-center transition-transform duration-[10000ms] ease-out group-hover:scale-105"
             style={{ 
-              backgroundImage: `url('https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&q=80&w=1200')` 
+              backgroundImage: `url('/src/assets/images/classic_restaurant_drinks_1782058509882.jpg')` 
             }}
           />
           {/* Rich Premium Overlay Gradients for absolute legibility */}

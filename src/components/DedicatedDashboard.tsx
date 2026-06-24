@@ -52,14 +52,8 @@ interface DedicatedDashboardProps {
 }
 
 const PRESET_IMAGES = [
-  { name: "Gourmet Burger", url: "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&q=80&w=800" },
-  { name: "Premium Steak", url: "https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&q=80&w=800" },
-  { name: "Charred Salmon", url: "https://images.unsplash.com/photo-1519708227418-c8fd9a32b7a2?auto=format&fit=crop&q=80&w=800" },
-  { name: "Fresh Pasta", url: "https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8?auto=format&fit=crop&q=80&w=800" },
-  { name: "Woodfired Pizza", url: "https://images.unsplash.com/photo-1628840042765-356cda07504e?auto=format&fit=crop&q=80&w=800" },
-  { name: "Artisanal Coffee", url: "https://images.unsplash.com/photo-1461023058943-07fcbe16d735?auto=format&fit=crop&q=80&w=800" },
-  { name: "Craft Cocktail", url: "https://images.unsplash.com/photo-1545438102-799c3991ffb2?auto=format&fit=crop&q=80&w=800" },
-  { name: "Heritage Appetizer", url: "https://images.unsplash.com/photo-1604329760661-e71dc83f8f26?auto=format&fit=crop&q=80&w=800" }
+  { name: "Classic Restaurant Drinks", url: "/src/assets/images/classic_restaurant_drinks_1782058509882.jpg" },
+  { name: "Gourmet Drinks Hero", url: "/src/assets/images/gourmet_drinks_hero_1782059009940.jpg" }
 ];
 
 export default function DedicatedDashboard({
@@ -1368,7 +1362,7 @@ export default function DedicatedDashboard({
         
         {/* Decorative image */}
         <img 
-          src="https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=1200&q=80" 
+          src="/src/assets/images/gourmet_drinks_hero_1782059009940.jpg" 
           alt="Dining banner background" 
           className="w-full h-full object-cover scale-105 filter blur-xs"
         />
@@ -2285,7 +2279,7 @@ export default function DedicatedDashboard({
                                 alt="Dynamic preview"
                                 className="w-12 h-12 object-cover border border-neutral-800 rounded-sm"
                                 onError={(e) => {
-                                  (e.target as any).src = "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&q=80&w=800";
+                                  (e.target as any).src = "/src/assets/images/classic_restaurant_drinks_1782058509882.jpg";
                                 }}
                               />
                               <div className="font-mono text-[9px] space-y-0.5 overflow-hidden flex-1">
@@ -2755,7 +2749,7 @@ export default function DedicatedDashboard({
                                 alt="Dynamic Upload Preview"
                                 className="w-full h-full object-cover"
                                 onError={(e) => {
-                                  (e.target as any).src = "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&q=80&w=800";
+                                  (e.target as any).src = "/src/assets/images/classic_restaurant_drinks_1782058509882.jpg";
                                 }}
                               />
                             </div>
