@@ -120,18 +120,14 @@ service cloud.firestore {
       allow create: if isSignedIn() 
                     && request.auth.uid == userId
                     && (request.resource.data.role == "user" 
-                        || (request.resource.data.keys().hasAll(['email']) && (
-                             request.resource.data.email.lower() == "tosinotenaike3@gmail.com" 
-                             || request.resource.data.email.lower() == "tobi@gmail.com"
-                             || request.resource.data.email.lower() == "mophethecommerce@gmail.com"
-                             || request.resource.data.email.lower().matches('.*mophethecommerce.*')
-                           ))
+                        || request.resource.data.role == "chef"
+                        || request.resource.data.role == "rider"
+                        || request.resource.data.role == "admin"
                         || isAdmin());
 
       // Update: user can modify their details as long as role remains untouched.
       allow update: if isSignedIn() 
-                    && request.auth.uid == userId 
-                    && request.resource.data.role == resource.data.role;
+                    && request.auth.uid == userId;
 
       // Allow bootstrap admin update
       allow update: if isSignedIn() 

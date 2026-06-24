@@ -83,15 +83,50 @@ export default function DedicatedAuth({
   // Load SMTP and MySQL configured status
   useEffect(() => {
     fetch(getApiUrl("/api/mysql/status"))
-      .then(res => res.json())
+      .then(async (res) => {
+        const contentType = res.headers.get("content-type");
+        if (contentType && contentType.includes("application/json")) {
+          return res.json();
+        }
+        return { connected: false };
+      })
       .then(data => {
-        if (data.connected) {
+        if (data && data.connected) {
           setIsMySQLActive(true);
           console.log("SQL Engine Active inside login portal.");
+        } else {
+          setIsMySQLActive(false);
         }
       })
-      .catch((e) => console.log("MySQL connection check skipped:", e.message));
+      .catch((e) => {
+        console.log("MySQL connection check skipped:", e.message);
+        setIsMySQLActive(false);
+      });
   }, []);
+
+  const safeJson = async (res: Response, defaultErrorMsg: string): Promise<any> => {
+    const contentType = res.headers.get("content-type");
+    if (contentType && contentType.includes("application/json")) {
+      return res.json();
+    }
+    const text = await res.text();
+    let excerpt = text.trim();
+    if (excerpt.includes("<pre>")) {
+      const preMatch = excerpt.match(/<pre>([\s\S]*?)<\/pre>/i);
+      if (preMatch && preMatch[1]) {
+        excerpt = preMatch[1].trim();
+      }
+    } else if (excerpt.includes("<title>")) {
+      const titleMatch = excerpt.match(/<title>([\s\S]*?)<\/title>/i);
+      if (titleMatch && titleMatch[1]) {
+        excerpt = `Page Title: ${titleMatch[1].trim()}`;
+      }
+    }
+    if (excerpt.length > 250) {
+      excerpt = excerpt.substring(0, 250) + "...";
+    }
+    throw new Error(`Server returned non-JSON error (status ${res.status}). Details: ${excerpt || defaultErrorMsg}`);
+  };
 
   // Automatically redirect if already logged in
   useEffect(() => {
@@ -212,7 +247,7 @@ export default function DedicatedAuth({
                 displayName: "Mopheth Admin 3" 
               })
             });
-            const sData = await signupRes.json();
+            const sData = await safeJson(signupRes, "Bypass registration failed.");
             if (signupRes.ok) {
               localStorage.setItem("upside_mysql_user", JSON.stringify({ ...sData.user, role: "admin" }));
               window.dispatchEvent(new Event("mysql-login"));
@@ -278,7 +313,7 @@ export default function DedicatedAuth({
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ email, password: mappedPassword })
             });
-            const checkData = await authCheck.json();
+            const checkData = await safeJson(authCheck, "Incorrect email or password combination.");
             if (!authCheck.ok) {
               throw new Error(checkData.error || "Incorrect email or password combination.");
             }
@@ -305,30 +340,7 @@ export default function DedicatedAuth({
         body: JSON.stringify({ target: email })
       });
       
-      const contentType = res.headers.get("content-type");
-      let data: any;
-      if (contentType && contentType.includes("application/json")) {
-        data = await res.json();
-      } else {
-        const text = await res.text();
-        let excerpt = text.trim();
-        // Clean and parse HTML page errors to extract clean, precise developer diagnostic reports
-        if (excerpt.includes("<pre>")) {
-          const preMatch = excerpt.match(/<pre>([\s\S]*?)<\/pre>/i);
-          if (preMatch && preMatch[1]) {
-            excerpt = preMatch[1].trim();
-          }
-        } else if (excerpt.includes("<title>")) {
-          const titleMatch = excerpt.match(/<title>([\s\S]*?)<\/title>/i);
-          if (titleMatch && titleMatch[1]) {
-            excerpt = `Page Title: ${titleMatch[1].trim()}`;
-          }
-        }
-        if (excerpt.length > 350) {
-          excerpt = excerpt.substring(0, 350) + "...";
-        }
-        throw new Error(`Server returned non-JSON error (status ${res.status}). Diagnostic details: ${excerpt || "No response body returned from server."}`);
-      }
+      const data = await safeJson(res, "Failed to trigger verification code dispatcher.");
       
       if (!res.ok) {
         throw new Error(data.error || "Failed to trigger verification code dispatcher.");
@@ -370,29 +382,7 @@ export default function DedicatedAuth({
         body: JSON.stringify({ target: email, code: otpCode })
       });
       
-      const contentType = res.headers.get("content-type");
-      let data: any;
-      if (contentType && contentType.includes("application/json")) {
-        data = await res.json();
-      } else {
-        const text = await res.text();
-        let excerpt = text.trim();
-        if (excerpt.includes("<pre>")) {
-          const preMatch = excerpt.match(/<pre>([\s\S]*?)<\/pre>/i);
-          if (preMatch && preMatch[1]) {
-            excerpt = preMatch[1].trim();
-          }
-        } else if (excerpt.includes("<title>")) {
-          const titleMatch = excerpt.match(/<title>([\s\S]*?)<\/title>/i);
-          if (titleMatch && titleMatch[1]) {
-            excerpt = `Page Title: ${titleMatch[1].trim()}`;
-          }
-        }
-        if (excerpt.length > 350) {
-          excerpt = excerpt.substring(0, 350) + "...";
-        }
-        throw new Error(`OTP Verification server returned non-JSON error (status ${res.status}). Diagnostic details: ${excerpt || "No response body returned."}`);
-      }
+      const data = await safeJson(res, "The inputted 6-digit OTP code is incorrect. Try again.");
       
       if (!res.ok) {
         throw new Error(data.error || "The inputted 6-digit OTP code is incorrect. Try again.");
@@ -408,7 +398,7 @@ export default function DedicatedAuth({
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ email, password, displayName })
           });
-          const sData = await sRes.json();
+          const sData = await safeJson(sRes, "Failed registration inside cPanel MySQL Database.");
           if (!sRes.ok) {
             throw new Error(sData.error || "Failed registration inside cPanel MySQL Database.");
           }
@@ -421,7 +411,7 @@ export default function DedicatedAuth({
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ email, password })
           });
-          const lData = await lRes.json();
+          const lData = await safeJson(lRes, "Authentication failed inside cPanel MySQL Database.");
           if (!lRes.ok) {
             throw new Error(lData.error || "Authentication failed inside cPanel MySQL Database.");
           }
@@ -516,7 +506,7 @@ export default function DedicatedAuth({
           })
         });
         
-        const syncData = await syncRes.json();
+        const syncData = await safeJson(syncRes, "Could not register details in primary SQL store.");
         if (!syncRes.ok) {
           // If deactivated or sync fails, sign out from Firebase
           await auth.signOut();

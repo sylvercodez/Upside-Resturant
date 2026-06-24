@@ -167,7 +167,16 @@ export async function autoInitializeSchema(activePool: mysql.Pool): Promise<void
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
 
-  console.log("[MYSQL AUTO-INIT] Created all tables. Seeding static lists...");
+  // 8. Create otp_codes table
+  await activePool.execute(`
+    CREATE TABLE IF NOT EXISTS otp_codes (
+      target VARCHAR(255) PRIMARY KEY,
+      code VARCHAR(255) NOT NULL,
+      expiresAt BIGINT NOT NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  console.log("[MYSQL AUTO-INIT] Created all tables including OTP codes. Seeding static lists...");
 
   // Seed categories
   try {

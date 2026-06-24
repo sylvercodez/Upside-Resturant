@@ -2,11 +2,14 @@ import express from "express";
 import crypto from "crypto";
 import { getMailTransporter, getFromEmailAddress } from "../_utils/smtp.js";
 import { stripQuotes } from "../_utils/env.js";
+import { querySql } from "../_utils/mysqlDb.js";
 
-const activeOtps = new Map<string, { code: string; expiresAt: number }>();
 const OTP_SESSION_SALT = stripQuotes(process.env.OTP_SESSION_SALT || "UPSIDE_ROYAL_OTP_SECRET_COMPLEX_HASH_2026");
 
 export const otpRouter = express.Router();
+
+// Robust in-memory fallback store for environments without configured/active MySQL databases
+const fallbackOtps = new Map<string, { code: string; expiresAt: number }>();
 
 otpRouter.get("/status", (req, res) => {
   const smtpHost = process.env.VITE_SMTP_HOST || process.env.SMTP_HOST;
@@ -35,7 +38,15 @@ otpRouter.post("/request", async (req, res) => {
     const code = Math.floor(100000 + Math.random() * 900000).toString();
     const expiresAt = Date.now() + 5 * 60 * 1000; // 5 minutes validity
     
-    activeOtps.set(cleanTarget, { code, expiresAt });
+    try {
+      await querySql(
+        "INSERT INTO otp_codes (target, code, expiresAt) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE code = VALUES(code), expiresAt = VALUES(expiresAt)",
+        [cleanTarget, code, expiresAt]
+      );
+    } catch (dbErr) {
+      console.warn("[OTP SYSTEM] MySQL storage write failed, utilizing robust in-memory fallback:", dbErr);
+      fallbackOtps.set(cleanTarget, { code, expiresAt });
+    }
 
     // Dispatched console alert log for server console/verification
     console.log(`\n=================================================`);
@@ -269,7 +280,7 @@ otpRouter.post("/request", async (req, res) => {
   }
 });
 
-otpRouter.post("/verify", (req, res) => {
+otpRouter.post("/verify", async (req, res) => {
   try {
     const { target, code } = req.body || {};
     if (!target || !code) {
@@ -277,14 +288,37 @@ otpRouter.post("/verify", (req, res) => {
     }
 
     const cleanTarget = target.trim().toLowerCase();
-    const otpRecord = activeOtps.get(cleanTarget);
+    let otpRecord = null;
+    let usingFallback = false;
+
+    try {
+      const rows = await querySql("SELECT * FROM otp_codes WHERE target = ?", [cleanTarget]);
+      if (rows && rows.length > 0) {
+        otpRecord = rows[0];
+      }
+    } catch (dbErr) {
+      console.warn("[OTP SYSTEM] MySQL storage read failed, utilizing robust in-memory fallback:", dbErr);
+    }
+
+    if (!otpRecord) {
+      otpRecord = fallbackOtps.get(cleanTarget);
+      if (otpRecord) {
+        usingFallback = true;
+      }
+    }
 
     if (!otpRecord) {
       return res.status(400).json({ error: "No active verification sessions found. Please request a new OTP code." });
     }
 
     if (Date.now() > otpRecord.expiresAt) {
-      activeOtps.delete(cleanTarget);
+      if (usingFallback) {
+        fallbackOtps.delete(cleanTarget);
+      } else {
+        try {
+          await querySql("DELETE FROM otp_codes WHERE target = ?", [cleanTarget]);
+        } catch (_) {}
+      }
       return res.status(400).json({ error: "The OTP verification code has expired. Please request a new PIN code." });
     }
 
@@ -293,7 +327,13 @@ otpRouter.post("/verify", (req, res) => {
     }
 
     // Verification succeeded! Consume the code.
-    activeOtps.delete(cleanTarget);
+    if (usingFallback) {
+      fallbackOtps.delete(cleanTarget);
+    } else {
+      try {
+        await querySql("DELETE FROM otp_codes WHERE target = ?", [cleanTarget]);
+      } catch (_) {}
+    }
 
     // Derive a durable deterministic password hash based on target + secure production salt
     const passwordHash = crypto

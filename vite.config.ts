@@ -9,6 +9,11 @@ export default defineConfig(() => {
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),
+        'firebase/app': path.resolve(__dirname, 'src/mysql-client/app.ts'),
+        'firebase/auth': path.resolve(__dirname, 'src/mysql-client/auth.ts'),
+        'firebase/firestore': path.resolve(__dirname, 'src/mysql-client/firestore.ts'),
+        'firebase/app-check': path.resolve(__dirname, 'src/mysql-client/app-check.ts'),
+        'firebase/analytics': path.resolve(__dirname, 'src/mysql-client/analytics.ts'),
       },
     },
     server: {

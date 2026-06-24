@@ -1,124 +1,121 @@
-import path from "path";
-import fs from "fs";
-import admin from "firebase-admin";
-import { initializeApp as initClientApp } from "firebase/app";
-import { getFirestore as getClientFirestore, doc, getDoc, setDoc, updateDoc, serverTimestamp as clientServerTimestamp } from "firebase/firestore";
-import { stripQuotes } from "./env.js";
+// Backend database administrator router targeting MySQL
+import { querySql } from "./mysqlDb.js";
 
 class CustomCollectionReference {
-  constructor(private db: any, private pathStr: string) {}
+  constructor(private collectionName: string) {}
   
   doc(docId: string) {
-    return new CustomDocumentReference(this.db, this.pathStr, docId);
+    return new CustomDocumentReference(this.collectionName, docId);
   }
 }
 
 class CustomDocumentReference {
-  constructor(private db: any, private pathStr: string, private docId: string) {}
+  constructor(private collectionName: string, private docId: string) {}
 
   async get() {
-    const dRef = doc(this.db, this.pathStr, this.docId);
-    const snap = await getDoc(dRef);
-    return {
-      exists: snap.exists(),
-      data: () => snap.data()
-    };
+    try {
+      if (this.collectionName === "settings") {
+        const rows = await querySql("SELECT setting_value FROM settings WHERE setting_key = ?", [this.docId]);
+        if (rows && rows.length > 0) {
+          return { exists: true, data: () => JSON.parse(rows[0].setting_value) };
+        }
+        return { exists: false, data: () => null };
+      }
+      if (this.collectionName === "payments") {
+        const rows = await querySql("SELECT * FROM payments WHERE orderId = ? OR id = ?", [this.docId, this.docId]);
+        if (rows && rows.length > 0) {
+          return { exists: true, data: () => rows[0] };
+        }
+        return { exists: false, data: () => null };
+      }
+      if (this.collectionName === "orders") {
+        const rows = await querySql("SELECT * FROM orders WHERE id = ?", [this.docId]);
+        if (rows && rows.length > 0) {
+          const item = rows[0];
+          return {
+            exists: true,
+            data: () => ({
+              ...item,
+              cartItems: typeof item.cartItems === "string" ? JSON.parse(item.cartItems) : item.cartItems
+            })
+          };
+        }
+        return { exists: false, data: () => null };
+      }
+    } catch (err) {
+      console.warn(`[MySQL dbAdmin Mimic get] Error on ${this.collectionName}/${this.docId}:`, err);
+    }
+    return { exists: false, data: () => null };
   }
 
   async set(data: any, options?: any) {
-    const dRef = doc(this.db, this.pathStr, this.docId);
-    const payload = this.sanitize({
-      ...data,
-      systemWriteKey: "f8d3c501-4be5-4841-a6ab-cb5e1d4d03e9"
-    });
-    return await setDoc(dRef, payload, options);
+    try {
+      if (this.collectionName === "settings") {
+        const valStr = JSON.stringify(data);
+        await querySql(
+          "INSERT INTO settings (setting_key, setting_value) VALUES (?, ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)",
+          [this.docId, valStr]
+        );
+      } else if (this.collectionName === "payments") {
+        const { orderId, amount, status, reference, method, currency, channel, description } = data;
+        await querySql(
+          `INSERT INTO payments (id, orderId, amount, status, reference, method, currency, channel, description, createdAt, updatedAt)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON DUPLICATE KEY UPDATE status=VALUES(status), updatedAt=VALUES(updatedAt)`,
+          [this.docId, orderId || this.docId, amount || 0, status || "pending", reference || "", method || "opay", currency || "NGN", channel || "", description || "", new Date().toISOString(), new Date().toISOString()]
+        );
+      } else if (this.collectionName === "orders") {
+        const { customerName, email, phone, type, address, area, paymentMethod, promoCode, customNotes, cartItems, itemsCount, totalAmount, status } = data;
+        const cartStr = typeof cartItems === "string" ? cartItems : JSON.stringify(cartItems || []);
+        await querySql(
+          `INSERT INTO orders (id, customerName, email, phone, type, address, area, paymentMethod, promoCode, customNotes, cartItems, itemsCount, totalAmount, status, createdAt, updatedAt)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON DUPLICATE KEY UPDATE status=VALUES(status), updatedAt=VALUES(updatedAt)`,
+          [this.docId, customerName, email, phone, type, address, area, paymentMethod, promoCode, customNotes, cartStr, itemsCount || 0, totalAmount || 0, status || "pending", new Date().toISOString(), new Date().toISOString()]
+        );
+      }
+    } catch (err) {
+      console.error(`[MySQL dbAdmin Mimic set] Error on ${this.collectionName}/${this.docId}:`, err);
+    }
   }
 
   async update(data: any) {
-    const dRef = doc(this.db, this.pathStr, this.docId);
-    const payload = this.sanitize({
-      ...data,
-      systemWriteKey: "f8d3c501-4be5-4841-a6ab-cb5e1d4d03e9"
-    });
-    return await updateDoc(dRef, payload);
-  }
-
-  private sanitize(obj: any): any {
-    if (!obj || typeof obj !== "object") return obj;
-    const copy = { ...obj };
-    for (const k of Object.keys(copy)) {
-      if (copy[k] && typeof copy[k] === "object") {
-        const constructorName = copy[k].constructor ? copy[k].constructor.name : null;
-        if (constructorName === "FieldValue" || copy[k]._methodName === "FieldValue.serverTimestamp") {
-          copy[k] = clientServerTimestamp();
-        } else {
-          copy[k] = this.sanitize(copy[k]);
+    try {
+      if (this.collectionName === "payments") {
+        let updates: string[] = [];
+        let params: any[] = [];
+        for (const [k, v] of Object.entries(data)) {
+          if (k === "status" || k === "updatedAt") {
+            updates.push(`${k} = ?`);
+            params.push(v);
+          }
+        }
+        if (updates.length > 0) {
+          params.push(this.docId);
+          await querySql(`UPDATE payments SET ${updates.join(", ")} WHERE orderId = ? OR id = ?`, [...params, this.docId]);
+        }
+      } else if (this.collectionName === "orders") {
+        let updates: string[] = [];
+        let params: any[] = [];
+        for (const [k, v] of Object.entries(data)) {
+          if (["status", "customerName", "email", "phone", "address", "assignedRiderId", "assignedRiderName", "assignedRiderPhone", "verificationCode", "updatedAt"].includes(k)) {
+            updates.push(`${k} = ?`);
+            params.push(v);
+          }
+        }
+        if (updates.length > 0) {
+          params.push(this.docId);
+          await querySql(`UPDATE orders SET ${updates.join(", ")} WHERE id = ?`, params);
         }
       }
+    } catch (err) {
+      console.error(`[MySQL dbAdmin Mimic update] Error on ${this.collectionName}/${this.docId}:`, err);
     }
-    return copy;
   }
 }
 
-export let dbAdmin: any = null;
-
-try {
-  let projectId = "gen-lang-client-0332471137";
-  let databaseId = "";
-  let config: any = null;
-
-  const configPath = path.join(process.cwd(), "firebase-applet-config.json");
-  if (fs.existsSync(configPath)) {
-    config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
-  } else {
-    config = {
-      projectId: stripQuotes(process.env.FIREBASE_PROJECT_ID || process.env.GCLOUD_PROJECT || "gen-lang-client-0332471137"),
-      apiKey: stripQuotes(process.env.FIREBASE_API_KEY || "AIzaSyBlIddU4ZP6QsC212vb__3AoMKH9MA-_1E"),
-      authDomain: stripQuotes(process.env.FIREBASE_AUTH_DOMAIN || "gen-lang-client-0332471137.firebaseapp.com"),
-      firestoreDatabaseId: stripQuotes(process.env.FIREBASE_DATABASE_ID || process.env.FIRESTORE_DB_NAME || "ai-studio-7ee29b67-2013-4587-a753-b479a6e19155"),
-      appId: stripQuotes(process.env.FIREBASE_APP_ID || "1:603064167629:web:81ee6a02fc18f423460d84"),
-      storageBucket: stripQuotes(process.env.FIREBASE_STORAGE_BUCKET || "gen-lang-client-0332471137.firebasestorage.app"),
-      messagingSenderId: stripQuotes(process.env.FIREBASE_MESSAGING_SENDER_ID || "603064167629")
-    };
+export const dbAdmin = {
+  collection(pathStr: string) {
+    return new CustomCollectionReference(pathStr);
   }
-
-  if (config) {
-    if (config.projectId) {
-      projectId = config.projectId;
-    }
-    if (config.firestoreDatabaseId) {
-      databaseId = config.firestoreDatabaseId;
-    }
-  }
-
-  try {
-    if (admin.apps.length === 0) {
-      admin.initializeApp({
-        projectId: projectId,
-        credential: admin.credential.applicationDefault()
-      });
-    }
-  } catch (credErr) {
-    if (admin.apps.length === 0) {
-      admin.initializeApp({
-        projectId: projectId
-      });
-    }
-  }
-
-  if (config) {
-    const clientApp = initClientApp(config);
-    const dbClient = getClientFirestore(clientApp, databaseId);
-    dbAdmin = {
-      collection(pathStr: string) {
-        return new CustomCollectionReference(dbClient, pathStr);
-      }
-    };
-    console.log("[FIREBASE CLIENT MIMIC] Hooked dbAdmin successfully from modular database service.");
-  } else {
-    console.warn("[FIREBASE CLIENT MIMIC] Config file not found. Falling back to default admin firestore.");
-    dbAdmin = admin.firestore();
-  }
-} catch (firebaseErr: any) {
-  console.error("[FIREBASE CLIENT MIMIC] Setup failed:", firebaseErr);
-}
+};

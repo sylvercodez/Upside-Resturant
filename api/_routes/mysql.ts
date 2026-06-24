@@ -355,11 +355,19 @@ mysqlRouter.post("/sync", async (req: any, res: any) => {
       };
     }
 
-    const { initializeApp } = await import("firebase/app");
-    const { getFirestore, getDocs, collection } = await import("firebase/firestore");
+    const { default: admin } = await import("firebase-admin");
 
-    const appInstance = initializeApp(firebaseConfig, "mysql-sync-app");
-    const fdb = getFirestore(appInstance, databaseId);
+    let appInstance;
+    try {
+      appInstance = admin.app("mysql-sync-admin");
+    } catch (_) {
+      appInstance = admin.initializeApp({
+        projectId: firebaseConfig.projectId
+      }, "mysql-sync-admin");
+    }
+
+    // Support databaseId in firebase-admin (passing databaseId to firestore() if defined)
+    const fdb = databaseId ? appInstance.firestore(databaseId) : appInstance.firestore();
 
     let usersSynced = 0;
     let ordersSynced = 0;
@@ -367,7 +375,7 @@ mysqlRouter.post("/sync", async (req: any, res: any) => {
 
     // A. Sync Users from Firestore to MySQL
     try {
-      const usersSnap = await getDocs(collection(fdb, "users"));
+      const usersSnap = await fdb.collection("users").get();
       for (const d of usersSnap.docs) {
         const u = d.data();
         await querySql(
@@ -384,7 +392,7 @@ mysqlRouter.post("/sync", async (req: any, res: any) => {
 
     // B. Sync Orders from Firestore to MySQL
     try {
-      const ordersSnap = await getDocs(collection(fdb, "orders"));
+      const ordersSnap = await fdb.collection("orders").get();
       for (const d of ordersSnap.docs) {
         const o = d.data();
         const itemsStr = typeof o.items === "string" ? o.items : JSON.stringify(o.items || []);
@@ -402,7 +410,7 @@ mysqlRouter.post("/sync", async (req: any, res: any) => {
 
     // C. Sync Payments from Firestore to MySQL
     try {
-      const paymentsSnap = await getDocs(collection(fdb, "payments"));
+      const paymentsSnap = await fdb.collection("payments").get();
       for (const d of paymentsSnap.docs) {
         const p = d.data();
         await querySql(
@@ -1124,3 +1132,86 @@ mysqlRouter.put("/users/:uid", async (req: any, res: any) => {
     return res.status(500).json({ error: err.message });
   }
 });
+
+// 5h. Single User Profile endpoints
+mysqlRouter.get("/users/:uid", async (req: any, res: any) => {
+  try {
+    const { uid } = req.params;
+    const rows = await querySql("SELECT uid, email, displayName, role, disabled, createdAt FROM users WHERE uid = ?", [uid]);
+    if (!rows || rows.length === 0) {
+      return res.status(404).json({ error: "User not found" });
+    }
+    const user = rows[0];
+    return res.json({
+      ...user,
+      disabled: user.disabled === 1 || user.disabled === true
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+mysqlRouter.post("/users/:uid", async (req: any, res: any) => {
+  try {
+    const { uid } = req.params;
+    const { email, displayName, role, disabled } = req.body;
+    
+    // Check if exists
+    const rows = await querySql("SELECT * FROM users WHERE uid = ?", [uid]);
+    if (rows && rows.length > 0) {
+      // Update
+      let updates: string[] = [];
+      let params: any[] = [];
+      if (email !== undefined) { updates.push("email = ?"); params.push(email.toLowerCase().trim()); }
+      if (displayName !== undefined) { updates.push("displayName = ?"); params.push(displayName.trim()); }
+      if (role !== undefined) { updates.push("role = ?"); params.push(role); }
+      if (disabled !== undefined) { updates.push("disabled = ?"); params.push(disabled ? 1 : 0); }
+      
+      if (updates.length > 0) {
+        params.push(uid);
+        await querySql(`UPDATE users SET ${updates.join(", ")} WHERE uid = ?`, params);
+      }
+    } else {
+      // Insert
+      const emailLower = email ? email.toLowerCase().trim() : "";
+      const cleanName = displayName ? displayName.trim() : emailLower.split("@")[0] || "User";
+      const userRole = role || "user";
+      await querySql(
+        "INSERT INTO users (uid, email, displayName, role, password_hash, disabled, createdAt) VALUES (?, ?, ?, ?, NULL, ?, ?)",
+        [uid, emailLower, cleanName, userRole, disabled ? 1 : 0, new Date().toISOString()]
+      );
+    }
+    return res.json({ success: true });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// 5i. Key-Value Settings endpoints
+mysqlRouter.get("/settings/:key", async (req: any, res: any) => {
+  try {
+    const { key } = req.params;
+    const rows = await querySql("SELECT setting_value FROM settings WHERE setting_key = ?", [key]);
+    if (!rows || rows.length === 0) {
+      return res.status(404).json({ error: "Setting not found" });
+    }
+    return res.json(JSON.parse(rows[0].setting_value));
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+mysqlRouter.post("/settings/:key", async (req: any, res: any) => {
+  try {
+    const { key } = req.params;
+    const valStr = JSON.stringify(req.body);
+    await querySql(
+      "INSERT INTO settings (setting_key, setting_value) VALUES (?, ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)",
+      [key, valStr]
+    );
+    return res.json({ success: true });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+

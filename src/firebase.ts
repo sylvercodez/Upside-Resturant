@@ -19,20 +19,27 @@ if (typeof window !== "undefined") {
                   window.location.hostname.includes("ais-dev-") ||
                   window.location.hostname.includes("ais-pre-");
     
-    // In local dev/sandbox, configure App Check debug token prior to initialization
-    if (isDev) {
-      (window as any).FIREBASE_APPCHECK_DEBUG_TOKEN = true;
+    const isInIframe = window.self !== window.top;
+    const shouldDisable = isDev || isInIframe || (import.meta as any).env?.VITE_DISABLE_APP_CHECK === "true";
+
+    if (shouldDisable) {
+      console.log("[Firebase App Check] Bypassing initialization in development, iframe, or sandbox environments.");
+    } else {
+      // In local dev/sandbox, configure App Check debug token prior to initialization
+      if (isDev) {
+        (window as any).FIREBASE_APPCHECK_DEBUG_TOKEN = true;
+      }
+
+      // Use default reCAPTCHA v3 sitekey. The customer can configure a custom one in import.meta.env if needed.
+      const customSiteKey = (import.meta as any).env?.VITE_RECAPTCHA_SITE_KEY;
+      const siteKey = customSiteKey || "6LeaPCYtAAAAAEJFosfUOWKgLL0g89O_AjWKyqys";
+
+      appCheck = initializeAppCheck(app, {
+        provider: new ReCaptchaV3Provider(siteKey),
+        isTokenAutoRefreshEnabled: true
+      });
+      console.log("[Firebase App Check] Initialized successfully with siteKey:", siteKey);
     }
-
-    // Use default reCAPTCHA v3 sitekey. The customer can configure a custom one in import.meta.env if needed.
-    const customSiteKey = (import.meta as any).env?.VITE_RECAPTCHA_SITE_KEY;
-    const siteKey = customSiteKey || "6LeaPCYtAAAAAEJFosfUOWKgLL0g89O_AjWKyqys";
-
-    appCheck = initializeAppCheck(app, {
-      provider: new ReCaptchaV3Provider(siteKey),
-      isTokenAutoRefreshEnabled: true
-    });
-    console.log("[Firebase App Check] Initialized successfully with siteKey:", siteKey);
   } catch (err) {
     console.error("[Firebase App Check] Initialization failed:", err);
   }

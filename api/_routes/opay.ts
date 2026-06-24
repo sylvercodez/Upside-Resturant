@@ -2,6 +2,7 @@ import express from "express";
 import path from "path";
 import fs from "fs";
 import { dbAdmin } from "../_utils/db.js";
+import { querySql } from "../_utils/mysqlDb.js";
 import {
   generateOpayApiSignature,
   verifyWebhookSignature,
@@ -47,15 +48,29 @@ async function getOpayConfig() {
   console.log(` - OPAY_SECRET_KEY: ${secretKey ? `Present (length: ${secretKey.length}, partial: ...${secretKey.substring(Math.max(0, secretKey.length - 8))})` : "MISSING"}`);
   console.log(` - OPAY_ENVIRONMENT: ${process.env.OPAY_ENVIRONMENT || "NOT SET (Defaulting to sandbox)"}`);
 
-  // Fallback to Firestore settings ONLY if process.env values are not fully available
+  // Fallback to MySQL and Firestore settings ONLY if process.env values are not fully available
   if (!merchantId || !publicKey || !secretKey) {
-    console.log("[VERCEL LOG] process.env variables incomplete. Querying Firestore settings collection as fallback...");
+    console.log("[VERCEL LOG] process.env variables incomplete. Querying MySQL settings first, then Firestore as fallback...");
     let opaySettings: any = {};
-    if (dbAdmin) {
+    
+    // A. Query MySQL settings first
+    try {
+      const rows = await querySql("SELECT setting_value FROM settings WHERE setting_key = ?", ["opay"]);
+      if (rows && rows.length > 0) {
+        opaySettings = JSON.parse(rows[0].setting_value) || {};
+        console.log("[VERCEL LOG] Found settings/opay in MySQL settings table.");
+      }
+    } catch (mysqlErr: any) {
+      console.warn("[VERCEL LOG] Could not fetch settings/opay from MySQL database:", mysqlErr.message || mysqlErr);
+    }
+
+    // B. Query Firestore if MySQL didn't yield results
+    if ((!opaySettings.merchantId || !opaySettings.publicKey || !opaySettings.secretKey) && dbAdmin) {
       try {
         const opaySnap = await dbAdmin.collection("settings").doc("opay").get();
         if (opaySnap.exists) {
-          opaySettings = opaySnap.data() || {};
+          const fsSettings = opaySnap.data() || {};
+          opaySettings = { ...fsSettings, ...opaySettings };
           console.log("[VERCEL LOG] Found settings/opay Firestore document.");
         } else {
           console.log("[VERCEL LOG] settings/opay Firestore document does not exist.");
@@ -63,8 +78,6 @@ async function getOpayConfig() {
       } catch (err: any) {
         console.warn("[VERCEL LOG] Could not fetch settings/opay from Firestore Administrative DB:", err.message || err);
       }
-    } else {
-      console.log("[VERCEL LOG] dbAdmin (Firestore) is not initialized, skipping Firestore fallback.");
     }
     
     merchantId = merchantId || opaySettings?.merchantId;
@@ -72,7 +85,7 @@ async function getOpayConfig() {
     secretKey = secretKey || opaySettings?.secretKey;
     environment = environment || opaySettings?.environment || "sandbox";
     
-    console.log("[VERCEL LOG] Final values after Firestore fallback evaluation:");
+    console.log("[VERCEL LOG] Final values after database configuration fallbacks evaluation:");
     console.log(` - merchantId: ${merchantId ? "RESOLVED" : "MISSING"}`);
     console.log(` - publicKey: ${publicKey ? "RESOLVED" : "MISSING"}`);
     console.log(` - secretKey: ${secretKey ? "RESOLVED" : "MISSING"}`);
@@ -242,6 +255,40 @@ Exception details:`, err);
     console.error(`[initializeOpayPayment] Firestore administrative logging error (payment record):`, firestoreErr.message || firestoreErr);
   }
 
+  // 5. Store Payment and Order in MySQL database
+  try {
+    // A. Insert/update payment record in MySQL payments table
+    await querySql(
+      "INSERT INTO payments (reference, amount, paymentStatus, orderId, updatedAt) VALUES (?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE amount = VALUES(amount), paymentStatus = VALUES(paymentStatus), orderId = VALUES(orderId), updatedAt = VALUES(updatedAt)",
+      [paymentData.orderId, paymentData.amount, "unpaid", paymentData.orderId, new Date().toISOString()]
+    );
+    console.log(`[initializeOpayPayment] Successfully logged payment to MySQL payments table: ${paymentData.orderId}`);
+
+    // B. Insert/update order record in MySQL orders table
+    const itemsStr = typeof paymentData.items === "string" ? paymentData.items : JSON.stringify(paymentData.items || []);
+    await querySql(
+      `INSERT INTO orders (id, userId, customerName, email, phone, totalPrice, items, address, status, paymentStatus, updatedAt) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) 
+       ON DUPLICATE KEY UPDATE userId = VALUES(userId), customerName = VALUES(customerName), email = VALUES(email), phone = VALUES(phone), totalPrice = VALUES(totalPrice), items = VALUES(items), address = VALUES(address), status = VALUES(status), paymentStatus = VALUES(paymentStatus), updatedAt = VALUES(updatedAt)`,
+      [
+        paymentData.orderId,
+        paymentData.userId || "guest",
+        paymentData.customerName,
+        paymentData.email || "guest@example.com",
+        paymentData.phone,
+        paymentData.amount,
+        itemsStr,
+        paymentData.address || "Boutique Self-Pickup",
+        "Prepping",
+        "unpaid",
+        new Date().toISOString()
+      ]
+    );
+    console.log(`[initializeOpayPayment] Successfully logged order to MySQL orders table: ${paymentData.orderId}`);
+  } catch (mysqlErr: any) {
+    console.warn("[initializeOpayPayment] Warning: Failed to write payment/order to MySQL database:", mysqlErr.message || mysqlErr);
+  }
+
   console.log(`[initializeOpayPayment] Success. Redirect cashierUrl generated for Ref: ${paymentData.orderId}`);
 
   return {
@@ -336,6 +383,60 @@ async function verifyOpayPayment(reference: string) {
     }
   } catch (firestoreErr: any) {
     console.error(`[verifyOpayPayment] Firestore payment document update failed:`, firestoreErr.message || firestoreErr);
+  }
+
+  // Update payment and order in MySQL as well
+  try {
+    // 1. Update payments table in MySQL
+    await querySql(
+      "UPDATE payments SET paymentStatus = ?, updatedAt = ? WHERE reference = ?",
+      [mappedStatus === "PAID" ? "paid" : mappedStatus.toLowerCase(), new Date().toISOString(), reference]
+    );
+    console.log(`[verifyOpayPayment] Successfully updated MySQL payments status for Ref: ${reference} -> ${mappedStatus}`);
+
+    // 2. Update orders table in MySQL
+    if (mappedStatus === "PAID") {
+      // First, get payment details to handle auto-creation if order doesn't exist
+      const rows = await querySql("SELECT * FROM payments WHERE reference = ?", [reference]);
+      const mysqlPayment = rows && rows.length > 0 ? rows[0] : null;
+
+      const orderRows = await querySql("SELECT * FROM orders WHERE id = ?", [reference]);
+      if (!orderRows || orderRows.length === 0) {
+        // If order doesn't exist, create it
+        await querySql(
+          `INSERT INTO orders (id, userId, customerName, email, phone, totalPrice, items, address, status, paymentStatus, updatedAt) 
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            reference,
+            "guest",
+            "Vanguard Guest",
+            "guest@example.com",
+            "",
+            mysqlPayment ? mysqlPayment.amount : 0,
+            "[]",
+            "Boutique Self-Pickup",
+            "Prepping",
+            "paid",
+            new Date().toISOString()
+          ]
+        );
+        console.log(`[verifyOpayPayment] Created new successful MySQL order record for Ref: ${reference}`);
+      } else {
+        await querySql(
+          "UPDATE orders SET paymentStatus = ?, status = 'Prepping', updatedAt = ? WHERE id = ?",
+          ["paid", new Date().toISOString(), reference]
+        );
+        console.log(`[verifyOpayPayment] Successfully updated status of existing MySQL order Ref: ${reference} to paid`);
+      }
+    } else if (mappedStatus === "FAILED" || mappedStatus === "CANCELLED" || mappedStatus === "EXPIRED") {
+      await querySql(
+        "UPDATE orders SET paymentStatus = ?, updatedAt = ? WHERE id = ?",
+        [mappedStatus.toLowerCase(), new Date().toISOString(), reference]
+      );
+      console.log(`[verifyOpayPayment] Successfully updated MySQL order status to ${mappedStatus.toLowerCase()} for Ref: ${reference}`);
+    }
+  } catch (mysqlErr: any) {
+    console.warn("[verifyOpayPayment] Warning: Failed to update payment/order state in MySQL database:", mysqlErr.message || mysqlErr);
   }
 
   // Update order status in orders collection
@@ -604,6 +705,20 @@ const handleOpayWebhook = async (req: any, res: any) => {
       }
     }
 
+    // MySQL idempotency check
+    try {
+      const rows = await querySql("SELECT * FROM payments WHERE reference = ?", [reference]);
+      if (rows && rows.length > 0) {
+        const pStatus = (rows[0].paymentStatus || "").toUpperCase();
+        if (pStatus === "PAID" || pStatus === "FAILED" || pStatus === "CANCELLED") {
+          console.log(`[handleOpayWebhook] Order ${reference} already in final state [${pStatus}] in MySQL. Skipping.`);
+          return res.json({ code: "00000", message: "SUCCESS" });
+        }
+      }
+    } catch (mysqlErr: any) {
+      console.warn("[handleOpayWebhook] Warning: Failed to perform MySQL idempotency check:", mysqlErr.message || mysqlErr);
+    }
+
     let mappedStatus = "PENDING";
     if (opayStatus === "SUCCESS") mappedStatus = "PAID";
     else if (opayStatus === "FAIL") mappedStatus = "FAILED";
@@ -612,7 +727,7 @@ const handleOpayWebhook = async (req: any, res: any) => {
 
     console.log(`[handleOpayWebhook] Processing update for reference: ${reference} -> Mapped: ${mappedStatus}`);
 
-    // Update payments table/collection
+    // Update payments table/collection in Firestore
     try {
       if (dbAdmin) {
         await dbAdmin.collection("payments").doc(reference).set({
@@ -625,7 +740,67 @@ const handleOpayWebhook = async (req: any, res: any) => {
       console.error("[handleOpayWebhook] Firestore set payment status failure:", firestoreErr.message || firestoreErr);
     }
 
-    // Update orders table/collection
+    // Update payments table in MySQL
+    try {
+      await querySql(
+        "INSERT INTO payments (reference, paymentStatus, updatedAt) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE paymentStatus = VALUES(paymentStatus), updatedAt = VALUES(updatedAt)",
+        [reference, mappedStatus === "PAID" ? "paid" : mappedStatus.toLowerCase(), new Date().toISOString()]
+      );
+      console.log(`[handleOpayWebhook] Successfully written payment confirmation to MySQL payments for Ref: ${reference}`);
+    } catch (mysqlErr: any) {
+      console.warn("[handleOpayWebhook] Warning: Failed to update MySQL payments status:", mysqlErr.message || mysqlErr);
+    }
+
+    // Update orders table/collection in MySQL
+    if (mappedStatus === "PAID") {
+      try {
+        const orderRows = await querySql("SELECT * FROM orders WHERE id = ?", [reference]);
+        if (!orderRows || orderRows.length === 0) {
+          // If order doesn't exist, retrieve payment amount from MySQL or default
+          const rows = await querySql("SELECT * FROM payments WHERE reference = ?", [reference]);
+          const mysqlPayment = rows && rows.length > 0 ? rows[0] : null;
+
+          await querySql(
+            `INSERT INTO orders (id, userId, customerName, email, phone, totalPrice, items, address, status, paymentStatus, updatedAt) 
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+              reference,
+              "guest",
+              "Vanguard Guest",
+              "guest@example.com",
+              "",
+              mysqlPayment ? mysqlPayment.amount : 0,
+              "[]",
+              "Boutique Self-Pickup",
+              "Prepping",
+              "paid",
+              new Date().toISOString()
+            ]
+          );
+          console.log(`[handleOpayWebhook] Created new successful MySQL order record for Ref: ${reference}`);
+        } else {
+          await querySql(
+            "UPDATE orders SET paymentStatus = 'paid', status = 'Prepping', updatedAt = ? WHERE id = ?",
+            [new Date().toISOString(), reference]
+          );
+          console.log(`[handleOpayWebhook] Successfully updated status of existing MySQL order Ref: ${reference} to paid`);
+        }
+      } catch (mysqlErr: any) {
+        console.warn("[handleOpayWebhook] Warning: Failed to update MySQL order status (PAID):", mysqlErr.message || mysqlErr);
+      }
+    } else {
+      try {
+        await querySql(
+          "UPDATE orders SET paymentStatus = ?, updatedAt = ? WHERE id = ?",
+          [mappedStatus.toLowerCase(), new Date().toISOString(), reference]
+        );
+        console.log(`[handleOpayWebhook] Successfully updated MySQL order paymentStatus to ${mappedStatus.toLowerCase()} for Ref: ${reference}`);
+      } catch (mysqlErr: any) {
+        console.warn(`[handleOpayWebhook] Warning: Failed to update MySQL order status (${mappedStatus}):`, mysqlErr.message || mysqlErr);
+      }
+    }
+
+    // Update orders table/collection in Firestore
     if (mappedStatus === "PAID") {
       try {
         if (dbAdmin) {
