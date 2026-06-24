@@ -1,14 +1,15 @@
 {
   "version": 2,
-  "functions": {
-    "api/index.ts": {
-      "maxDuration": 15
+  "cleanUrls": true,
+  "outputDirectory": "dist",
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/index.ts"
     },
-    "api/**/*.ts": {
-      "launcherType": "Nodejs",
-      "config": {
-        "nodeVersion": "18.x"
-      }
+    {
+      "source": "/((?!api|assets|favicon|vite).*)",
+      "destination": "/index.html"
     }
-  }
+  ]
 }
