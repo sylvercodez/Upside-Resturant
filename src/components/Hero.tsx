@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { ArrowRight, Compass, Calendar, Flame, ChevronLeft, ChevronRight, ShoppingBag, QrCode } from "lucide-react";
 import { MENU_ITEMS, MenuItem } from "../data/menu";
-
-const gourmetDrinksHero = "/src/assets/images/gourmet_drinks_hero_1782059009940.jpg";
+import gourmetDrinksHero from "../assets/images/gourmet_drinks_hero_1782059009940.jpg";
 
 interface HeroProps {
   onExploreMenu: () => void;

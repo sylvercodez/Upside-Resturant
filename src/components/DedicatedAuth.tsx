@@ -12,6 +12,7 @@ import {
 } from "firebase/auth";
 import { doc, setDoc } from "firebase/firestore";
 import { getApiUrl } from "../types";
+import classicDrinks from "../assets/images/classic_restaurant_drinks_1782058509882.jpg";
 
 interface DedicatedAuthProps {
   currentUser: FirebaseUser | null;
@@ -674,7 +675,7 @@ export default function DedicatedAuth({
           <div 
             className="absolute inset-0 bg-cover bg-center transition-transform duration-[10000ms] ease-out group-hover:scale-105"
             style={{ 
-              backgroundImage: `url('/src/assets/images/classic_restaurant_drinks_1782058509882.jpg')` 
+              backgroundImage: `url(${classicDrinks})` 
             }}
           />
           {/* Rich Premium Overlay Gradients for absolute legibility */}

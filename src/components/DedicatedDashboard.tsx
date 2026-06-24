@@ -33,6 +33,8 @@ import {
 import { collection, query, updateDoc, doc, onSnapshot, setDoc, deleteDoc } from "firebase/firestore";
 import { db, handleFirestoreError, OperationType } from "../firebase";
 import { ShippingLocation, getApiUrl } from "../types";
+import classicDrinks from "../assets/images/classic_restaurant_drinks_1782058509882.jpg";
+import gourmetDrinks from "../assets/images/gourmet_drinks_hero_1782059009940.jpg";
 
 interface DedicatedDashboardProps {
   currentUser: FirebaseUser | null;
@@ -52,8 +54,8 @@ interface DedicatedDashboardProps {
 }
 
 const PRESET_IMAGES = [
-  { name: "Classic Restaurant Drinks", url: "/src/assets/images/classic_restaurant_drinks_1782058509882.jpg" },
-  { name: "Gourmet Drinks Hero", url: "/src/assets/images/gourmet_drinks_hero_1782059009940.jpg" }
+  { name: "Classic Restaurant Drinks", url: classicDrinks },
+  { name: "Gourmet Drinks Hero", url: gourmetDrinks }
 ];
 
 export default function DedicatedDashboard({
@@ -1362,7 +1364,7 @@ export default function DedicatedDashboard({
         
         {/* Decorative image */}
         <img 
-          src="/src/assets/images/gourmet_drinks_hero_1782059009940.jpg" 
+          src={gourmetDrinks} 
           alt="Dining banner background" 
           className="w-full h-full object-cover scale-105 filter blur-xs"
         />
@@ -2279,7 +2281,7 @@ export default function DedicatedDashboard({
                                 alt="Dynamic preview"
                                 className="w-12 h-12 object-cover border border-neutral-800 rounded-sm"
                                 onError={(e) => {
-                                  (e.target as any).src = "/src/assets/images/classic_restaurant_drinks_1782058509882.jpg";
+                                  (e.target as any).src = classicDrinks;
                                 }}
                               />
                               <div className="font-mono text-[9px] space-y-0.5 overflow-hidden flex-1">
@@ -2749,7 +2751,7 @@ export default function DedicatedDashboard({
                                 alt="Dynamic Upload Preview"
                                 className="w-full h-full object-cover"
                                 onError={(e) => {
-                                  (e.target as any).src = "/src/assets/images/classic_restaurant_drinks_1782058509882.jpg";
+                                  (e.target as any).src = classicDrinks;
                                 }}
                               />
                             </div>
