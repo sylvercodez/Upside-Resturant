@@ -2,18 +2,13 @@
   "version": 2,
   "cleanUrls": true,
   "outputDirectory": "dist",
-  "functions": {
-    "api/index.ts": {
-      "maxDuration": 15
-    }
-  },
   "rewrites": [
     {
       "source": "/api/:path*",
       "destination": "/api/index.ts"
     },
     {
-      "source": "/((?!api|assets|favicon).*)",
+      "source": "/((?!api|assets|favicon|vite).*)",
       "destination": "/index.html"
     }
   ]
