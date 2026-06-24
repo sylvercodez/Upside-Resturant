@@ -44,31 +44,31 @@ export default function App() {
     }
   }, [toast]);
 
-  // 1. MySQL connection status poller & listener
-  useEffect(() => {
-    const checkMySQL = async () => {
-      try {
-        const res = await fetch(getApiUrl("/api/mysql/status"));
-        if (res.ok) {
-          const data = await res.json();
-          if (data.connected) {
-            setIsMySQLActive(true);
-            console.log("MySQL Database Engine Detected Active. Cloud routing operational.");
-          } else {
-            setIsMySQLActive(false);
-          }
+// 1. MySQL connection status — check once, then every 5 minutes
+useEffect(() => {
+  const checkMySQL = async () => {
+    try {
+      const res = await fetch(getApiUrl("/api/mysql/status"));
+      if (res.ok) {
+        const data = await res.json();
+        setIsMySQLActive(!!data.connected);
+        if (data.connected) {
+          console.log("MySQL active.");
         }
-      } catch (_) {
+      } else {
         setIsMySQLActive(false);
       }
-    };
+    } catch (_) {
+      setIsMySQLActive(false);
+    }
+  };
 
-    checkMySQL();
-    
-    // Periodically re-check connection status (every 8 seconds)
-    const intv = setInterval(checkMySQL, 8000);
-    return () => clearInterval(intv);
-  }, []);
+  checkMySQL();
+
+  // Only recheck every 5 minutes — not every 8 seconds
+  const intv = setInterval(checkMySQL, 5 * 60 * 1000);
+  return () => clearInterval(intv);
+}, []);
 
   // 2. MySQL Auth Loader
   useEffect(() => {
@@ -91,43 +91,28 @@ export default function App() {
     window.addEventListener("mysql-login", syncUser);
     return () => window.removeEventListener("mysql-login", syncUser);
   }, [isMySQLActive]);
+// 3. MySQL Background Data Synchronization — fetch once only
+useEffect(() => {
+  if (!isMySQLActive) return;
 
-  // 3. MySQL Background Data Synchronization
-  useEffect(() => {
-    if (!isMySQLActive) return;
+  const fetchMySQLData = async () => {
+    try {
+      const [mRes, cRes, sRes] = await Promise.all([
+        fetch(getApiUrl("/api/mysql/menus")),
+        fetch(getApiUrl("/api/mysql/categories")),
+        fetch(getApiUrl("/api/mysql/shipping-areas")),
+      ]);
 
-    const fetchMySQLData = async () => {
-      try {
-        // Fetch menus
-        const mRes = await fetch(getApiUrl("/api/mysql/menus"));
-        if (mRes.ok) {
-          const mData = await mRes.json();
-          setAllMenuItems(mData);
-        }
+      if (mRes.ok) setAllMenuItems(await mRes.json());
+      if (cRes.ok) setAllCategories(await cRes.json());
+      if (sRes.ok) setShippingLocations(await sRes.json());
+    } catch (err) {
+      console.warn("MySQL sync error:", err);
+    }
+  };
 
-        // Fetch categories
-        const cRes = await fetch(getApiUrl("/api/mysql/categories"));
-        if (cRes.ok) {
-          const cData = await cRes.json();
-          setAllCategories(cData);
-        }
-
-        // Fetch shipping areas
-        const sRes = await fetch(getApiUrl("/api/mysql/shipping-areas"));
-        if (sRes.ok) {
-          const sData = await sRes.json();
-          setShippingLocations(sData);
-        }
-      } catch (err) {
-        console.warn("MySQL sync background error:", err);
-      }
-    };
-
-    fetchMySQLData();
-    const interval = setInterval(fetchMySQLData, 4000); // 4s polling for high responsiveness
-    return () => clearInterval(interval);
-  }, [isMySQLActive]);
-
+  fetchMySQLData(); // run once, no interval
+}, [isMySQLActive]);
   // Firebase listeners (only active if MySQL is not active)
   useEffect(() => {
     if (isMySQLActive) return;
