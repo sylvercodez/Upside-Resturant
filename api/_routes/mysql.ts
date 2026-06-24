@@ -2,8 +2,27 @@ import express from "express";
 import path from "path";
 import fs from "fs";
 import { getMySQLPool, querySql, resetMySQLPool, sanitizeMySQLHost } from "../_utils/mysqlDb.js";
-import { CATEGORIES, MENU_ITEMS } from "../../src/data/menu.js";
-import { LAGOS_AREAS } from "../../src/types.js";
+
+// ========================================================
+// BACKEND STRUCTURAL FALLBACK SEEDS
+// (Replaces the broken frontend cross-imports)
+// ========================================================
+const CATEGORIES = [
+  { id: "starters", name: "Starters", description: "Appetizers and quick bites", icon: "Utensils" },
+  { id: "main-dishes", name: "Main Dishes", description: "Hearty, filling main courses", icon: "Soup" },
+  { id: "drinks", name: "Drinks", description: "Chilled drinks and beverages", icon: "CupSoda" }
+];
+
+const MENU_ITEMS = [
+  { id: "init-item-1", name: "Welcome Menu Item", description: "Database initialized successfully. Update this in your dashboard.", price: 2500, category: "main-dishes", image: "", tags: ["Fresh"], specs: ["Serves 1"] }
+];
+
+const LAGOS_AREAS = [
+  { id: "vi", name: "Victoria Island", fee: 2000, isMainland: false },
+  { id: "lekki-1", name: "Lekki Phase 1", fee: 2000, isMainland: false },
+  { id: "ikeja", name: "Ikeja", fee: 3500, isMainland: true },
+  { id: "surulere", name: "Surulere", fee: 3000, isMainland: true }
+];
 
 export const mysqlRouter = express.Router();
 
@@ -300,8 +319,8 @@ mysqlRouter.post("/setup", async (req: any, res: any) => {
 
     let menusSeeded = 0;
     for (const item of MENU_ITEMS) {
-      const tagsStr = item.tags ? item.tags.join(",") : "";
-      const specsStr = item.specs ? item.specs.join(",") : "";
+      const tagsStr = Array.isArray(item.tags) ? item.tags.join(",") : (item.tags || "");
+      const specsStr = Array.isArray(item.specs) ? item.specs.join(",") : (item.specs || "");
       await querySql(
         `INSERT INTO menus (id, name, description, price, category, image, tags, specs, deleted, updatedAt)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?)
@@ -444,19 +463,13 @@ mysqlRouter.post("/sync", async (req: any, res: any) => {
 mysqlRouter.get("/export", async (req: any, res: any) => {
   try {
     const database = process.env.MYSQL_DATABASE || "upside_restaurant_db";
-    let sqlDump = `-- ==========================================
--- UPSIDE RESTAURANT & CAFÉ DATABASE MIGRATION DUMP
--- Compatible with cPanel, Hostinger, phpMyAdmin (MySQL 5.7 / 8.0+)
--- Generated on: ${new Date().toUTCString()}
--- ==========================================\n\n`;
+    let sqlDump = `-- ==========================================\n-- UPSIDE RESTAURANT & CAFÉ DATABASE MIGRATION DUMP\n-- Compatible with cPanel, Hostinger, phpMyAdmin (MySQL 5.7 / 8.0+)\n-- Generated on: ${new Date().toUTCString()}\n-- ==========================================\n\n`;
 
     sqlDump += `CREATE DATABASE IF NOT EXISTS \`${database}\`;\n`;
     sqlDump += `USE \`${database}\`;\n\n`;
 
     // Retrieve categories
-    sqlDump += `-- ----------------------------------------------------
--- TABLE STRUCTURE & INSERTS FOR: categories
--- ----------------------------------------------------\n`;
+    sqlDump += `-- ----------------------------------------------------\n-- TABLE STRUCTURE & INSERTS FOR: categories\n-- ----------------------------------------------------\n`;
     sqlDump += `DROP TABLE IF EXISTS \`categories\`;\n`;
     sqlDump += `CREATE TABLE \`categories\` (
   \`id\` varchar(255) NOT NULL,
@@ -482,9 +495,7 @@ mysqlRouter.get("/export", async (req: any, res: any) => {
     } catch (_) {}
 
     // Retrieve menus
-    sqlDump += `-- ----------------------------------------------------
--- TABLE STRUCTURE & INSERTS FOR: menus
--- ----------------------------------------------------\n`;
+    sqlDump += `-- ----------------------------------------------------\n-- TABLE STRUCTURE & INSERTS FOR: menus\n-- ----------------------------------------------------\n`;
     sqlDump += `DROP TABLE IF EXISTS \`menus\`;\n`;
     sqlDump += `CREATE TABLE \`menus\` (
   \`id\` varchar(255) NOT NULL,
@@ -518,9 +529,7 @@ mysqlRouter.get("/export", async (req: any, res: any) => {
     } catch (_) {}
 
     // Retrieve shipping areas
-    sqlDump += `-- ----------------------------------------------------
--- TABLE STRUCTURE & INSERTS FOR: shipping_areas
--- ----------------------------------------------------\n`;
+    sqlDump += `-- ----------------------------------------------------\n-- TABLE STRUCTURE & INSERTS FOR: shipping_areas\n-- ----------------------------------------------------\n`;
     sqlDump += `DROP TABLE IF EXISTS \`shipping_areas\`;\n`;
     sqlDump += `CREATE TABLE \`shipping_areas\` (
   \`id\` varchar(255) NOT NULL,
@@ -545,9 +554,7 @@ mysqlRouter.get("/export", async (req: any, res: any) => {
     } catch (_) {}
 
     // Retrieve other tables structure (orders, payments, users)
-    sqlDump += `-- ----------------------------------------------------
--- TABLE STRUCTURE FOR: orders
--- ----------------------------------------------------\n`;
+    sqlDump += `-- ----------------------------------------------------\n-- TABLE STRUCTURE FOR: orders\n-- ----------------------------------------------------\n`;
     sqlDump += `DROP TABLE IF EXISTS \`orders\`;\n`;
     sqlDump += `CREATE TABLE \`orders\` (
   \`id\` varchar(255) NOT NULL,
@@ -580,9 +587,7 @@ mysqlRouter.get("/export", async (req: any, res: any) => {
       }
     } catch (_) {}
 
-    sqlDump += `-- ----------------------------------------------------
--- TABLE STRUCTURE FOR: payments
--- ----------------------------------------------------\n`;
+    sqlDump += `-- ----------------------------------------------------\n-- TABLE STRUCTURE FOR: payments\n-- ----------------------------------------------------\n`;
     sqlDump += `DROP TABLE IF EXISTS \`payments\`;\n`;
     sqlDump += `CREATE TABLE \`payments\` (
   \`reference\` varchar(255) NOT NULL,
@@ -605,9 +610,7 @@ mysqlRouter.get("/export", async (req: any, res: any) => {
       }
     } catch (_) {}
 
-    sqlDump += `-- ----------------------------------------------------
--- TABLE STRUCTURE FOR: users
--- ----------------------------------------------------\n`;
+    sqlDump += `-- ----------------------------------------------------\n-- TABLE STRUCTURE FOR: users\n-- ----------------------------------------------------\n`;
     sqlDump += `DROP TABLE IF EXISTS \`users\`;\n`;
     sqlDump += `CREATE TABLE \`users\` (
   \`uid\` varchar(255) NOT NULL,
@@ -1213,65 +1216,6 @@ mysqlRouter.post("/settings/:key", async (req: any, res: any) => {
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
-
 });
-// ==========================================
-// 6. FIRESTORE-COMPATIBLE DYNAMIC COLLECTION FALLBACK
-// ==========================================
-mysqlRouter.get("/:collection", async (req: any, res: any) => {
-  const { collection } = req.params;
-  
-  // Convert any dash notations from client endpoints to underscores (e.g., 'shipping-areas' -> 'shipping_areas')
-  const tableName = collection.replace(/-/g, "_");
 
-  // Only allow explicit tables to prevent raw URL injection attacks
-  const whitelistedTables = ["menus", "categories", "shipping_areas", "orders", "payments", "users", "settings"];
-  if (!whitelistedTables.includes(tableName)) {
-    return res.status(404).json({ error: `Collection path '${collection}' does not exist on target database.` });
-  }
-
-  try {
-    console.log(`[MYSQL DYNAMIC FALLBACK] Querying collection: ${tableName}`);
-    const rows = await querySql(`SELECT * FROM \`${tableName}\``);
-
-    // Re-apply custom frontend transformations so structural maps don't break
-    if (tableName === "menus") {
-      const items = rows.map((r: any) => ({
-        ...r,
-        tags: r.tags ? r.tags.split(",") : [],
-        specs: r.specs ? r.specs.split(",") : [],
-        price: parseFloat(r.price || "0")
-      }));
-      return res.json(items);
-    }
-
-    if (tableName === "shipping_areas") {
-      const areas = rows.map((r: any) => ({
-        ...r,
-        fee: parseFloat(r.fee || "0"),
-        isMainland: r.isMainland === 1 || r.isMainland === true
-      }));
-      return res.json(areas);
-    }
-
-    if (tableName === "orders") {
-      const orders = rows.map((r: any) => {
-        let parsedItems = [];
-        try { parsedItems = typeof r.items === "string" ? JSON.parse(r.items) : (r.items || []); } catch (_) {}
-        return { ...r, items: parsedItems, totalPrice: parseFloat(r.totalPrice || "0") };
-      });
-      return res.json(orders);
-    }
-
-    // Default response wrapper for other standard table objects
-    return res.json(rows || []);
-
-  } catch (err: any) {
-    console.error(`[MYSQL CRITICAL FAIL ON ROUTE /${collection}]:`, err.message);
-    return res.status(500).json({ 
-      error: "Internal Database Driver Error", 
-      message: err.message,
-      stack: err.stack 
-    });
-  }
-});
+export default mysqlRouter;
