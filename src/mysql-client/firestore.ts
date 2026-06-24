@@ -68,7 +68,16 @@ export async function getDoc(docRef: any): Promise<any> {
         // Return doesn't exist
         return makeDocSnap(id, null);
       }
-      if (!res.ok) throw new Error(`Failed to load setting: ${res.statusText}`);
+      if (!res.ok) {
+        let errDetails = "";
+        try {
+          const errJson = await res.json();
+          errDetails = errJson.message || errJson.error || JSON.stringify(errJson);
+        } catch (_) {
+          try { errDetails = await res.text(); } catch (_) {}
+        }
+        throw new Error(`Failed to load setting: ${res.status} - ${errDetails || res.statusText}`);
+      }
       const data = await res.json();
       return makeDocSnap(id, data);
     }
@@ -76,7 +85,16 @@ export async function getDoc(docRef: any): Promise<any> {
     if (collection === "users") {
       const res = await fetch(getApiUrl(`/api/mysql/users/${id}`));
       if (res.status === 404) return makeDocSnap(id, null);
-      if (!res.ok) throw new Error(`Failed to load user: ${res.statusText}`);
+      if (!res.ok) {
+        let errDetails = "";
+        try {
+          const errJson = await res.json();
+          errDetails = errJson.message || errJson.error || JSON.stringify(errJson);
+        } catch (_) {
+          try { errDetails = await res.text(); } catch (_) {}
+        }
+        throw new Error(`Failed to load user: ${res.status} - ${errDetails || res.statusText}`);
+      }
       const data = await res.json();
       return makeDocSnap(id, data);
     }
@@ -84,7 +102,16 @@ export async function getDoc(docRef: any): Promise<any> {
     if (collection === "orders") {
       const res = await fetch(getApiUrl(`/api/mysql/orders/${id}`));
       if (res.status === 404) return makeDocSnap(id, null);
-      if (!res.ok) throw new Error(`Failed to load order: ${res.statusText}`);
+      if (!res.ok) {
+        let errDetails = "";
+        try {
+          const errJson = await res.json();
+          errDetails = errJson.message || errJson.error || JSON.stringify(errJson);
+        } catch (_) {
+          try { errDetails = await res.text(); } catch (_) {}
+        }
+        throw new Error(`Failed to load order: ${res.status} - ${errDetails || res.statusText}`);
+      }
       const data = await res.json();
       return makeDocSnap(id, data);
     }
@@ -130,7 +157,16 @@ export async function getDocs(queryOrRef: any): Promise<any> {
     }
 
     const res = await fetch(url);
-    if (!res.ok) throw new Error(`Failed to load collection ${collectionName}`);
+    if (!res.ok) {
+      let errDetails = "";
+      try {
+        const errJson = await res.json();
+        errDetails = errJson.message || errJson.error || JSON.stringify(errJson);
+      } catch (_) {
+        try { errDetails = await res.text(); } catch (_) {}
+      }
+      throw new Error(`Failed to load collection ${collectionName}: ${res.status} - ${errDetails || res.statusText}`);
+    }
     let data = await res.json();
 
     // Client-side filtering/constraints application
