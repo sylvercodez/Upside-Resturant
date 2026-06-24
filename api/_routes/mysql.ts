@@ -309,7 +309,14 @@ mysqlRouter.post("/setup", async (req: any, res: any) => {
     try {
       await querySql("ALTER TABLE users ADD COLUMN password_hash VARCHAR(255) DEFAULT NULL");
     } catch (_) {}
-
+//otp_codes
+await querySql(`
+  CREATE TABLE IF NOT EXISTS otp_codes (
+    target VARCHAR(255) PRIMARY KEY,
+    code VARCHAR(10) NOT NULL,
+    expiresAt BIGINT NOT NULL
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+`);
     // Create shipping_areas table
     await querySql(`
       CREATE TABLE IF NOT EXISTS shipping_areas (
