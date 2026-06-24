@@ -26,51 +26,76 @@ const LAGOS_AREAS = [
 
 export const mysqlRouter = express.Router();
 
-// 1. Route: Save MySQL credentials from the admin UI configurations to .env and running memory process
+// // 1. Route: Save MySQL credentials from the admin UI configurations to .env and running memory process
+// mysqlRouter.post("/convert-to-env", async (req: any, res: any) => {
+//   try {
+//     const { host, port, user, password, database } = req.body;
+//     if (!host || !user || !database) {
+//       return res.status(400).json({ error: "Missing required MySQL credentials: host, user, database are required." });
+//     }
+
+//     const cleanHost = sanitizeMySQLHost(host);
+
+//     const envPath = path.join(process.cwd(), ".env");
+//     let envContent = "";
+//     if (fs.existsSync(envPath)) {
+//       envContent = fs.readFileSync(envPath, "utf-8");
+//     }
+
+//     const keysMap: Record<string, string> = {
+//       MYSQL_HOST: cleanHost,
+//       MYSQL_PORT: (port || "3306").toString().trim(),
+//       MYSQL_USER: user.trim(),
+//       MYSQL_PASSWORD: (password || "").trim(),
+//       MYSQL_DATABASE: database.trim()
+//     };
+
+//     let envLines = envContent ? envContent.split("\n") : [];
+//     for (const [key, val] of Object.entries(keysMap)) {
+//       const index = envLines.findIndex(line => line.startsWith(`${key}=`) || line.startsWith(`# ${key}=`) || line.startsWith(`${key} =`));
+//       if (index >= 0) {
+//         envLines[index] = `${key}=${val}`;
+//       } else {
+//         envLines.push(`${key}=${val}`);
+//       }
+//       process.env[key] = val; // Update process memory directly
+//     }
+
+//     fs.writeFileSync(envPath, envLines.join("\n"), "utf-8");
+//     console.log("[MYSQL CONFIG] Successfully updated env keys and synchronized app process!");
+    
+//     // Reset our active connection pool so that a new one is re-initialized with these credentials
+//     resetMySQLPool();
+
+//     return res.json({ success: true, message: "MySQL database configurations converted and saved securely!" });
+//   } catch (err: any) {
+//     console.error("[MYSQL Config Route] Error converting keys:", err);
+//     return res.status(500).json({ error: err.message || "Unable to save MySQL configurations to env." });
+//   }
+// });
 mysqlRouter.post("/convert-to-env", async (req: any, res: any) => {
   try {
     const { host, port, user, password, database } = req.body;
     if (!host || !user || !database) {
-      return res.status(400).json({ error: "Missing required MySQL credentials: host, user, database are required." });
+      return res.status(400).json({ error: "Missing required fields." });
     }
 
     const cleanHost = sanitizeMySQLHost(host);
 
-    const envPath = path.join(process.cwd(), ".env");
-    let envContent = "";
-    if (fs.existsSync(envPath)) {
-      envContent = fs.readFileSync(envPath, "utf-8");
-    }
+    process.env.MYSQL_HOST     = cleanHost;
+    process.env.MYSQL_PORT     = (port || "3306").toString();
+    process.env.MYSQL_USER     = user.trim();
+    process.env.MYSQL_PASSWORD = (password || "").trim();
+    process.env.MYSQL_DATABASE = database.trim();
 
-    const keysMap: Record<string, string> = {
-      MYSQL_HOST: cleanHost,
-      MYSQL_PORT: (port || "3306").toString().trim(),
-      MYSQL_USER: user.trim(),
-      MYSQL_PASSWORD: (password || "").trim(),
-      MYSQL_DATABASE: database.trim()
-    };
-
-    let envLines = envContent ? envContent.split("\n") : [];
-    for (const [key, val] of Object.entries(keysMap)) {
-      const index = envLines.findIndex(line => line.startsWith(`${key}=`) || line.startsWith(`# ${key}=`) || line.startsWith(`${key} =`));
-      if (index >= 0) {
-        envLines[index] = `${key}=${val}`;
-      } else {
-        envLines.push(`${key}=${val}`);
-      }
-      process.env[key] = val; // Update process memory directly
-    }
-
-    fs.writeFileSync(envPath, envLines.join("\n"), "utf-8");
-    console.log("[MYSQL CONFIG] Successfully updated env keys and synchronized app process!");
-    
-    // Reset our active connection pool so that a new one is re-initialized with these credentials
     resetMySQLPool();
 
-    return res.json({ success: true, message: "MySQL database configurations converted and saved securely!" });
+    return res.json({
+      success: true,
+      message: "Credentials applied. To make permanent, save them in your Render Environment Variables dashboard.",
+    });
   } catch (err: any) {
-    console.error("[MYSQL Config Route] Error converting keys:", err);
-    return res.status(500).json({ error: err.message || "Unable to save MySQL configurations to env." });
+    return res.status(500).json({ error: err.message });
   }
 });
 
