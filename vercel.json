@@ -9,11 +9,11 @@
   },
   "rewrites": [
     {
-      "source": "/api/(.*)",
-      "destination": "/api"
+      "source": "/api/:path*",
+      "destination": "/api/index.ts"
     },
     {
-      "source": "/((?!api/).*)",
+      "source": "/((?!api|assets|favicon).*)",
       "destination": "/index.html"
     }
   ]
