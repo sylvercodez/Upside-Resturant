@@ -1219,22 +1219,22 @@ mysqlRouter.post("/settings/:key", async (req: any, res: any) => {
 // 6. FIRESTORE-COMPATIBLE DYNAMIC COLLECTION FALLBACK
 // ==========================================
 mysqlRouter.get("/:collection", async (req: any, res: any) => {
+  const { collection } = req.params;
+  
+  // Convert any dash notations from client endpoints to underscores (e.g., 'shipping-areas' -> 'shipping_areas')
+  const tableName = collection.replace(/-/g, "_");
+
+  // Only allow explicit tables to prevent raw URL injection attacks
+  const whitelistedTables = ["menus", "categories", "shipping_areas", "orders", "payments", "users", "settings"];
+  if (!whitelistedTables.includes(tableName)) {
+    return res.status(404).json({ error: `Collection path '${collection}' does not exist on target database.` });
+  }
+
   try {
-    const { collection } = req.params;
-    
-    // Convert any dash notations from client endpoints to underscores (e.g., 'shipping-areas' -> 'shipping_areas')
-    const tableName = collection.replace(/-/g, "_");
-
-    // Only allow explicit tables to prevent raw URL injection attacks
-    const whitelistedTables = ["menus", "categories", "shipping_areas", "orders", "payments", "users", "settings"];
-    if (!whitelistedTables.includes(tableName)) {
-      return res.status(404).json({ error: `Collection path '${collection}' does not exist on target database.` });
-    }
-
-    console.log(`[DYNAMIC COUPLING] Fetching fallback collections for path: ${tableName}`);
+    console.log(`[MYSQL DYNAMIC FALLBACK] Querying collection: ${tableName}`);
     const rows = await querySql(`SELECT * FROM \`${tableName}\``);
 
-    // Re-apply your custom frontend transformations so structural maps don't break
+    // Re-apply custom frontend transformations so structural maps don't break
     if (tableName === "menus") {
       const items = rows.map((r: any) => ({
         ...r,
@@ -1267,38 +1267,6 @@ mysqlRouter.get("/:collection", async (req: any, res: any) => {
     return res.json(rows || []);
 
   } catch (err: any) {
-    console.error(`[DYNAMIC COLLECTION FALLBACK CRASH]:`, err);
-    return res.status(500).json({ error: err.message || "Failed to fall back cleanly to secondary schema query." });
-  }
-});
-// Add or replace your catch-all /:collection route with this to debug the exact crash:
-mysqlRouter.get("/:collection", async (req: any, res: any) => {
-  const { collection } = req.params;
-  const tableName = collection.replace(/-/g, "_");
-
-  const whitelistedTables = ["menus", "categories", "shipping_areas"];
-  if (!whitelistedTables.includes(tableName)) {
-    return res.status(404).json({ error: `Collection path '${collection}' does not exist.` });
-  }
-
-  try {
-    console.log(`[MYSQL DEBUG] Querying collection: ${tableName}`);
-    const rows = await querySql(`SELECT * FROM \`${tableName}\``);
-    
-    // Apply your array filters here
-    if (tableName === "menus") {
-      const items = rows.map((r: any) => ({
-        ...r,
-        tags: r.tags ? r.tags.split(",") : [],
-        specs: r.specs ? r.specs.split(",") : [],
-        price: parseFloat(r.price || "0")
-      }));
-      return res.json(items);
-    }
-    
-    return res.json(rows || []);
-  } catch (err: any) {
-    // THIS WILL TELL YOU EXACTLY IF CONFIG IS MISSING OR IF IP IS BLOCKED
     console.error(`[MYSQL CRITICAL FAIL ON ROUTE /${collection}]:`, err.message);
     return res.status(500).json({ 
       error: "Internal Database Driver Error", 

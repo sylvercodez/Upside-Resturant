@@ -20,6 +20,16 @@ app.use(express.json());
 
 // Path normalizer to handle Vercel serverless routing variations gracefully (where Vercel might strip /api prefix from the routed request)
 app.use((req: any, res: any, next: any) => {
+  const originalUrl = req.url || "";
+  const originalPath = req.path || "";
+  
+  // If Vercel stripped /api prefix or routed to index.ts, try to restore from Vercel headers
+  const vercelPath = req.headers["x-vercel-forwarded-path"] || req.headers["x-forwarded-uri"] || req.headers["x-original-url"];
+  if (vercelPath && typeof vercelPath === "string" && vercelPath.startsWith("/api") && req.url !== vercelPath) {
+    console.log(`[Vercel Router Compatibility] Overriding req.url from Vercel headers: "${req.url}" -> "${vercelPath}"`);
+    req.url = vercelPath;
+  }
+
   const url = req.url || "";
   const path = req.path || "";
   if (!url.startsWith("/api") && (
@@ -68,14 +78,22 @@ app.use((req, res, next) => {
 
 // App Check verification middleware - gracefully handles verification to support all sandboxes and custom setups
 app.use("/api", appCheckVerification);
+app.use(appCheckVerification);
 
-// Mount modular sub-routers
+// Mount modular sub-routers (with both /api prefix and raw prefix to guarantee match under all serverless configurations)
 app.use("/api/otp", otpRouter);
 app.use("/api/opay", opayRouter);
 app.use("/api/instagram", instagramRouter);
 app.use("/api/seed-menu", menuRouter);
 app.use("/api/mysql", mysqlRouter);
 app.use("/api/delivery", deliveryRouter);
+
+app.use("/otp", otpRouter);
+app.use("/opay", opayRouter);
+app.use("/instagram", instagramRouter);
+app.use("/seed-menu", menuRouter);
+app.use("/mysql", mysqlRouter);
+app.use("/delivery", deliveryRouter);
 
 // Serve frontend assets
 async function serveApp() {
