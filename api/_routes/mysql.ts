@@ -1191,18 +1191,18 @@ mysqlRouter.post("/users/:uid", async (req: any, res: any) => {
 });
 
 // 5i. Key-Value Settings endpoints
-mysqlRouter.get("/settings/:key", async (req: any, res: any) => {
-  try {
-    const { key } = req.params;
-    const rows = await querySql("SELECT setting_value FROM settings WHERE setting_key = ?", [key]);
-    if (!rows || rows.length === 0) {
-      return res.status(404).json({ error: "Setting not found" });
-    }
-    return res.json(JSON.parse(rows[0].setting_value));
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message });
-  }
-});
+// mysqlRouter.get("/settings/:key", async (req: any, res: any) => {
+//   try {
+//     const { key } = req.params;
+//     const rows = await querySql("SELECT setting_value FROM settings WHERE setting_key = ?", [key]);
+//     if (!rows || rows.length === 0) {
+//       return res.status(404).json({ error: "Setting not found" });
+//     }
+//     return res.json(JSON.parse(rows[0].setting_value));
+//   } catch (err: any) {
+//     return res.status(500).json({ error: err.message });
+//   }
+// });
 
 mysqlRouter.post("/settings/:key", async (req: any, res: any) => {
   try {
@@ -1217,5 +1217,40 @@ mysqlRouter.post("/settings/:key", async (req: any, res: any) => {
     return res.status(500).json({ error: err.message });
   }
 });
+// Add or replace your catch-all /:collection route with this to debug the exact crash:
+mysqlRouter.get("/:collection", async (req: any, res: any) => {
+  const { collection } = req.params;
+  const tableName = collection.replace(/-/g, "_");
 
+  const whitelistedTables = ["menus", "categories", "shipping_areas"];
+  if (!whitelistedTables.includes(tableName)) {
+    return res.status(404).json({ error: `Collection path '${collection}' does not exist.` });
+  }
+
+  try {
+    console.log(`[MYSQL DEBUG] Querying collection: ${tableName}`);
+    const rows = await querySql(`SELECT * FROM \`${tableName}\``);
+    
+    // Apply your array filters here
+    if (tableName === "menus") {
+      const items = rows.map((r: any) => ({
+        ...r,
+        tags: r.tags ? r.tags.split(",") : [],
+        specs: r.specs ? r.specs.split(",") : [],
+        price: parseFloat(r.price || "0")
+      }));
+      return res.json(items);
+    }
+    
+    return res.json(rows || []);
+  } catch (err: any) {
+    // THIS WILL TELL YOU EXACTLY IF CONFIG IS MISSING OR IF IP IS BLOCKED
+    console.error(`[MYSQL CRITICAL FAIL ON ROUTE /${collection}]:`, err.message);
+    return res.status(500).json({ 
+      error: "Internal Database Driver Error", 
+      message: err.message,
+      stack: err.stack 
+    });
+  }
+});
 export default mysqlRouter;
