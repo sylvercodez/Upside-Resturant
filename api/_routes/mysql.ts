@@ -513,13 +513,48 @@ mysqlRouter.post("/sync", async (req: any, res: any) => {
       console.warn("Payments sync warning:", pe);
     }
 
+    // D. Sync Riders from Firestore to MySQL
+    let ridersSynced = 0;
+    try {
+      const ridersSnap = await fdb.collection("riders").get();
+      for (const d of ridersSnap.docs) {
+        const r = d.data();
+        await querySql(
+          `INSERT INTO riders (id, fullName, phoneNumber, username, password, email, active, updatedAt)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+           ON DUPLICATE KEY UPDATE 
+             fullName = VALUES(fullName),
+             phoneNumber = VALUES(phoneNumber),
+             username = VALUES(username),
+             password = VALUES(password),
+             email = VALUES(email),
+             active = VALUES(active),
+             updatedAt = VALUES(updatedAt)`,
+          [
+            d.id, 
+            r.fullName || "", 
+            r.phoneNumber || "", 
+            (r.username || "").toLowerCase().trim(), 
+            r.password || "", 
+            r.email || "", 
+            r.active ? 1 : 0, 
+            r.updatedAt || new Date().toISOString()
+          ]
+        );
+        ridersSynced++;
+      }
+    } catch (re) {
+      console.warn("Riders sync warning:", re);
+    }
+
     return res.json({
       success: true,
       message: "Dynamic Firestore records fully replicated and synchronized with MySQL tables!",
       synced: {
         users: usersSynced,
         orders: ordersSynced,
-        payments: paymentsSynced
+        payments: paymentsSynced,
+        riders: ridersSynced
       }
     });
   } catch (err: any) {
@@ -1028,6 +1063,9 @@ mysqlRouter.get("/orders", async (req: any, res: any) => {
     } else if (email) {
       queryStr += " WHERE LOWER(email) = ?";
       params.push(email.toLowerCase().trim());
+    } else {
+      // Backend / general administrative query: return ONLY successful paid orders
+      queryStr += " WHERE LOWER(paymentStatus) IN ('paid', 'success', 'payment_successful')";
     }
 
     queryStr += " ORDER BY createdAt DESC";

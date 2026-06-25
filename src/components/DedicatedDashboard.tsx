@@ -1339,6 +1339,11 @@ export default function DedicatedDashboard({
 
   // Filtration logic for global orders pipeline
   const filteredOrders = allOrders.filter(ord => {
+    // Only successful paid orders are shown to the backend pipeline
+    const payStatus = (ord.paymentStatus || "").toLowerCase();
+    const isPaid = ["paid", "success", "payment_successful"].includes(payStatus);
+    if (!isPaid) return false;
+
     // Stage check
     let currentStatus = ord.status || "Prepping";
     if (currentStatus === "paid" || currentStatus === "pending") {
