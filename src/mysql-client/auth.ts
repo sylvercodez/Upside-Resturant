@@ -39,7 +39,6 @@ class CustomUser implements User {
   }
 
   async delete() {
-    console.log("[MySQL Auth] Deleted user mock.");
   }
 
   async getIdToken() {
@@ -136,7 +135,6 @@ export function onAuthStateChanged(auth: FirebaseAuthClient, callback: (user: Cu
 }
 
 export async function signInWithEmailAndPassword(auth: FirebaseAuthClient, email: string, password: string) {
-  console.log("[MySQL Auth] Login attempt for email:", email);
   const response = await fetch(getApiUrl("/api/mysql/auth/login"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -154,7 +152,6 @@ export async function signInWithEmailAndPassword(auth: FirebaseAuthClient, email
 }
 
 export async function createUserWithEmailAndPassword(auth: FirebaseAuthClient, email: string, password: string) {
-  console.log("[MySQL Auth] Sign-up attempt for email:", email);
   // Default to email prefix as full name during creation. Will be refined during updateProfile()
   const displayName = email.split("@")[0];
   const response = await fetch(getApiUrl("/api/mysql/auth/register"), {
@@ -174,7 +171,6 @@ export async function createUserWithEmailAndPassword(auth: FirebaseAuthClient, e
 }
 
 export async function updateProfile(user: CustomUser, profile: { displayName?: string }) {
-  console.log("[MySQL Auth] Profile update requested for:", profile);
   if (!user) throw new Error("No authenticated user session.");
 
   if (profile.displayName) {
@@ -202,7 +198,6 @@ export async function updateProfile(user: CustomUser, profile: { displayName?: s
 }
 
 export async function signOut(auth: FirebaseAuthClient) {
-  console.log("[MySQL Auth] Log out triggered.");
   auth.setSession(null);
 }
 
@@ -211,8 +206,6 @@ export class GoogleAuthProvider {
 }
 
 export async function signInWithPopup(auth: FirebaseAuthClient, provider?: any): Promise<any> {
-  console.log("[MySQL Auth] Social/Google auth popup triggered.");
-  
   try {
     const urlRes = await fetch(getApiUrl("/api/mysql/auth/google/url"));
     if (!urlRes.ok) {
@@ -294,6 +287,5 @@ export async function signInWithPopup(auth: FirebaseAuthClient, provider?: any):
 }
 
 export async function sendPasswordResetEmail(auth: FirebaseAuthClient, email: string) {
-  console.log("[MySQL Auth] Password reset request dispatched for:", email);
   return true;
 }

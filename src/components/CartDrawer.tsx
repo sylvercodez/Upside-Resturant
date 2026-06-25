@@ -672,11 +672,6 @@ export default function CartDrawer({
       userId: currentUserId
     };
 
-    console.log("=================== OPAY DEBUG PAYLOAD LOGGER ===================");
-    console.log("Exact payload structure being transmitted to /api/opay/create-payment API:");
-    console.log(JSON.stringify(opayPayload, null, 2));
-    console.log("=================================================================");
-
     try {
       const response = await fetch(getApiUrl("/api/opay/create-payment"), {
         method: "POST",

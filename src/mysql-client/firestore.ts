@@ -2,7 +2,6 @@
 import { getApiUrl } from "../types";
 
 export function getFirestore(app?: any, databaseId?: string) {
-  console.log("[MySQL Firestore] Loaded firestore client-side interface.");
   return { name: "mysql-firestore", databaseId };
 }
 
@@ -59,7 +58,6 @@ function makeQuerySnap(docs: any[]) {
 // Fetch single document
 export async function getDoc(docRef: any): Promise<any> {
   const { collection, id } = docRef;
-  console.log(`[MySQL Firestore] getDoc requested for: ${collection}/${id}`);
 
   try {
     if (collection === "settings") {
@@ -158,7 +156,6 @@ export async function getDocs(queryOrRef: any): Promise<any> {
   }
 
   const collectionName = ref.name;
-  console.log(`[MySQL Firestore] getDocs requested for: ${collectionName}`);
 
   try {
     let url = "";
@@ -215,7 +212,6 @@ export async function getDocs(queryOrRef: any): Promise<any> {
 // Write/Update documents
 export async function setDoc(docRef: any, data: any, options?: any): Promise<void> {
   const { collection, id } = docRef;
-  console.log(`[MySQL Firestore] setDoc requested for: ${collection}/${id}`, data);
 
   let payload = data;
   if (options && options.merge) {
@@ -258,7 +254,6 @@ export async function setDoc(docRef: any, data: any, options?: any): Promise<voi
   }
 
   if (!url) {
-    console.log(`[MySQL Firestore] Transient write bypassed for unmapped collection: "${collection}/${id}"`);
     // Store in localStorage as transient fallback
     try {
       localStorage.setItem(`transient_collection_${collection}_${id}`, JSON.stringify(payload));
@@ -280,7 +275,6 @@ export async function setDoc(docRef: any, data: any, options?: any): Promise<voi
 
 export async function updateDoc(docRef: any, data: any): Promise<void> {
   const { collection, id } = docRef;
-  console.log(`[MySQL Firestore] updateDoc requested for: ${collection}/${id}`, data);
 
   let url = "";
   let method = "PUT"; // Use PUT for order updates, POST for others
@@ -322,7 +316,6 @@ export async function addDoc(collectionRef: any, data: any): Promise<any> {
 
 export async function deleteDoc(docRef: any): Promise<void> {
   const { collection, id } = docRef;
-  console.log(`[MySQL Firestore] deleteDoc requested for: ${collection}/${id}`);
 
   let url = "";
   if (collection === "orders") url = getApiUrl(`/api/mysql/orders/${id}`);
