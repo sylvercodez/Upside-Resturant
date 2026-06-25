@@ -101,6 +101,8 @@ export default function DedicatedDashboard({
   const [ridersList, setRidersList] = useState<any[]>([]);
   const [ordersSearchText, setOrdersSearchText] = useState("");
   const [selectedOrderTab, setSelectedOrderTab] = useState<string>("all");
+  const [pipelineChannelFilter, setPipelineChannelFilter] = useState<string>("all");
+  const [isVerifyingOpayId, setIsVerifyingOpayId] = useState<string | null>(null);
   const [whatsappSearchText, setWhatsappSearchText] = useState("");
   const [whatsappStatusFilter, setWhatsappStatusFilter] = useState<string>("all");
 
@@ -1166,6 +1168,28 @@ export default function DedicatedDashboard({
     }
   };
 
+  const handleVerifyOpayOrder = async (orderId: string) => {
+    setIsVerifyingOpayId(orderId);
+    try {
+      const response = await fetch(getApiUrl("/api/opay/verify-payment"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderRef: orderId })
+      });
+      const data = await response.json();
+      if (response.ok && data.success) {
+        alert(`Verification Success: Status is now "${data.paymentStatus || "paid"}"!`);
+      } else {
+        alert(`Verification Failed: ${data.error || "Please verify manually."}`);
+      }
+    } catch (err: any) {
+      console.error("OPay order verification fail:", err);
+      alert(`Network error verifying OPay payment: ${err.message || err}`);
+    } finally {
+      setIsVerifyingOpayId(null);
+    }
+  };
+
   // Handle deleting order (and automatically setting its status to Cancelled first)
   const handleDeleteOrder = async (orderId: string) => {
     if (!window.confirm("Are you absolutely sure you want to cancel and delete this order? This action is permanent and cannot be undone.")) {
@@ -1408,12 +1432,14 @@ export default function DedicatedDashboard({
 
   // Filtration logic for global orders pipeline
   const filteredOrders = allOrders.filter(ord => {
-    // Only successful paid orders are shown to the backend pipeline
-    const payStatus = (ord.paymentStatus || "").toLowerCase();
-    const isPaid = ["paid", "success", "payment_successful"].includes(payStatus);
-    if (!isPaid) return false;
+    const isOpay = ord.paymentMethod === "opay" || ord.paymentMethod === "OPay" || ord.type === "opay";
+    const isWhatsapp = ord.paymentMethod === "whatsapp" || ord.type === "whatsapp";
 
-    // Stage check
+    // Channel filter
+    if (pipelineChannelFilter === "opay" && !isOpay) return false;
+    if (pipelineChannelFilter === "whatsapp" && !isWhatsapp) return false;
+
+    // Stage check (only if we're not filtering "all" preparation statuses)
     let currentStatus = ord.status || "Prepping";
     if (currentStatus === "paid" || currentStatus === "pending") {
       currentStatus = "Prepping";
@@ -1824,6 +1850,27 @@ export default function DedicatedDashboard({
                       </div>
                     </div>
 
+                    {/* Channel selection sub-tabs inside Orders Pipeline */}
+                    <div className="flex border-b border-neutral-800 font-mono text-[10px]">
+                      {[
+                        { id: "all", label: "🌐 All Channels", count: allOrders.length },
+                        { id: "opay", label: "💳 OPay Checkout", count: allOrders.filter(o => o.paymentMethod === "opay" || o.paymentMethod === "OPay" || o.type === "opay").length },
+                        { id: "whatsapp", label: "💬 WhatsApp Checkout", count: allOrders.filter(o => o.paymentMethod === "whatsapp" || o.type === "whatsapp").length }
+                      ].map((tab) => (
+                        <button
+                          key={tab.id}
+                          onClick={() => setPipelineChannelFilter(tab.id)}
+                          className={`px-4 py-2.5 font-bold uppercase border-b-2 tracking-wider transition-all cursor-pointer ${
+                            pipelineChannelFilter === tab.id
+                              ? "border-amber-500 text-amber-500 bg-amber-500/5 font-extrabold"
+                              : "border-transparent text-neutral-400 hover:text-white"
+                          }`}
+                        >
+                          {tab.label} ({tab.count})
+                        </button>
+                      ))}
+                    </div>
+
                     {/* Search Field */}
                     <div className="relative max-w-md">
                       <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-600" />
@@ -1875,9 +1922,42 @@ export default function DedicatedDashboard({
                                   <span className="px-2 py-0.5 bg-neutral-900 text-amber-500 font-mono text-[9px] uppercase tracking-wider font-extrabold border border-neutral-800">
                                     {ordStatus.toUpperCase()}
                                   </span>
-                                  <span className="text-[9px] text-neutral-500 uppercase">
-                                    {ord.type}
-                                  </span>
+
+                                  {/* Channel and payment indicators */}
+                                  {(() => {
+                                    const isOpay = ord.paymentMethod === "opay" || ord.paymentMethod === "OPay" || ord.type === "opay";
+                                    const isWhatsapp = ord.paymentMethod === "whatsapp" || ord.type === "whatsapp";
+                                    const payStatus = (ord.paymentStatus || "").toLowerCase();
+                                    const isPaid = ["paid", "success", "payment_successful"].includes(payStatus);
+
+                                    return (
+                                      <>
+                                        {isOpay ? (
+                                          <span className="px-2 py-0.5 bg-neutral-900 text-[#ff6b00] font-mono text-[9px] uppercase tracking-wider font-extrabold border border-[#ff6b00]/30 flex items-center gap-1">
+                                            <span>💳</span> OPay Order
+                                          </span>
+                                        ) : isWhatsapp ? (
+                                          <span className="px-2 py-0.5 bg-neutral-900 text-emerald-500 font-mono text-[9px] uppercase tracking-wider font-extrabold border border-emerald-500/30 flex items-center gap-1">
+                                            <span>💬</span> WhatsApp Order
+                                          </span>
+                                        ) : (
+                                          <span className="px-2 py-0.5 bg-neutral-900 text-neutral-400 font-mono text-[9px] uppercase tracking-wider font-extrabold border border-neutral-800">
+                                            {ord.type?.toUpperCase()}
+                                          </span>
+                                        )}
+
+                                        {isPaid ? (
+                                          <span className="px-2 py-0.5 bg-emerald-950/40 text-emerald-400 font-mono text-[8.5px] uppercase tracking-wider font-black border border-emerald-500/35">
+                                            ✓ PAID
+                                          </span>
+                                        ) : (
+                                          <span className="px-2 py-0.5 bg-amber-950/40 text-amber-500 font-mono text-[8.5px] uppercase tracking-wider font-black border border-amber-500/35 animate-pulse">
+                                            ⏳ UNPAID / AWAITING PAYMENT
+                                          </span>
+                                        )}
+                                      </>
+                                    );
+                                  })()}
                                 </div>
 
                                 {/* Main client Info grid */}
@@ -2070,6 +2150,91 @@ export default function DedicatedDashboard({
                                     >
                                       Delivered ✓
                                     </button>
+
+                                    {/* Channel-Specific Verification Controls */}
+                                    {(() => {
+                                      const isOpay = ord.paymentMethod === "opay" || ord.paymentMethod === "OPay" || ord.type === "opay";
+                                      const isWhatsapp = ord.paymentMethod === "whatsapp" || ord.type === "whatsapp";
+                                      const payStatus = (ord.paymentStatus || "").toLowerCase();
+                                      const isPaid = ["paid", "success", "payment_successful"].includes(payStatus);
+
+                                      return (
+                                        <>
+                                          {isOpay && (
+                                            <div className="bg-black/30 p-2 border border-[#ff6b00]/10 space-y-1.5 mt-1 text-left">
+                                              <div className="flex justify-between items-center text-[8px] text-neutral-400 font-bold uppercase">
+                                                <span>OPay Controls</span>
+                                                <span className="text-neutral-500">Ref: #{ord.id?.slice(-6).toUpperCase()}</span>
+                                              </div>
+                                              <div className="flex flex-col gap-1.5">
+                                                <div className="flex gap-1">
+                                                  <button
+                                                    onClick={() => handleVerifyOpayOrder(ord.id)}
+                                                    disabled={isVerifyingOpayId === ord.id}
+                                                    className="flex-grow py-1 px-1.5 bg-[#ff6b00]/15 hover:bg-[#ff6b00]/30 text-[#ff6b00] border border-[#ff6b00]/30 text-[9px] font-bold uppercase transition-all flex items-center justify-center gap-1 cursor-pointer disabled:opacity-50"
+                                                  >
+                                                    {isVerifyingOpayId === ord.id ? "Checking..." : "🔍 Verify OPay"}
+                                                  </button>
+                                                  {!isPaid && (
+                                                    <button
+                                                      onClick={() => handleUpdateWhatsAppStatus(ord, "paid")}
+                                                      className="py-1 px-1.5 bg-neutral-850 hover:bg-neutral-800 border border-neutral-700 text-neutral-300 text-[9px] font-bold uppercase transition-all cursor-pointer"
+                                                      title="Manually force OPay order as Paid"
+                                                    >
+                                                      Force Paid
+                                                    </button>
+                                                  )}
+                                                </div>
+                                              </div>
+                                            </div>
+                                          )}
+
+                                          {isWhatsapp && (
+                                            <div className="bg-black/30 p-2 border border-emerald-500/10 space-y-1.5 mt-1 text-left">
+                                              <div className="flex justify-between items-center text-[8px] text-neutral-400 font-bold uppercase">
+                                                <span>WhatsApp Controls</span>
+                                              </div>
+                                              <div className="flex flex-col gap-1.5">
+                                                <div className="flex gap-1.5">
+                                                  <button
+                                                    onClick={() => handleUpdateWhatsAppStatus(ord, "paid")}
+                                                    disabled={isPaid}
+                                                    className={`flex-1 py-1 px-1.5 text-[9px] font-bold uppercase transition-all cursor-pointer border ${
+                                                      isPaid 
+                                                        ? "bg-neutral-850 text-neutral-600 border-neutral-800 cursor-not-allowed" 
+                                                        : "bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border-emerald-500/40"
+                                                    }`}
+                                                  >
+                                                    {isPaid ? "✓ Marked Paid" : "✓ Mark Paid"}
+                                                  </button>
+                                                  
+                                                  <select
+                                                    value={ord.paymentStatus || "waiting for payment"}
+                                                    onChange={(e) => handleUpdateWhatsAppStatus(ord, e.target.value)}
+                                                    className="bg-[#0a0908] border border-neutral-800 text-[9px] text-neutral-300 font-mono cursor-pointer focus:outline-none focus:border-amber-500 p-1"
+                                                  >
+                                                    <option value="waiting for payment">⏳ Waiting</option>
+                                                    <option value="not paid">❌ Unpaid</option>
+                                                    <option value="cancel">🚫 Cancelled</option>
+                                                    <option value="paid">✔️ Paid</option>
+                                                  </select>
+                                                </div>
+                                                
+                                                {/* Customer Chat Helper */}
+                                                <a
+                                                  href={`https://wa.me/${ord.phone?.replace(/[^0-9]/g, "") || "2349114646767"}`}
+                                                  target="_blank"
+                                                  rel="noreferrer"
+                                                  className="w-full py-1 bg-neutral-900 border border-neutral-800 text-[8.5px] text-neutral-350 font-bold uppercase tracking-wider text-center block hover:text-white"
+                                                >
+                                                  💬 Chat with Customer
+                                                </a>
+                                              </div>
+                                            </div>
+                                          )}
+                                        </>
+                                      );
+                                    })()}
 
                                     <div className="border-t border-neutral-800 my-1"></div>
 
