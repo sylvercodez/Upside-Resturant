@@ -331,6 +331,7 @@ export async function deleteDoc(docRef: any): Promise<void> {
   else if (collection === "shipping_areas" || collection === "shipping-areas") url = getApiUrl(`/api/mysql/shipping-areas/${id}`);
   else if (collection === "riders") url = getApiUrl(`/api/mysql/riders/${id}`);
   else if (collection === "assets") url = getApiUrl(`/api/mysql/assets/${id}`);
+  else if (collection === "users") url = getApiUrl(`/api/mysql/users/${id}`);
 
   if (!url) throw new Error(`Unsupported delete collection: ${collection}`);
 

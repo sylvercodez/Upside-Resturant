@@ -210,31 +210,87 @@ export class GoogleAuthProvider {
   static PROVIDER_ID = "google.com";
 }
 
-export async function signInWithPopup(auth: FirebaseAuthClient, provider?: any) {
+export async function signInWithPopup(auth: FirebaseAuthClient, provider?: any): Promise<any> {
   console.log("[MySQL Auth] Social/Google auth popup triggered.");
-  // Fast synthetic Google authorization
-  const email = prompt("Enter your Google Email Address to continue:", "guest@gmail.com");
-  if (!email) {
-    throw new Error("Google login cancelled by user.");
+  
+  try {
+    const urlRes = await fetch(getApiUrl("/api/mysql/auth/google/url"));
+    if (!urlRes.ok) {
+      const errData = await urlRes.json().catch(() => ({}));
+      throw new Error(errData.error || "Google Client ID is not configured on the server.");
+    }
+
+    const { url } = await urlRes.json();
+    
+    return new Promise((resolve, reject) => {
+      const authWindow = window.open(
+        url,
+        "google_oauth_popup",
+        "width=500,height=600,left=100,top=100"
+      );
+
+      if (!authWindow) {
+        reject(new Error("Popup blocked. Please allow popups to sign in with Google."));
+        return;
+      }
+
+      const handleMessage = (event: MessageEvent) => {
+        if (event.data?.type === "OAUTH_AUTH_SUCCESS") {
+          window.removeEventListener("message", handleMessage);
+          const userData = event.data.user;
+          auth.setSession(userData);
+          resolve({ user: auth.currentUser });
+        } else if (event.data?.type === "OAUTH_AUTH_FAILURE") {
+          window.removeEventListener("message", handleMessage);
+          reject(new Error(event.data.error || "Google login failed."));
+        }
+      };
+
+      window.addEventListener("message", handleMessage);
+
+      // Check if window is closed by user
+      const checkClosed = setInterval(() => {
+        if (authWindow.closed) {
+          clearInterval(checkClosed);
+          window.removeEventListener("message", handleMessage);
+          reject(new Error("Google login window closed."));
+        }
+      }, 1000);
+    });
+
+  } catch (err: any) {
+    console.warn("Real Google Auth failed/not configured. Falling back to synthetic prompt:", err.message);
+    
+    // Friendly warning to user about how to configure Google Auth
+    alert(
+      "Notice: Google Authentication credentials are not configured in system secrets.\n\n" +
+      "To enable real Google Login, please register your app on Google Cloud Console and set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET environment variables.\n\n" +
+      "Falling back to high-fidelity simulated account registration..."
+    );
+
+    const email = prompt("Enter your Google Email Address to continue:", "guest@gmail.com");
+    if (!email) {
+      throw new Error("Google login cancelled by user.");
+    }
+
+    const displayName = email.split("@")[0];
+    const uid = "google_usr_" + Math.random().toString(36).substring(2, 11);
+
+    const response = await fetch(getApiUrl("/api/mysql/auth/social-sync"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ uid, email, displayName })
+    });
+
+    if (!response.ok) {
+      const errData = await response.json().catch(() => ({}));
+      throw new Error(errData.error || "Google login sync failed.");
+    }
+
+    const data = await response.json();
+    auth.setSession(data.user);
+    return { user: auth.currentUser };
   }
-
-  const displayName = email.split("@")[0];
-  const uid = "google_usr_" + Math.random().toString(36).substring(2, 11);
-
-  const response = await fetch(getApiUrl("/api/mysql/auth/social-sync"), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ uid, email, displayName })
-  });
-
-  if (!response.ok) {
-    const errData = await response.json().catch(() => ({}));
-    throw new Error(errData.error || "Google login sync failed.");
-  }
-
-  const data = await response.json();
-  auth.setSession(data.user);
-  return { user: auth.currentUser };
 }
 
 export async function sendPasswordResetEmail(auth: FirebaseAuthClient, email: string) {

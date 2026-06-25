@@ -922,6 +922,186 @@ mysqlRouter.post("/auth/social-sync", async (req: any, res: any) => {
   }
 });
 
+// 5bc. Real Google OAuth Routes
+mysqlRouter.get("/auth/google/url", (req: any, res: any) => {
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  if (!clientId) {
+    return res.status(400).json({ error: "Google Client ID is not configured. Please add GOOGLE_CLIENT_ID to the system environment variables." });
+  }
+
+  const origin = process.env.APP_URL || `${req.protocol}://${req.get("host")}`;
+  const redirectUri = `${origin.replace(/\/$/, "")}/api/mysql/auth/google/callback`;
+
+  const params = new URLSearchParams({
+    client_id: clientId,
+    redirect_uri: redirectUri,
+    response_type: "code",
+    scope: "openid email profile",
+    prompt: "select_account"
+  });
+
+  const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
+  return res.json({ url: authUrl });
+});
+
+mysqlRouter.get("/auth/google/callback", async (req: any, res: any) => {
+  const { code, error } = req.query;
+  if (error) {
+    return res.send(`
+      <html>
+        <body>
+          <script>
+            if (window.opener) {
+              window.opener.postMessage({ type: "OAUTH_AUTH_FAILURE", error: "${error}" }, "*");
+              window.close();
+            } else {
+              window.location.href = "/";
+            }
+          </script>
+          <p>Authentication failed: ${error}. This window should close automatically.</p>
+        </body>
+      </html>
+    `);
+  }
+
+  if (!code) {
+    return res.status(400).send("No authorization code provided.");
+  }
+
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+  if (!clientId || !clientSecret) {
+    return res.status(400).send("Google credentials are not configured in system environment variables.");
+  }
+
+  const origin = process.env.APP_URL || `${req.protocol}://${req.get("host")}`;
+  const redirectUri = `${origin.replace(/\/$/, "")}/api/mysql/auth/google/callback`;
+
+  try {
+    const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        code: code as string,
+        client_id: clientId,
+        client_secret: clientSecret,
+        redirect_uri: redirectUri,
+        grant_type: "authorization_code"
+      }).toString()
+    });
+
+    if (!tokenRes.ok) {
+      const errText = await tokenRes.text();
+      throw new Error(`Token exchange failed: ${errText}`);
+    }
+
+    const tokenData = await tokenRes.json();
+    const { access_token } = tokenData;
+
+    const profileRes = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
+      headers: { Authorization: `Bearer ${access_token}` }
+    });
+
+    if (!profileRes.ok) {
+      const errText = await profileRes.text();
+      throw new Error(`Failed to retrieve Google profile: ${errText}`);
+    }
+
+    const profile = await profileRes.json();
+    const { sub, email, name } = profile;
+
+    if (!email) {
+      throw new Error("No email returned from Google user profile.");
+    }
+
+    const emailLower = email.toLowerCase().trim();
+    const displayName = name || emailLower.split("@")[0];
+    const uid = `google_${sub}`;
+
+    const records: any[] = await querySql(
+      "SELECT * FROM users WHERE uid = ? OR LOWER(email) = ?",
+      [uid, emailLower]
+    );
+
+    let user: any = null;
+    if (records && records.length > 0) {
+      user = records[0];
+      if (user.disabled || user.disabled === 1) {
+        throw new Error("Your user account has been disabled by the system administrator.");
+      }
+      if (user.uid !== uid) {
+        await querySql("UPDATE users SET uid = ? WHERE email = ?", [uid, emailLower]);
+        user.uid = uid;
+      }
+    } else {
+      const isAdminEmail = 
+        emailLower === "tosinotenaike3@gmail.com" || 
+        emailLower === "tobi@gmail.com" || 
+        emailLower === "mophethecommerce@gmail.com" ||
+        emailLower.includes("mophethecommerce");
+      const role = isAdminEmail ? "admin" : "user";
+
+      await querySql(
+        "INSERT INTO users (uid, email, displayName, role, password_hash, disabled, createdAt) VALUES (?, ?, ?, ?, NULL, 0, ?)",
+        [uid, emailLower, displayName, role, new Date().toISOString()]
+      );
+
+      user = {
+        uid,
+        email: emailLower,
+        displayName,
+        role,
+        disabled: false
+      };
+    }
+
+    const userPayload = {
+      uid: user.uid,
+      email: user.email,
+      displayName: user.displayName || user.email.split("@")[0],
+      role: user.role || "user",
+      disabled: false
+    };
+
+    return res.send(`
+      <html>
+        <body>
+          <script>
+            if (window.opener) {
+              window.opener.postMessage({ 
+                type: "OAUTH_AUTH_SUCCESS", 
+                user: ${JSON.stringify(userPayload)} 
+              }, "*");
+              window.close();
+            } else {
+              window.location.href = "/";
+            }
+          </script>
+          <p>Authentication successful! Logging you in... This window should close automatically.</p>
+        </body>
+      </html>
+    `);
+
+  } catch (err: any) {
+    console.error("[GOOGLE CALLBACK ERROR]:", err);
+    return res.send(`
+      <html>
+        <body>
+          <script>
+            if (window.opener) {
+              window.opener.postMessage({ type: "OAUTH_AUTH_FAILURE", error: ${JSON.stringify(err.message)} }, "*");
+              window.close();
+            } else {
+              window.location.href = "/?auth_error=" + encodeURIComponent(err.message);
+            }
+          </script>
+          <p>Authentication error: ${err.message}. This window should close automatically.</p>
+        </body>
+      </html>
+    `);
+  }
+});
+
 // 5c. Menus Endpoint Definitions
 mysqlRouter.get("/menus", async (req: any, res: any) => {
   try {
@@ -1297,6 +1477,16 @@ mysqlRouter.post("/users/:uid", async (req: any, res: any) => {
   }
 });
 
+mysqlRouter.delete("/users/:uid", async (req: any, res: any) => {
+  try {
+    const { uid } = req.params;
+    await querySql("DELETE FROM users WHERE uid = ?", [uid]);
+    return res.json({ success: true });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 // 5i. Key-Value Settings endpoints
 // mysqlRouter.get("/settings/:key", async (req: any, res: any) => {
 //   try {
@@ -1330,6 +1520,62 @@ mysqlRouter.post("/settings/:key", async (req: any, res: any) => {
 // ==========================================
 mysqlRouter.get("/riders", async (req: any, res: any) => {
   try {
+    // Attempt automatic real-time sync from Firestore to MySQL on query
+    try {
+      const configPath = path.join(process.cwd(), "firebase-applet-config.json");
+      let databaseId = "ai-studio-7ee29b67-2013-4587-a753-b479a6e19155";
+      let firebaseConfig: any = null;
+      
+      if (fs.existsSync(configPath)) {
+        firebaseConfig = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+        if (firebaseConfig.firestoreDatabaseId) databaseId = firebaseConfig.firestoreDatabaseId;
+      } else {
+        firebaseConfig = {
+          projectId: process.env.FIREBASE_PROJECT_ID || process.env.GCLOUD_PROJECT || "gen-lang-client-0332471137",
+        };
+      }
+
+      const { default: admin } = await import("firebase-admin");
+      let appInstance;
+      try {
+        appInstance = admin.app("mysql-sync-admin-get");
+      } catch (_) {
+        appInstance = admin.initializeApp({
+          projectId: firebaseConfig.projectId
+        }, "mysql-sync-admin-get");
+      }
+
+      const fdb = databaseId ? appInstance.firestore(databaseId) : appInstance.firestore();
+      const ridersSnap = await fdb.collection("riders").get();
+      for (const d of ridersSnap.docs) {
+        const r = d.data();
+        await querySql(
+          `INSERT INTO riders (id, fullName, phoneNumber, username, password, email, active, updatedAt)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+           ON DUPLICATE KEY UPDATE 
+             fullName = VALUES(fullName),
+             phoneNumber = VALUES(phoneNumber),
+             username = VALUES(username),
+             password = VALUES(password),
+             email = VALUES(email),
+             active = VALUES(active),
+             updatedAt = VALUES(updatedAt)`,
+          [
+            d.id, 
+            r.fullName || "", 
+            r.phoneNumber || "", 
+            (r.username || "").toLowerCase().trim(), 
+            r.password || "", 
+            r.email || "", 
+            r.active ? 1 : 0, 
+            r.updatedAt || new Date().toISOString()
+          ]
+        );
+      }
+    } catch (syncErr) {
+      console.warn("Auto-sync of riders from Firestore failed (proceeding to MySQL only):", syncErr);
+    }
+
     const rows = await querySql("SELECT * FROM riders");
     const riders = rows.map((r: any) => ({
       ...r,
