@@ -929,7 +929,11 @@ mysqlRouter.get("/auth/google/url", (req: any, res: any) => {
     return res.status(400).json({ error: "Google Client ID is not configured. Please add GOOGLE_CLIENT_ID to the system environment variables." });
   }
 
-  const origin = process.env.APP_URL || `${req.protocol}://${req.get("host")}`;
+  let origin = process.env.APP_URL || `${req.protocol}://${req.get("host")}`;
+  const hostHeader = (req.get("host") || "").toLowerCase();
+  if (hostHeader.includes("upside-restaurant-cafe.com") || (!hostHeader.includes("localhost") && !hostHeader.includes("127.0.0.1") && !hostHeader.includes(".run.app") && !hostHeader.includes("gitpod") && !hostHeader.includes("codesandbox"))) {
+    origin = "https://upside-restaurant-cafe.com";
+  }
   const redirectUri = `${origin.replace(/\/$/, "")}/api/mysql/auth/google/callback`;
 
   const params = new URLSearchParams({
@@ -974,7 +978,11 @@ mysqlRouter.get("/auth/google/callback", async (req: any, res: any) => {
     return res.status(400).send("Google credentials are not configured in system environment variables.");
   }
 
-  const origin = process.env.APP_URL || `${req.protocol}://${req.get("host")}`;
+  let origin = process.env.APP_URL || `${req.protocol}://${req.get("host")}`;
+  const hostHeader = (req.get("host") || "").toLowerCase();
+  if (hostHeader.includes("upside-restaurant-cafe.com") || (!hostHeader.includes("localhost") && !hostHeader.includes("127.0.0.1") && !hostHeader.includes(".run.app") && !hostHeader.includes("gitpod") && !hostHeader.includes("codesandbox"))) {
+    origin = "https://upside-restaurant-cafe.com";
+  }
   const redirectUri = `${origin.replace(/\/$/, "")}/api/mysql/auth/google/callback`;
 
   try {
