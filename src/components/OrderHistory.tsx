@@ -22,6 +22,8 @@ interface Order {
   timestamp: number;
   type: string;
   verificationCode?: string;
+  paymentStatus?: string;
+  paymentMethod?: string;
 }
 
 interface OrderHistoryProps {
@@ -224,156 +226,245 @@ export default function OrderHistory({ onReorderClick, onTrackClick }: OrderHist
       </div>
 
       <div className="space-y-2.5 max-h-[380px] overflow-y-auto pr-1" id="order-history-scroll-panel">
-        {orders.map((order) => {
-          const isExpanded = expandedOrderId === order.id;
-          const formattedDate = new Date(order.timestamp).toLocaleDateString("en-NG", {
-            year: "numeric",
-            month: "short",
-            day: "numeric",
-            hour: "2-digit",
-            minute: "2-digit"
-          });
+        {(() => {
+          const handleSendWhatsAppProof = (order: Order) => {
+            const orderId = order.id;
+            let itemsArray: any[] = [];
+            const items = order.items;
+            if (items) {
+              if (Array.isArray(items)) {
+                itemsArray = items;
+              } else if (typeof items === "string") {
+                try {
+                  const parsed = JSON.parse(items);
+                  if (Array.isArray(parsed)) {
+                    itemsArray = parsed;
+                  } else if (parsed && typeof parsed === "object") {
+                    itemsArray = Object.values(parsed);
+                  }
+                } catch (_) {}
+              } else if (typeof items === "object") {
+                itemsArray = Object.values(items);
+              }
+            }
+            
+            const itemsSummary = itemsArray
+              .map((it: any) => `${it.quantity || 1}x ${it.name || "Gourmet Dish"}`)
+              .join(", ");
 
-          return (
-            <div 
-              key={order.id} 
-              className="bg-[#181818] border border-neutral-800/80 hover:border-amber-900/20 transition-all font-mono"
-              id={`order-block-${order.id}`}
-            >
-              {/* Collapsed Header Bar */}
+            const text = `Hello Upside, I've placed an order and would like to submit proof of payment.\n\n` +
+              `• *Order ID*: #${orderId.slice(-6).toUpperCase()}\n` +
+              `• *Customer*: ${order.customerName || "Customer"}\n` +
+              `• *Items*: ${itemsSummary}\n` +
+              `• *Total Price*: ₦${order.totalPrice.toLocaleString()}\n` +
+              `• *Verification Code*: ${order.verificationCode || "None"}\n\n` +
+              `I am attaching my transfer receipt. Please verify and approve so cooking can commence!`;
+
+            const encodedText = encodeURIComponent(text);
+            const whatsappUrl = `https://wa.me/2349114646767?text=${encodedText}`;
+            window.open(whatsappUrl, "_blank");
+          };
+
+          return orders.map((order) => {
+            const isExpanded = expandedOrderId === order.id;
+            const formattedDate = new Date(order.timestamp).toLocaleDateString("en-NG", {
+              year: "numeric",
+              month: "short",
+              day: "numeric",
+              hour: "2-digit",
+              minute: "2-digit"
+            });
+
+            const unpaid = 
+              (order.paymentStatus || "").toLowerCase() === "waiting for payment" ||
+              (order.paymentStatus || "").toLowerCase() === "unpaid" ||
+              (order.paymentStatus || "").toLowerCase() === "not paid" ||
+              (order.paymentStatus || "").toLowerCase() === "pending" ||
+              (order.paymentMethod === "whatsapp" && !order.paymentStatus);
+
+            const cardClass = unpaid
+              ? "bg-[#1d1612]/90 border border-amber-900/40 hover:border-amber-700/50 transition-all font-mono shadow-[inset_0_1px_1px_rgba(251,191,36,0.03)]"
+              : "bg-[#181818] border border-neutral-800/80 hover:border-amber-900/20 transition-all font-mono";
+
+            const displayStatus = unpaid ? "Awaiting Payment" : order.status;
+            const badgeClass = unpaid 
+              ? "bg-amber-950/40 text-amber-500 border border-amber-600/30 animate-pulse" 
+              : getStatusBadgeClass(order.status);
+
+            return (
               <div 
-                onClick={() => toggleExpandOrder(order.id)}
-                className="p-3.5 flex items-center justify-between cursor-pointer select-none text-left"
+                key={order.id} 
+                className={cardClass}
+                id={`order-block-${order.id}`}
               >
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-bold text-white tracking-widest">
-                      #{order.id.slice(-6).toUpperCase()}
-                    </span>
-                    <span className="text-[9px] text-neutral-500">
-                      {formattedDate}
-                    </span>
-                  </div>
-                  <div className="text-[10px] text-neutral-400 tracking-tight font-sans">
-                    {order.items.length} {order.items.length === 1 ? "dish" : "dishes"} • <span className="text-amber-500 font-mono font-bold">₦{order.totalPrice.toLocaleString()}</span>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <span className={`px-2 py-0.5 text-[8px] uppercase tracking-wider font-bold ${getStatusBadgeClass(order.status)}`}>
-                    {order.status}
-                  </span>
-                  {isExpanded ? (
-                    <ChevronUp className="w-3.5 h-3.5 text-neutral-500" />
-                  ) : (
-                    <ChevronDown className="w-3.5 h-3.5 text-neutral-500" />
-                  )}
-                </div>
-              </div>
-
-              {/* Expanded Detail Panel */}
-              {isExpanded && (
-                <div className="p-3.5 border-t border-neutral-800 bg-[#121212] space-y-3.5 text-left animate-slideDown">
-                  {/* Dish List Grid */}
-                  <div className="space-y-1.5" id={`order-expansion-${order.id}-dishes`}>
-                    <p className="text-[9px] text-neutral-500 uppercase tracking-widest font-bold">Dish Selection</p>
-                    <div className="space-y-1 text-[11px] text-neutral-300">
-                      {(() => {
-                        const items = order.items;
-                        let itemsArray: any[] = [];
-                        if (items) {
-                          if (Array.isArray(items)) {
-                            itemsArray = items;
-                          } else if (typeof items === "string") {
-                            try {
-                              const parsed = JSON.parse(items);
-                              if (Array.isArray(parsed)) {
-                                itemsArray = parsed;
-                              } else if (parsed && typeof parsed === "object") {
-                                itemsArray = Object.values(parsed);
-                              }
-                            } catch (_) {}
-                          } else if (typeof items === "object") {
-                            itemsArray = Object.values(items);
-                          }
-                        }
-                        return itemsArray.map((item: any, idx: number) => (
-                          <div key={idx} className="flex justify-between items-center bg-[#181818] px-2 py-1.5">
-                            <span>
-                              {(item?.quantity || 1)}x <span className="text-white font-sans">{item?.name || "Gourmet Dish"}</span>
-                            </span>
-                            <span className="text-[10px] text-amber-500">
-                              ₦{((item?.price || 5000) * (item?.quantity || 1)).toLocaleString()}
-                            </span>
-                          </div>
-                        ));
-                      })()}
-                    </div>
-                  </div>
-
-                  {/* Delivery Sanctuary Details */}
+                {/* Collapsed Header Bar */}
+                <div 
+                  onClick={() => toggleExpandOrder(order.id)}
+                  className="p-3.5 flex items-center justify-between cursor-pointer select-none text-left"
+                >
                   <div className="space-y-1">
-                    <p className="text-[9px] text-neutral-500 uppercase tracking-widest font-bold">Fulfillment Details</p>
-                    <div className="bg-[#181818] p-2 text-[10px] space-y-1 text-neutral-400">
-                      <div className="flex items-start gap-1 font-sans">
-                        <MapPin className="w-3.5 h-3.5 text-neutral-500 shrink-0 mt-0.5" />
-                        <span>Address: {order.address}</span>
-                      </div>
-                      <div className="font-sans">
-                        Type: <span className="text-amber-500 font-mono uppercase tracking-wider font-bold text-[9px]">{order.type}</span>
-                      </div>
-                      {order.verificationCode && (
-                        <div className="border-t border-neutral-800 mt-2.5 pt-2 flex items-center justify-between">
-                          <span className="font-sans text-[9px] text-neutral-400 uppercase font-black tracking-wide">Pickup Code:</span>
-                          <span className="text-amber-500 font-bold px-2 py-0.5 bg-neutral-950 border border-neutral-800 font-mono tracking-widest text-[11px] block select-all">{order.verificationCode}</span>
-                        </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-bold text-white tracking-widest">
+                        #{order.id.slice(-6).toUpperCase()}
+                      </span>
+                      <span className="text-[9px] text-neutral-500">
+                        {formattedDate}
+                      </span>
+                      {unpaid && (
+                        <span className="text-[8px] px-1 bg-amber-900/40 text-amber-500 border border-amber-700/30">
+                          UNPAID
+                        </span>
                       )}
                     </div>
-                  </div>
-
-                  {/* Custom Action Utilities */}
-                  <div className="flex gap-2 pt-1">
-                    {onTrackClick && (
-                      <button
-                        onClick={() => onTrackClick(order)}
-                        className="flex-1 py-1.5 bg-amber-500 text-black text-[9px] tracking-widest font-extrabold uppercase hover:bg-amber-400 transition-colors flex items-center justify-center gap-1 cursor-pointer"
-                      >
-                        <Truck className="w-3.5 h-3.5" />
-                        <span>Track Order Progress</span>
-                      </button>
-                    )}
-                    {onReorderClick && (
-                      <button
-                        onClick={() => onReorderClick(order.items)}
-                        className="flex-1 py-1.5 bg-[#202020] hover:bg-neutral-800 border border-neutral-800 text-neutral-200 text-[9px] tracking-widest font-semibold uppercase transition-all flex items-center justify-center gap-1 cursor-pointer"
-                      >
-                        <ShoppingBag className="w-3.5 h-3.5" />
-                        <span>Reorder Basket</span>
-                      </button>
-                    )}
-                  </div>
-
-                  {order.status === "Delivered" && (
-                    <div className="flex gap-2 mt-2 pt-2 border-t border-neutral-850/65">
-                      <button
-                        onClick={() => handleDeleteOrder(order.id)}
-                        className="flex-1 py-1.5 bg-red-950/40 hover:bg-red-900/40 border border-red-900/30 text-red-500 text-[9px] tracking-widest font-bold uppercase transition-all flex items-center justify-center gap-1 cursor-pointer"
-                      >
-                        Delete Order
-                      </button>
-                      <button
-                        onClick={() => handleArchiveOrder(order.id)}
-                        className="flex-1 py-1.5 bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-neutral-300 text-[9px] tracking-widest font-bold uppercase transition-all flex items-center justify-center gap-1 cursor-pointer"
-                      >
-                        Archive Order
-                      </button>
+                    <div className="text-[10px] text-neutral-400 tracking-tight font-sans">
+                      {order.items.length} {order.items.length === 1 ? "dish" : "dishes"} • <span className="text-amber-500 font-mono font-bold">₦{order.totalPrice.toLocaleString()}</span>
                     </div>
-                  )}
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <span className={`px-2 py-0.5 text-[8px] uppercase tracking-wider font-bold ${badgeClass}`}>
+                      {displayStatus}
+                    </span>
+                    {isExpanded ? (
+                      <ChevronUp className="w-3.5 h-3.5 text-neutral-500" />
+                    ) : (
+                      <ChevronDown className="w-3.5 h-3.5 text-neutral-500" />
+                    )}
+                  </div>
                 </div>
-              )}
-            </div>
-          );
-        })}
+
+                {/* Expanded Detail Panel */}
+                {isExpanded && (
+                  <div className="p-3.5 border-t border-neutral-800 bg-[#121212] space-y-3.5 text-left animate-slideDown">
+                    {/* Unpaid Warning Block */}
+                    {unpaid && (
+                      <div className="bg-amber-950/20 border border-amber-900/40 p-3 text-[10px] space-y-1.5 text-amber-400 font-sans leading-relaxed">
+                        <div className="flex items-center gap-1.5 font-bold font-mono uppercase tracking-wider text-[11px] text-amber-500">
+                          <span>⏳ PAYMENT REQUIRED</span>
+                        </div>
+                        <p>
+                          Your order is currently placed but is awaiting payment verification. 
+                          Our kitchen team will begin preparing your delicious selection as soon as your payment of <strong className="font-mono text-white">₦{order.totalPrice.toLocaleString()}</strong> is confirmed.
+                        </p>
+                        {order.paymentMethod === "whatsapp" && (
+                          <p className="text-[9.5px] text-neutral-400">
+                            Please click the <strong className="text-emerald-400 font-bold font-mono">WhatsApp Proof of Payment</strong> button below to send your transfer receipt to our secure administration line.
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Dish List Grid */}
+                    <div className="space-y-1.5" id={`order-expansion-${order.id}-dishes`}>
+                      <p className="text-[9px] text-neutral-500 uppercase tracking-widest font-bold">Dish Selection</p>
+                      <div className="space-y-1 text-[11px] text-neutral-300">
+                        {(() => {
+                          const items = order.items;
+                          let itemsArray: any[] = [];
+                          if (items) {
+                            if (Array.isArray(items)) {
+                              itemsArray = items;
+                            } else if (typeof items === "string") {
+                              try {
+                                const parsed = JSON.parse(items);
+                                if (Array.isArray(parsed)) {
+                                  itemsArray = parsed;
+                                } else if (parsed && typeof parsed === "object") {
+                                  itemsArray = Object.values(parsed);
+                                }
+                              } catch (_) {}
+                            } else if (typeof items === "object") {
+                              itemsArray = Object.values(items);
+                            }
+                          }
+                          return itemsArray.map((item: any, idx: number) => (
+                            <div key={idx} className="flex justify-between items-center bg-[#181818] px-2 py-1.5">
+                              <span>
+                                {(item?.quantity || 1)}x <span className="text-white font-sans">{item?.name || "Gourmet Dish"}</span>
+                              </span>
+                              <span className="text-[10px] text-amber-500">
+                                ₦{((item?.price || 5000) * (item?.quantity || 1)).toLocaleString()}
+                              </span>
+                            </div>
+                          ));
+                        })()}
+                      </div>
+                    </div>
+
+                    {/* Delivery Sanctuary Details */}
+                    <div className="space-y-1">
+                      <p className="text-[9px] text-neutral-500 uppercase tracking-widest font-bold">Fulfillment Details</p>
+                      <div className="bg-[#181818] p-2 text-[10px] space-y-1 text-neutral-400">
+                        <div className="flex items-start gap-1 font-sans">
+                          <MapPin className="w-3.5 h-3.5 text-neutral-500 shrink-0 mt-0.5" />
+                          <span>Address: {order.address}</span>
+                        </div>
+                        <div className="font-sans">
+                          Type: <span className="text-amber-500 font-mono uppercase tracking-wider font-bold text-[9px]">{order.type}</span>
+                        </div>
+                        {order.verificationCode && (
+                          <div className="border-t border-neutral-800 mt-2.5 pt-2 flex items-center justify-between">
+                            <span className="font-sans text-[9px] text-neutral-400 uppercase font-black tracking-wide">Pickup Code:</span>
+                            <span className="text-amber-500 font-bold px-2 py-0.5 bg-neutral-950 border border-neutral-800 font-mono tracking-widest text-[11px] block select-all">{order.verificationCode}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Custom Action Utilities */}
+                    <div className="flex gap-2 pt-1">
+                      {unpaid && order.paymentMethod === "whatsapp" ? (
+                        <button
+                          onClick={() => handleSendWhatsAppProof(order)}
+                          className="flex-1 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-[9px] tracking-widest font-extrabold uppercase transition-colors flex items-center justify-center gap-1 cursor-pointer"
+                        >
+                          <span className="text-[12px]">💬</span>
+                          <span>Submit Proof via WhatsApp</span>
+                        </button>
+                      ) : (
+                        onTrackClick && (
+                          <button
+                            onClick={() => onTrackClick(order)}
+                            className="flex-1 py-1.5 bg-amber-500 text-black text-[9px] tracking-widest font-extrabold uppercase hover:bg-amber-400 transition-colors flex items-center justify-center gap-1 cursor-pointer"
+                          >
+                            <Truck className="w-3.5 h-3.5" />
+                            <span>Track Order Progress</span>
+                          </button>
+                        )
+                      )}
+                      {onReorderClick && (
+                        <button
+                          onClick={() => onReorderClick(order.items)}
+                          className="flex-1 py-1.5 bg-[#202020] hover:bg-neutral-800 border border-neutral-800 text-neutral-200 text-[9px] tracking-widest font-semibold uppercase transition-all flex items-center justify-center gap-1 cursor-pointer"
+                        >
+                          <ShoppingBag className="w-3.5 h-3.5" />
+                          <span>Reorder Basket</span>
+                        </button>
+                      )}
+                    </div>
+
+                    {order.status === "Delivered" && (
+                      <div className="flex gap-2 mt-2 pt-2 border-t border-neutral-850/65">
+                        <button
+                          onClick={() => handleDeleteOrder(order.id)}
+                          className="flex-1 py-1.5 bg-red-950/40 hover:bg-red-900/40 border border-red-900/30 text-red-500 text-[9px] tracking-widest font-bold uppercase transition-all flex items-center justify-center gap-1 cursor-pointer"
+                        >
+                          Delete Order
+                        </button>
+                        <button
+                          onClick={() => handleArchiveOrder(order.id)}
+                          className="flex-1 py-1.5 bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-neutral-300 text-[9px] tracking-widest font-bold uppercase transition-all flex items-center justify-center gap-1 cursor-pointer"
+                        >
+                          Archive Order
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          });
+        })()}
       </div>
     </div>
   );

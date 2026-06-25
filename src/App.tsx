@@ -545,8 +545,8 @@ useEffect(() => {
   const handleTrackOrder = async (order: any) => {
     if (!order) return;
 
-    // Detect if order uses OPay (either checked out via OPay, type is opay, or id starts with order_)
-    const isOpay = order.paymentMethod === "opay" || order.paymentMethod === "OPay" || order.type === "opay" || order.id?.startsWith("order_");
+    // Detect if order uses OPay (either checked out via OPay, or type is opay explicitly)
+    const isOpay = order.paymentMethod === "opay" || order.paymentMethod === "OPay" || order.type === "opay";
 
     if (isOpay && order.id) {
       try {
@@ -715,7 +715,7 @@ useEffect(() => {
             onViewAllMenu={() => {
               handleNavigate("/menu");
             }}
-            menuItems={allMenuItems}
+            menuItems={allMenuItems.filter(item => item.available !== false)}
             categories={allCategories}
           />
 
@@ -749,7 +749,7 @@ useEffect(() => {
           onAddToCart={handleAddToCart}
           favorites={favorites}
           onToggleFavorite={handleToggleFavorite}
-          menuItems={allMenuItems}
+          menuItems={allMenuItems.filter(item => item.available !== false)}
           categories={allCategories}
         />
       )}

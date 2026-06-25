@@ -394,7 +394,7 @@ export default function CartDrawer({
   const getUpsellItems = () => {
     const itemIdsInCart = cartItems.map((c) => c.itemId);
     const finalMenu = menuItems || MENU_ITEMS;
-    return finalMenu.filter((item) => !itemIdsInCart.includes(item.id)).slice(0, 2);
+    return finalMenu.filter((item) => !itemIdsInCart.includes(item.id) && item.available !== false).slice(0, 2);
   };
 
   const upsellRecommendations = getUpsellItems();
@@ -526,6 +526,8 @@ export default function CartDrawer({
       items: cartItems.map(item => ({ name: item.name, quantity: item.quantity, price: item.price })),
       address: formData.type === "delivery" ? `${formData.address}, ${formData.area}` : "Boutique Self-Pickup",
       status: "Prepping",
+      paymentMethod: "whatsapp",
+      paymentStatus: "waiting for payment",
       timestamp: Date.now(),
       type: formData.type,
       verificationCode
@@ -547,7 +549,8 @@ export default function CartDrawer({
             items: JSON.stringify(cartItems.map(item => ({ name: item.name, quantity: item.quantity, price: item.price }))),
             address: formData.type === "delivery" ? `${formData.address}, ${formData.area}` : "Boutique Self-Pickup",
             status: "Prepping",
-            paymentStatus: "PENDING",
+            paymentStatus: "waiting for payment",
+            paymentMethod: "whatsapp",
             verificationCode
           })
         });
@@ -563,23 +566,8 @@ export default function CartDrawer({
       console.error("Failed to persist order to Firestore:", dbErr);
     }
 
-    // Trigger confirmation e-mail asynchronously
-    if (formData.email && formData.email !== "guest@example.com" && formData.email.includes("@")) {
-      fetch(getApiUrl("/api/delivery/notify/order-placed"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          orderId,
-          email: formData.email,
-          customerName: formData.customerName,
-          verificationCode,
-          totalPrice: finalTotal,
-          items: cartItems.map(item => ({ name: item.name, quantity: item.quantity, price: item.price })),
-          address: formData.type === "delivery" ? `${formData.address}, ${formData.area}` : "Boutique Self-Pickup",
-          phone: formData.phone || ""
-        })
-      }).catch(err => console.error("Could not trigger email:", err));
-    }
+    // Trigger confirmation e-mail asynchronously - SUPPRESSED for WhatsApp order until admin marks as paid
+    console.log("WhatsApp order placed. Confirmation email is held until payment is confirmed by admin.");
 
     window.open(whatsappUrl, "_blank");
     logCustomEvent("checkout_success", {

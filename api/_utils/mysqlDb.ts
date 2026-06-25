@@ -92,9 +92,14 @@ export async function autoInitializeSchema(activePool: mysql.Pool): Promise<void
       tags TEXT,
       specs TEXT,
       deleted TINYINT(1) DEFAULT 0,
+      available TINYINT(1) DEFAULT 1,
       updatedAt VARCHAR(255)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
+
+  try {
+    await activePool.execute("ALTER TABLE menus ADD COLUMN available TINYINT(1) DEFAULT 1");
+  } catch (_) {}
 
   // 3. Create orders table
   await activePool.execute(`
@@ -109,6 +114,7 @@ export async function autoInitializeSchema(activePool: mysql.Pool): Promise<void
       address TEXT,
       status VARCHAR(100) DEFAULT 'Prepping',
       paymentStatus VARCHAR(100) DEFAULT 'unpaid',
+      paymentMethod VARCHAR(100) DEFAULT 'other',
       verificationCode VARCHAR(100) DEFAULT NULL,
       assignedRiderId VARCHAR(255) DEFAULT NULL,
       assignedRiderName VARCHAR(255) DEFAULT NULL,
@@ -117,6 +123,10 @@ export async function autoInitializeSchema(activePool: mysql.Pool): Promise<void
       createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
+
+  try {
+    await activePool.execute("ALTER TABLE orders ADD COLUMN paymentMethod VARCHAR(100) DEFAULT 'other'");
+  } catch (_) {}
 
   // 4. Create payments table
   await activePool.execute(`

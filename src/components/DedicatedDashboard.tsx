@@ -101,6 +101,8 @@ export default function DedicatedDashboard({
   const [ridersList, setRidersList] = useState<any[]>([]);
   const [ordersSearchText, setOrdersSearchText] = useState("");
   const [selectedOrderTab, setSelectedOrderTab] = useState<string>("all");
+  const [whatsappSearchText, setWhatsappSearchText] = useState("");
+  const [whatsappStatusFilter, setWhatsappStatusFilter] = useState<string>("all");
 
   // Form states to create customized menu items
   const [newMenuData, setNewMenuData] = useState({
@@ -111,7 +113,8 @@ export default function DedicatedDashboard({
     category: "starters",
     image: PRESET_IMAGES[0].url,
     tags: "Chef's Special, Spicy",
-    specs: "Contains premium native spices"
+    specs: "Contains premium native spices",
+    available: true
   });
   const [menuFormError, setMenuFormError] = useState("");
   const [menuFormSuccess, setMenuFormSuccess] = useState("");
@@ -1100,6 +1103,69 @@ export default function DedicatedDashboard({
     }
   };
 
+  // Handle updating WhatsApp order payment status and optionally dispatching confirmation email
+  const handleUpdateWhatsAppStatus = async (order: any, newPaymentStatus: string) => {
+    try {
+      const orderRef = doc(db, "orders", order.id);
+      
+      // Update Firestore
+      await updateDoc(orderRef, {
+        paymentStatus: newPaymentStatus,
+        // If marked as paid, we can set the kitchen status to Prepping so it enters the cooking pipeline
+        ...(newPaymentStatus === "paid" ? { status: "Prepping" } : {}),
+        updatedAt: new Date().toISOString()
+      });
+
+      // Update MySQL if active
+      if (isMySQLActive) {
+        await fetch(getApiUrl(`/api/mysql/orders/${order.id}`), {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            paymentStatus: newPaymentStatus,
+            ...(newPaymentStatus === "paid" ? { status: "Prepping" } : {})
+          })
+        }).catch(err => console.error("Could not sync paymentStatus to MySQL:", err));
+      }
+
+      // If transition to paid, send email confirmation!
+      if (newPaymentStatus === "paid") {
+        if (order.email && order.email !== "guest@example.com" && order.email.includes("@")) {
+          await fetch(getApiUrl("/api/delivery/notify/order-placed"), {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              orderId: order.id,
+              email: order.email,
+              customerName: order.customerName,
+              verificationCode: order.verificationCode || "",
+              totalPrice: order.totalPrice,
+              items: order.items || [],
+              address: order.address,
+              phone: order.phone || ""
+            })
+          }).then(res => {
+            if (res.ok) {
+              alert(`Order marked as PAID! Confirmation email successfully dispatched to ${order.customerName}.`);
+            } else {
+              alert(`Order marked as PAID! (Note: Confirmation email dispatch returned status ${res.status})`);
+            }
+          }).catch(err => {
+            console.error("Could not dispatch confirmation email:", err);
+            alert(`Order marked as PAID! (Note: Could not dispatch confirmation email: ${err.message})`);
+          });
+        } else {
+          alert("Order marked as PAID! (No customer email found or guest account used)");
+        }
+      } else {
+        alert(`Order status updated to "${newPaymentStatus}" successfully.`);
+      }
+    } catch (e: any) {
+      console.error("WhatsApp status shift failed:", e);
+      alert(`Could not update WhatsApp status: ${e.message}`);
+    }
+  };
+
   // Handle deleting order (and automatically setting its status to Cancelled first)
   const handleDeleteOrder = async (orderId: string) => {
     if (!window.confirm("Are you absolutely sure you want to cancel and delete this order? This action is permanent and cannot be undone.")) {
@@ -1163,7 +1229,8 @@ export default function DedicatedDashboard({
           category: "starters",
           image: PRESET_IMAGES[0].url,
           tags: "Chef's Special, Spicy",
-          specs: "Contains premium native spices"
+          specs: "Contains premium native spices",
+          available: true
         });
       }
     } catch (e: any) {
@@ -1257,6 +1324,7 @@ export default function DedicatedDashboard({
         image: newMenuData.image.trim(),
         tags: newMenuData.tags ? newMenuData.tags.split(",").map(t => t.trim()).filter(Boolean) : [],
         specs: newMenuData.specs ? newMenuData.specs.split(",").map(s => s.trim()).filter(Boolean) : [],
+        available: newMenuData.available,
         updatedAt: new Date().toISOString()
       };
 
@@ -1289,7 +1357,8 @@ export default function DedicatedDashboard({
         category: "starters",
         image: PRESET_IMAGES[0].url,
         tags: "Chef's Special, Spicy",
-        specs: "Contains premium native spices"
+        specs: "Contains premium native spices",
+        available: true
       });
     } catch (err: any) {
       console.error("Menu save error:", err);
@@ -1496,16 +1565,28 @@ export default function DedicatedDashboard({
 
                   {/* Privileged pipeline (Sales, Chef, Admin) */}
                   {isPrivileged && (
-                    <button
-                      onClick={() => setActiveTab("orders_pipeline")}
-                      className={`px-6 py-3 text-xs tracking-wider uppercase font-bold text-center transition-all cursor-pointer flex items-center gap-1.5 ${
-                        activeTab === "orders_pipeline"
-                          ? "bg-amber-600 text-white border-l-2 border-amber-400"
-                          : "text-amber-600 hover:text-amber-500 hover:bg-amber-100"
-                      }`}
-                    >
-                      🛍️ Orders Pipeline ({allOrders.length})
-                    </button>
+                    <>
+                      <button
+                        onClick={() => setActiveTab("orders_pipeline")}
+                        className={`px-6 py-3 text-xs tracking-wider uppercase font-bold text-center transition-all cursor-pointer flex items-center gap-1.5 ${
+                          activeTab === "orders_pipeline"
+                            ? "bg-amber-600 text-white border-l-2 border-amber-400"
+                            : "text-amber-600 hover:text-amber-500 hover:bg-amber-100"
+                        }`}
+                      >
+                        🛍️ Orders Pipeline ({allOrders.filter(o => ["paid", "success", "payment_successful"].includes((o.paymentStatus || "").toLowerCase())).length})
+                      </button>
+                      <button
+                        onClick={() => setActiveTab("whatsapp_orders")}
+                        className={`px-6 py-3 text-xs tracking-wider uppercase font-bold text-center transition-all cursor-pointer flex items-center gap-1.5 ${
+                          activeTab === "whatsapp_orders"
+                            ? "bg-amber-600 text-white border-l-2 border-amber-400"
+                            : "text-neutral-600 hover:text-neutral-900 hover:bg-neutral-200"
+                        }`}
+                      >
+                        💬 WhatsApp Orders ({allOrders.filter(o => o.paymentMethod === "whatsapp").length})
+                      </button>
+                    </>
                   )}
 
                   {/* Admin-only user manager and dynamic menu creator */}
@@ -2011,6 +2092,215 @@ export default function DedicatedDashboard({
                   </div>
                 )}
 
+                {/* TAB 3.5: WHATSAPP ORDERS MANAGER (Sales/Chef/Admin) */}
+                {isPrivileged && activeTab === "whatsapp_orders" && (
+                  <div className="bg-[#121212] border border-neutral-850 p-6 space-y-6 text-left" id="dashboard-whatsapp-orders-tab">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-neutral-800 pb-4">
+                      <div>
+                        <h2 className="text-xs font-mono font-bold tracking-widest text-amber-500 uppercase flex items-center gap-2">
+                          <span>💬 WhatsApp Orders Pipeline</span>
+                          <span className="px-2 py-0.5 bg-neutral-800 text-[9px] text-neutral-400 rounded-none tracking-normal font-normal">Privileged Dashboard</span>
+                        </h2>
+                        <p className="text-[10px] text-neutral-500 font-sans mt-0.5">
+                          Manage external orders placed via WhatsApp. Change statuses or mark as paid to dispatch confirmations.
+                        </p>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-3">
+                        <input
+                          type="text"
+                          placeholder="Search WhatsApp orders..."
+                          value={whatsappSearchText}
+                          onChange={(e) => setWhatsappSearchText(e.target.value)}
+                          className="px-3 py-1.5 bg-[#0a0908] border border-neutral-800 text-[10px] text-neutral-300 placeholder-neutral-600 focus:outline-none focus:border-amber-600 w-48 font-mono"
+                        />
+                        <div className="flex bg-[#0a0908] border border-neutral-800 p-0.5">
+                          {["all", "waiting for payment", "not paid", "paid", "cancel"].map((st) => {
+                            const count = allOrders.filter(
+                              (o) =>
+                                o.paymentMethod === "whatsapp" &&
+                                (st === "all" || (o.paymentStatus || "").toLowerCase() === st)
+                            ).length;
+                            return (
+                              <button
+                                key={st}
+                                onClick={() => setWhatsappStatusFilter(st)}
+                                className={`px-2 py-1 text-[9px] font-mono uppercase transition-colors cursor-pointer ${
+                                  whatsappStatusFilter === st
+                                    ? "bg-amber-600 text-white font-bold"
+                                    : "text-neutral-400 hover:text-white"
+                                }`}
+                              >
+                                {st} ({count})
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Filtered list */}
+                    {(() => {
+                      const filtered = allOrders
+                        .filter((o) => o.paymentMethod === "whatsapp")
+                        .filter((o) => {
+                          const statusMatch =
+                            whatsappStatusFilter === "all" ||
+                            (o.paymentStatus || "").toLowerCase() === whatsappStatusFilter;
+                          const searchLower = whatsappSearchText.toLowerCase();
+                          const textMatch =
+                            !whatsappSearchText ||
+                            (o.id || "").toLowerCase().includes(searchLower) ||
+                            (o.customerName || "").toLowerCase().includes(searchLower) ||
+                            (o.email || "").toLowerCase().includes(searchLower) ||
+                            (o.phone || "").toLowerCase().includes(searchLower) ||
+                            (o.address || "").toLowerCase().includes(searchLower);
+                          return statusMatch && textMatch;
+                        });
+
+                      if (filtered.length === 0) {
+                        return (
+                          <div className="py-12 text-center border border-dashed border-neutral-850">
+                            <span className="text-3xl block mb-2">💬</span>
+                            <p className="text-xs font-mono text-neutral-500">No matching WhatsApp orders found.</p>
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {filtered.map((ord) => {
+                            const orderStatus = (ord.paymentStatus || "waiting for payment").toLowerCase();
+                            
+                            // Let's determine color theme for order card status
+                            let borderCol = "border-neutral-850";
+                            let statusBadge = "border-neutral-700 text-neutral-400";
+                            if (orderStatus === "waiting for payment") {
+                              borderCol = "border-amber-900/40 bg-amber-950/5";
+                              statusBadge = "border-amber-600/40 text-amber-500 bg-amber-950/20";
+                            } else if (orderStatus === "not paid") {
+                              borderCol = "border-rose-950 bg-rose-950/5";
+                              statusBadge = "border-rose-600/40 text-rose-500 bg-rose-950/20";
+                            } else if (orderStatus === "paid") {
+                              borderCol = "border-emerald-950 bg-emerald-950/5";
+                              statusBadge = "border-emerald-600/40 text-emerald-500 bg-emerald-950/20";
+                            } else if (orderStatus === "cancel") {
+                              borderCol = "border-neutral-900 bg-neutral-950/20 opacity-60";
+                              statusBadge = "border-neutral-700 text-neutral-500";
+                            }
+
+                            return (
+                              <div
+                                key={ord.id}
+                                className={`border ${borderCol} p-5 space-y-4 font-mono flex flex-col justify-between transition-all`}
+                                id={`whatsapp-order-${ord.id}`}
+                              >
+                                <div className="space-y-3">
+                                  {/* Top Row: Info & Badges */}
+                                  <div className="flex items-start justify-between gap-2 border-b border-neutral-850 pb-2">
+                                    <div>
+                                      <span className="text-[9px] text-neutral-500 font-mono block">
+                                        {ord.timestamp ? new Date(ord.timestamp).toLocaleString() : "Unknown date"}
+                                      </span>
+                                      <h3 className="text-xs font-mono font-bold text-white uppercase mt-0.5 tracking-wider">
+                                        ID: #{ord.id?.substring(6) || ord.id}
+                                      </h3>
+                                    </div>
+                                    <div className="flex flex-col items-end gap-1">
+                                      <span className={`text-[8px] font-bold uppercase tracking-widest px-2 py-0.5 border rounded-none font-mono ${statusBadge}`}>
+                                        {ord.paymentStatus || "Waiting for Payment"}
+                                      </span>
+                                      {ord.type && (
+                                        <span className="text-[8px] font-mono text-neutral-400 bg-neutral-900 px-1.5 py-0.5 uppercase tracking-wider">
+                                          {ord.type}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  {/* Customer Info */}
+                                  <div className="text-[10px] text-neutral-300 space-y-1 bg-neutral-900/50 p-2.5 border border-neutral-850">
+                                    <p className="font-sans">
+                                      <strong className="font-mono text-amber-500 text-[9.5px]">👤 CUSTOMER:</strong> {ord.customerName}
+                                    </p>
+                                    <p className="font-sans">
+                                      <strong className="font-mono text-amber-500 text-[9.5px]">📞 PHONE:</strong> {ord.phone}
+                                    </p>
+                                    {ord.email && ord.email !== "guest@example.com" && (
+                                      <p className="font-sans">
+                                        <strong className="font-mono text-amber-500 text-[9.5px]">✉️ EMAIL:</strong> {ord.email}
+                                      </p>
+                                    )}
+                                    <p className="font-sans mt-1 text-neutral-400">
+                                      <strong className="font-mono text-amber-500 text-[9.5px]">📍 ADDRESS:</strong> {ord.address}
+                                    </p>
+                                  </div>
+
+                                  {/* Ordered items list */}
+                                  <div className="space-y-1">
+                                    <span className="text-[9px] text-neutral-500 block uppercase font-bold tracking-wider">Items summary:</span>
+                                    <div className="space-y-1 pl-1">
+                                      {(ord.items || []).map((it: any, index: number) => (
+                                        <div key={index} className="flex justify-between items-center text-[10px] text-neutral-400 border-b border-neutral-900 pb-0.5">
+                                          <span>• {it.name} <span className="text-neutral-500 text-[9px]">x{it.quantity}</span></span>
+                                          <span className="text-neutral-300">₦{(it.price * it.quantity).toLocaleString()}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+
+                                  {/* Verification Code */}
+                                  {ord.verificationCode && (
+                                    <div className="flex justify-between items-center text-[9px] bg-[#0e0c0b] p-1.5 border border-neutral-850 text-neutral-400">
+                                      <span>VERIFICATION CODE:</span>
+                                      <span className="font-bold text-amber-500 tracking-widest">{ord.verificationCode}</span>
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* Bottom Row: Price & Actions */}
+                                <div className="pt-3 border-t border-neutral-850 space-y-3">
+                                  <div className="flex justify-between items-end">
+                                    <span className="text-[9px] text-neutral-500">GRAND TOTAL:</span>
+                                    <span className="text-sm font-bold text-white">₦{ord.totalPrice?.toLocaleString()}</span>
+                                  </div>
+
+                                  <div className="grid grid-cols-2 gap-2">
+                                    <button
+                                      onClick={() => handleUpdateWhatsAppStatus(ord, "paid")}
+                                      disabled={orderStatus === "paid"}
+                                      className={`px-3 py-1.5 text-[10px] font-mono uppercase tracking-wider text-center cursor-pointer font-bold ${
+                                        orderStatus === "paid"
+                                          ? "bg-neutral-850 text-neutral-600 border border-neutral-800"
+                                          : "bg-emerald-600 hover:bg-emerald-500 text-white border border-emerald-500"
+                                      }`}
+                                    >
+                                      {orderStatus === "paid" ? "✅ PAID (Done)" : "✔️ Mark Paid"}
+                                    </button>
+
+                                    <div className="relative group">
+                                      <select
+                                        value={ord.paymentStatus || "waiting for payment"}
+                                        onChange={(e) => handleUpdateWhatsAppStatus(ord, e.target.value)}
+                                        className="w-full px-2 py-1.5 bg-[#0a0908] border border-neutral-800 text-[10px] text-neutral-300 font-mono cursor-pointer focus:outline-none focus:border-amber-500"
+                                      >
+                                        <option value="waiting for payment">⏳ Waiting Payment</option>
+                                        <option value="not paid">❌ Not Paid</option>
+                                        <option value="cancel">🚫 Cancelled</option>
+                                        <option value="paid">✔️ Paid (Mark Paid)</option>
+                                      </select>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                )}
+
                 {/* TAB 4: USER DIRECTORY ROLE ASSIGNER (Admins Only) */}
                 {userRole === "admin" && activeTab === "users_panel" && (
                   <div className="bg-[#121212] border border-neutral-850 p-6 space-y-6 text-left" id="dashboard-users-tab">
@@ -2144,7 +2434,8 @@ export default function DedicatedDashboard({
                                 category: "starters",
                                 image: PRESET_IMAGES[0].url,
                                 tags: "Chef's Special, Spicy",
-                                specs: "Contains premium native spices"
+                                specs: "Contains premium native spices",
+                                available: true
                               });
                               setMenuFormError("");
                               setMenuFormSuccess("");
@@ -2336,6 +2627,19 @@ export default function DedicatedDashboard({
                           </div>
                         </div>
 
+                        <div className="flex items-center gap-2.5 p-2.5 bg-neutral-950 border border-neutral-850">
+                          <input
+                            type="checkbox"
+                            id="menu-available-toggle"
+                            checked={newMenuData.available}
+                            onChange={(e) => setNewMenuData(prev => ({ ...prev, available: e.target.checked }))}
+                            className="w-4 h-4 rounded border-neutral-800 text-amber-500 focus:ring-amber-500/30 accent-amber-500 cursor-pointer"
+                          />
+                          <label htmlFor="menu-available-toggle" className="text-[10px] text-neutral-300 uppercase tracking-wider font-mono cursor-pointer select-none">
+                            Item is Available <span className="text-[9px] text-neutral-500 font-sans italic lowercase">(uncheck to hide from customer view)</span>
+                          </label>
+                        </div>
+
                         <button
                           type="submit"
                           className="w-full py-3 bg-amber-600 hover:bg-amber-700 text-white font-bold tracking-widest uppercase transition-colors rounded-none cursor-pointer flex items-center justify-center gap-2"
@@ -2434,6 +2738,15 @@ export default function DedicatedDashboard({
                                       <span className="text-[8px] font-mono text-neutral-500 uppercase bg-neutral-900 px-1 border border-neutral-850">
                                         {item.id}
                                       </span>
+                                      {item.available === false ? (
+                                        <span className="text-[7.5px] font-mono text-red-400 uppercase bg-red-950/20 px-1 border border-red-900/30">
+                                          Unavailable (Hidden)
+                                        </span>
+                                      ) : (
+                                        <span className="text-[7.5px] font-mono text-emerald-400 uppercase bg-emerald-950/20 px-1 border border-emerald-900/30">
+                                          Available
+                                        </span>
+                                      )}
                                     </div>
                                     <p className="text-[9.5px] text-neutral-500 capitalize">{item.category} • <span className="text-[9px] font-bold text-amber-500">₦{item.price.toLocaleString()}</span></p>
                                     <p className="text-[8px] text-neutral-400 font-sans line-clamp-1 max-w-[280px] mt-0.5">{item.description}</p>
@@ -2452,7 +2765,8 @@ export default function DedicatedDashboard({
                                         category: item.category,
                                         image: item.image,
                                         tags: Array.isArray(item.tags) ? item.tags.join(", ") : (item.tags || ""),
-                                        specs: Array.isArray(item.specs) ? item.specs.join(", ") : (item.specs || "")
+                                        specs: Array.isArray(item.specs) ? item.specs.join(", ") : (item.specs || ""),
+                                        available: item.available !== false
                                       });
                                       setMenuFormError("");
                                       setMenuFormSuccess("");

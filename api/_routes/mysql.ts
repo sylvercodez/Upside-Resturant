@@ -255,9 +255,14 @@ mysqlRouter.post("/setup", async (req: any, res: any) => {
         tags TEXT,
         specs TEXT,
         deleted TINYINT(1) DEFAULT 0,
+        available TINYINT(1) DEFAULT 1,
         updatedAt VARCHAR(255)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     `);
+
+    try {
+      await querySql("ALTER TABLE menus ADD COLUMN available TINYINT(1) DEFAULT 1");
+    } catch (_) {}
 
     // Create orders table
     await querySql(`
@@ -272,6 +277,7 @@ mysqlRouter.post("/setup", async (req: any, res: any) => {
         address TEXT,
         status VARCHAR(100) DEFAULT 'Prepping',
         paymentStatus VARCHAR(100) DEFAULT 'unpaid',
+        paymentMethod VARCHAR(100) DEFAULT 'other',
         verificationCode VARCHAR(100) DEFAULT NULL,
         assignedRiderId VARCHAR(255) DEFAULT NULL,
         assignedRiderName VARCHAR(255) DEFAULT NULL,
@@ -280,6 +286,10 @@ mysqlRouter.post("/setup", async (req: any, res: any) => {
         createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     `);
+
+    try {
+      await querySql("ALTER TABLE orders ADD COLUMN paymentMethod VARCHAR(100) DEFAULT 'other'");
+    } catch (_) {}
 
     // Create payments table
     await querySql(`
@@ -1118,7 +1128,8 @@ mysqlRouter.get("/menus", async (req: any, res: any) => {
       ...r,
       tags: r.tags ? r.tags.split(",") : [],
       specs: r.specs ? r.specs.split(",") : [],
-      price: parseFloat(r.price)
+      price: parseFloat(r.price),
+      available: r.available === undefined ? true : (r.available === 1 || r.available === true)
     }));
     return res.json(items);
   } catch (err: any) {
@@ -1128,18 +1139,19 @@ mysqlRouter.get("/menus", async (req: any, res: any) => {
 
 mysqlRouter.post("/menus", async (req: any, res: any) => {
   try {
-    const { id, name, description, price, category, image, tags, specs } = req.body;
+    const { id, name, description, price, category, image, tags, specs, available } = req.body;
     if (!id || !name || !category) {
       return res.status(400).json({ error: "Missing required menu properties: id, name, category are required." });
     }
     const tagsStr = Array.isArray(tags) ? tags.join(",") : (tags || "");
     const specsStr = Array.isArray(specs) ? specs.join(",") : (specs || "");
+    const availableVal = (available === undefined || available === null) ? 1 : (available ? 1 : 0);
 
     await querySql(
-      `INSERT INTO menus (id, name, description, price, category, image, tags, specs, deleted, updatedAt)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?)
-       ON DUPLICATE KEY UPDATE name=VALUES(name), description=VALUES(description), price=VALUES(price), category=VALUES(category), image=VALUES(image), tags=VALUES(tags), specs=VALUES(specs), deleted=0, updatedAt=VALUES(updatedAt)`,
-      [id, name, description || "", parseFloat(price || "0"), category, image || "", tagsStr, specsStr, new Date().toISOString()]
+      `INSERT INTO menus (id, name, description, price, category, image, tags, specs, deleted, available, updatedAt)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
+       ON DUPLICATE KEY UPDATE name=VALUES(name), description=VALUES(description), price=VALUES(price), category=VALUES(category), image=VALUES(image), tags=VALUES(tags), specs=VALUES(specs), deleted=0, available=VALUES(available), updatedAt=VALUES(updatedAt)`,
+      [id, name, description || "", parseFloat(price || "0"), category, image || "", tagsStr, specsStr, availableVal, new Date().toISOString()]
     );
     return res.json({ success: true });
   } catch (err: any) {
@@ -1309,17 +1321,17 @@ mysqlRouter.get("/orders/:id", async (req: any, res: any) => {
 
 mysqlRouter.post("/orders", async (req: any, res: any) => {
   try {
-    const { id, userId, customerName, email, phone, totalPrice, items, address, status, paymentStatus, verificationCode, assignedRiderId, assignedRiderName, assignedRiderPhone } = req.body;
+    const { id, userId, customerName, email, phone, totalPrice, items, address, status, paymentStatus, paymentMethod, verificationCode, assignedRiderId, assignedRiderName, assignedRiderPhone } = req.body;
     if (!id || !customerName) {
       return res.status(400).json({ error: "Missing required order fields: id and name are required." });
     }
     const itemsStr = typeof items === "string" ? items : JSON.stringify(items || []);
 
     await querySql(
-      `INSERT INTO orders (id, userId, customerName, email, phone, totalPrice, items, address, status, paymentStatus, verificationCode, assignedRiderId, assignedRiderName, assignedRiderPhone, updatedAt)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-       ON DUPLICATE KEY UPDATE customerName=VALUES(customerName), email=VALUES(email), phone=VALUES(phone), totalPrice=VALUES(totalPrice), items=VALUES(items), address=VALUES(address), status=VALUES(status), paymentStatus=VALUES(paymentStatus), verificationCode=VALUES(verificationCode), assignedRiderId=VALUES(assignedRiderId), assignedRiderName=VALUES(assignedRiderName), assignedRiderPhone=VALUES(assignedRiderPhone), updatedAt=VALUES(updatedAt)`,
-      [id, userId || "guest", customerName, email || "", phone || "", parseFloat(totalPrice || "0"), itemsStr, address || "", status || "Prepping", paymentStatus || "unpaid", verificationCode || "", assignedRiderId || "", assignedRiderName || "", assignedRiderPhone || "", new Date().toISOString()]
+      `INSERT INTO orders (id, userId, customerName, email, phone, totalPrice, items, address, status, paymentStatus, paymentMethod, verificationCode, assignedRiderId, assignedRiderName, assignedRiderPhone, updatedAt)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE customerName=VALUES(customerName), email=VALUES(email), phone=VALUES(phone), totalPrice=VALUES(totalPrice), items=VALUES(items), address=VALUES(address), status=VALUES(status), paymentStatus=VALUES(paymentStatus), paymentMethod=VALUES(paymentMethod), verificationCode=VALUES(verificationCode), assignedRiderId=VALUES(assignedRiderId), assignedRiderName=VALUES(assignedRiderName), assignedRiderPhone=VALUES(assignedRiderPhone), updatedAt=VALUES(updatedAt)`,
+      [id, userId || "guest", customerName, email || "", phone || "", parseFloat(totalPrice || "0"), itemsStr, address || "", status || "Prepping", paymentStatus || "unpaid", paymentMethod || "other", verificationCode || "", assignedRiderId || "", assignedRiderName || "", assignedRiderPhone || "", new Date().toISOString()]
     );
 
     return res.json({ success: true, orderId: id });
@@ -1331,7 +1343,7 @@ mysqlRouter.post("/orders", async (req: any, res: any) => {
 mysqlRouter.put("/orders/:id", async (req: any, res: any) => {
   try {
     const { id } = req.params;
-    const { status, paymentStatus, verificationCode, assignedRiderId, assignedRiderName, assignedRiderPhone } = req.body;
+    const { status, paymentStatus, paymentMethod, verificationCode, assignedRiderId, assignedRiderName, assignedRiderPhone } = req.body;
 
     let updates: string[] = [];
     let params: any[] = [];
@@ -1343,6 +1355,10 @@ mysqlRouter.put("/orders/:id", async (req: any, res: any) => {
     if (paymentStatus !== undefined) {
       updates.push("paymentStatus = ?");
       params.push(paymentStatus);
+    }
+    if (paymentMethod !== undefined) {
+      updates.push("paymentMethod = ?");
+      params.push(paymentMethod);
     }
     if (verificationCode !== undefined) {
       updates.push("verificationCode = ?");

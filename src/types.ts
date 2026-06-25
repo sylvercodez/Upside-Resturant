@@ -82,6 +82,7 @@ export interface MenuItem {
   specs?: string[];
   variants?: { name: string; price: number }[];
   extras?: { name: string; price: number }[];
+  available?: boolean;
 }
 
 export interface Category {
