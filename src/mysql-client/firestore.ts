@@ -116,6 +116,23 @@ export async function getDoc(docRef: any): Promise<any> {
       return makeDocSnap(id, data);
     }
 
+    if (collection === "riders") {
+      const res = await fetch(getApiUrl(`/api/mysql/riders/${id}`));
+      if (res.status === 404) return makeDocSnap(id, null);
+      if (!res.ok) {
+        let errDetails = "";
+        try {
+          const errJson = await res.json();
+          errDetails = errJson.message || errJson.error || JSON.stringify(errJson);
+        } catch (_) {
+          try { errDetails = await res.text(); } catch (_) {}
+        }
+        throw new Error(`Failed to load rider: ${res.status} - ${errDetails || res.statusText}`);
+      }
+      const data = await res.json();
+      return makeDocSnap(id, data);
+    }
+
     // Default fallback - check in transient localStorage first
     try {
       const valStr = localStorage.getItem(`transient_collection_${collection}_${id}`);
@@ -150,6 +167,9 @@ export async function getDocs(queryOrRef: any): Promise<any> {
     else if (collectionName === "shipping_areas" || collectionName === "shipping-areas") url = getApiUrl("/api/mysql/shipping-areas");
     else if (collectionName === "orders") url = getApiUrl("/api/mysql/orders");
     else if (collectionName === "users") url = getApiUrl("/api/mysql/users/all");
+    else if (collectionName === "riders") url = getApiUrl("/api/mysql/riders");
+    else if (collectionName === "analytics_events") url = getApiUrl("/api/mysql/analytics");
+    else if (collectionName === "assets") url = getApiUrl("/api/mysql/assets");
 
     if (!url) {
       console.warn(`[MySQL Firestore] Unsupported collection name: ${collectionName}`);
@@ -226,6 +246,15 @@ export async function setDoc(docRef: any, data: any, options?: any): Promise<voi
   } else if (collection === "shipping_areas" || collection === "shipping-areas") {
     url = getApiUrl(`/api/mysql/shipping-areas`);
     payload = { id, ...payload };
+  } else if (collection === "riders") {
+    url = getApiUrl(`/api/mysql/riders`);
+    payload = { id, ...payload };
+  } else if (collection === "analytics_events") {
+    url = getApiUrl(`/api/mysql/analytics`);
+    payload = { id, ...payload };
+  } else if (collection === "assets") {
+    url = getApiUrl(`/api/mysql/assets`);
+    payload = { id, ...payload };
   }
 
   if (!url) {
@@ -263,6 +292,9 @@ export async function updateDoc(docRef: any, data: any): Promise<void> {
   } else if (collection === "users") {
     url = getApiUrl(`/api/mysql/users/${id}`);
     method = "PUT";
+  } else if (collection === "riders") {
+    url = getApiUrl(`/api/mysql/riders/${id}`);
+    method = "PUT";
   } else {
     // Fall back to setDoc merge for other collections
     return await setDoc(docRef, data, { merge: true });
@@ -297,6 +329,8 @@ export async function deleteDoc(docRef: any): Promise<void> {
   else if (collection === "categories") url = getApiUrl(`/api/mysql/categories/${id}`);
   else if (collection === "menus" || collection === "menu") url = getApiUrl(`/api/mysql/menus/${id}`);
   else if (collection === "shipping_areas" || collection === "shipping-areas") url = getApiUrl(`/api/mysql/shipping-areas/${id}`);
+  else if (collection === "riders") url = getApiUrl(`/api/mysql/riders/${id}`);
+  else if (collection === "assets") url = getApiUrl(`/api/mysql/assets/${id}`);
 
   if (!url) throw new Error(`Unsupported delete collection: ${collection}`);
 

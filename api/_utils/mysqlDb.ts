@@ -176,6 +176,43 @@ export async function autoInitializeSchema(activePool: mysql.Pool): Promise<void
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
 
+  // 9. Create riders table
+  await activePool.execute(`
+    CREATE TABLE IF NOT EXISTS riders (
+      id VARCHAR(255) PRIMARY KEY,
+      fullName VARCHAR(255),
+      phoneNumber VARCHAR(255),
+      username VARCHAR(255) UNIQUE NOT NULL,
+      password VARCHAR(255),
+      email VARCHAR(255),
+      active TINYINT(1) DEFAULT 1,
+      updatedAt VARCHAR(255)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  // 10. Create analytics_events table
+  await activePool.execute(`
+    CREATE TABLE IF NOT EXISTS analytics_events (
+      id VARCHAR(255) PRIMARY KEY,
+      eventType VARCHAR(255) NOT NULL,
+      pathName VARCHAR(255),
+      sessionUid VARCHAR(255),
+      metadata TEXT,
+      timestamp VARCHAR(255)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  // 11. Create assets table
+  await activePool.execute(`
+    CREATE TABLE IF NOT EXISTS assets (
+      id VARCHAR(255) PRIMARY KEY,
+      name VARCHAR(255) NOT NULL,
+      url LONGTEXT NOT NULL,
+      createdAt VARCHAR(255),
+      isPreset TINYINT(1) DEFAULT 0
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
   console.log("[MYSQL AUTO-INIT] Created all tables including OTP codes. Seeding static lists...");
 
   // Seed categories

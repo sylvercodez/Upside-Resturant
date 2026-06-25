@@ -337,6 +337,43 @@ await querySql(`
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     `);
 
+    // Create riders table
+    await querySql(`
+      CREATE TABLE IF NOT EXISTS riders (
+        id VARCHAR(255) PRIMARY KEY,
+        fullName VARCHAR(255),
+        phoneNumber VARCHAR(255),
+        username VARCHAR(255) UNIQUE NOT NULL,
+        password VARCHAR(255),
+        email VARCHAR(255),
+        active TINYINT(1) DEFAULT 1,
+        updatedAt VARCHAR(255)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+
+    // Create analytics_events table
+    await querySql(`
+      CREATE TABLE IF NOT EXISTS analytics_events (
+        id VARCHAR(255) PRIMARY KEY,
+        eventType VARCHAR(255) NOT NULL,
+        pathName VARCHAR(255),
+        sessionUid VARCHAR(255),
+        metadata TEXT,
+        timestamp VARCHAR(255)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+
+    // Create assets table
+    await querySql(`
+      CREATE TABLE IF NOT EXISTS assets (
+        id VARCHAR(255) PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        url LONGTEXT NOT NULL,
+        createdAt VARCHAR(255),
+        isPreset TINYINT(1) DEFAULT 0
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+
     // SEED STRUCTURAL DATA
     let catsSeeded = 0;
     for (const cat of CATEGORIES) {
@@ -1244,6 +1281,199 @@ mysqlRouter.post("/settings/:key", async (req: any, res: any) => {
       "INSERT INTO settings (setting_key, setting_value) VALUES (?, ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)",
       [key, valStr]
     );
+    return res.json({ success: true });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ==========================================
+// RIDERS ENDPOINTS
+// ==========================================
+mysqlRouter.get("/riders", async (req: any, res: any) => {
+  try {
+    const rows = await querySql("SELECT * FROM riders");
+    const riders = rows.map((r: any) => ({
+      ...r,
+      active: r.active === 1 || r.active === true
+    }));
+    return res.json(riders);
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+mysqlRouter.get("/riders/:id", async (req: any, res: any) => {
+  try {
+    const { id } = req.params;
+    const rows = await querySql("SELECT * FROM riders WHERE id = ?", [id]);
+    if (!rows || rows.length === 0) {
+      return res.status(404).json({ error: "Rider not found" });
+    }
+    const r = rows[0];
+    return res.json({
+      ...r,
+      active: r.active === 1 || r.active === true
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+mysqlRouter.post("/riders", async (req: any, res: any) => {
+  try {
+    const { id, fullName, phoneNumber, username, password, email, active } = req.body;
+    if (!username) {
+      return res.status(400).json({ error: "Username is required" });
+    }
+    await querySql(
+      `INSERT INTO riders (id, fullName, phoneNumber, username, password, email, active, updatedAt)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE 
+         fullName = VALUES(fullName),
+         phoneNumber = VALUES(phoneNumber),
+         username = VALUES(username),
+         password = VALUES(password),
+         email = VALUES(email),
+         active = VALUES(active),
+         updatedAt = VALUES(updatedAt)`,
+      [id, fullName, phoneNumber, username.toLowerCase().trim(), password, email || "", active ? 1 : 0, new Date().toISOString()]
+    );
+    return res.json({ success: true });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+mysqlRouter.put("/riders/:id", async (req: any, res: any) => {
+  try {
+    const { id } = req.params;
+    const { fullName, phoneNumber, username, password, email, active } = req.body;
+    
+    let updates: string[] = [];
+    let params: any[] = [];
+    
+    if (fullName !== undefined) { updates.push("fullName = ?"); params.push(fullName); }
+    if (phoneNumber !== undefined) { updates.push("phoneNumber = ?"); params.push(phoneNumber); }
+    if (username !== undefined) { updates.push("username = ?"); params.push(username.toLowerCase().trim()); }
+    if (password !== undefined) { updates.push("password = ?"); params.push(password); }
+    if (email !== undefined) { updates.push("email = ?"); params.push(email); }
+    if (active !== undefined) { updates.push("active = ?"); params.push(active ? 1 : 0); }
+    
+    if (updates.length > 0) {
+      updates.push("updatedAt = ?");
+      params.push(new Date().toISOString());
+      params.push(id);
+      await querySql(`UPDATE riders SET ${updates.join(", ")} WHERE id = ?`, params);
+    }
+    return res.json({ success: true });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+mysqlRouter.delete("/riders/:id", async (req: any, res: any) => {
+  try {
+    const { id } = req.params;
+    await querySql("DELETE FROM riders WHERE id = ?", [id]);
+    return res.json({ success: true });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ==========================================
+// ANALYTICS ENDPOINTS
+// ==========================================
+mysqlRouter.get("/analytics", async (req: any, res: any) => {
+  try {
+    const rows = await querySql("SELECT * FROM analytics_events ORDER BY timestamp DESC LIMIT 1000");
+    const events = rows.map((r: any) => {
+      let parsedMetadata = {};
+      try {
+        parsedMetadata = typeof r.metadata === "string" ? JSON.parse(r.metadata) : (r.metadata || {});
+      } catch (_) {}
+      return {
+        ...r,
+        metadata: parsedMetadata
+      };
+    });
+    return res.json(events);
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+mysqlRouter.post("/analytics", async (req: any, res: any) => {
+  try {
+    const { id, eventType, pathName, sessionUid, metadata, timestamp } = req.body;
+    const metadataStr = typeof metadata === "object" ? JSON.stringify(metadata) : (metadata || "{}");
+    await querySql(
+      `INSERT INTO analytics_events (id, eventType, pathName, sessionUid, metadata, timestamp)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE 
+         eventType = VALUES(eventType),
+         pathName = VALUES(pathName),
+         sessionUid = VALUES(sessionUid),
+         metadata = VALUES(metadata),
+         timestamp = VALUES(timestamp)`,
+      [
+        id || "evt_" + Math.random().toString(36).substring(2, 11) + "_" + Date.now(),
+        eventType || "generic_event",
+        pathName || "/",
+        sessionUid || "unknown",
+        metadataStr,
+        timestamp || new Date().toISOString()
+      ]
+    );
+    return res.json({ success: true });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ==========================================
+// ASSETS (IMAGES) ENDPOINTS
+// ==========================================
+mysqlRouter.get("/assets", async (req: any, res: any) => {
+  try {
+    const rows = await querySql("SELECT * FROM assets");
+    const assets = rows.map((r: any) => ({
+      ...r,
+      isPreset: r.isPreset === 1 || r.isPreset === true
+    }));
+    return res.json(assets);
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+mysqlRouter.post("/assets", async (req: any, res: any) => {
+  try {
+    const { id, name, url, createdAt, isPreset } = req.body;
+    if (!id || !name || !url) {
+      return res.status(400).json({ error: "Missing id, name or url" });
+    }
+    await querySql(
+      `INSERT INTO assets (id, name, url, createdAt, isPreset)
+       VALUES (?, ?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE 
+         name = VALUES(name),
+         url = VALUES(url),
+         createdAt = VALUES(createdAt),
+         isPreset = VALUES(isPreset)`,
+      [id, name, url, createdAt || new Date().toISOString(), isPreset ? 1 : 0]
+    );
+    return res.json({ success: true });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+mysqlRouter.delete("/assets/:id", async (req: any, res: any) => {
+  try {
+    const { id } = req.params;
+    await querySql("DELETE FROM assets WHERE id = ?", [id]);
     return res.json({ success: true });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
