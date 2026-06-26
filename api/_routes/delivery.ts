@@ -1,16 +1,18 @@
+
 import express from "express";
 import fs from "fs";
 import path from "path";
 import { getMailTransporter, getFromEmailAddress } from "../_utils/smtp.js";
-
+import { querySql } from "../_utils/mysqlDb.js";
+ 
 export const deliveryRouter = express.Router();
-
+ 
 // Helper to get Firestore instance
 async function getFirestoreInstance() {
   const configPath = path.join(process.cwd(), "firebase-applet-config.json");
   let databaseId = "ai-studio-7ee29b67-2013-4587-a753-b479a6e19155";
   let firebaseConfig: any = null;
-
+ 
   if (fs.existsSync(configPath)) {
     firebaseConfig = JSON.parse(fs.readFileSync(configPath, "utf-8"));
     if (firebaseConfig.firestoreDatabaseId) databaseId = firebaseConfig.firestoreDatabaseId;
@@ -21,10 +23,10 @@ async function getFirestoreInstance() {
       authDomain: (process.env.FIREBASE_PROJECT_ID || "gen-lang-client-0332471137") + ".firebaseapp.com"
     };
   }
-
+ 
   const { initializeApp, getApp, getApps } = await import("firebase/app");
   const { getFirestore } = await import("firebase/firestore");
-
+ 
   let appInstance;
   const appName = "delivery-service-app";
   const currentApps = getApps();
@@ -33,7 +35,7 @@ async function getFirestoreInstance() {
   } else {
     appInstance = initializeApp(firebaseConfig, appName);
   }
-
+ 
   try {
     const fdb = getFirestore(appInstance, databaseId);
     // Test query to see if it exists
@@ -45,140 +47,119 @@ async function getFirestoreInstance() {
     return getFirestore(appInstance);
   }
 }
-
-
-// 1. GET ALL RIDERS
+ 
+ 
+// 1. GET ALL RIDERS (now MySQL-backed)
 deliveryRouter.get("/riders", async (req, res) => {
   try {
-    const db = await getFirestoreInstance();
-    const { collection, getDocs } = await import("firebase/firestore");
-    const snapshot = await getDocs(collection(db, "riders"));
-    const riders: any[] = [];
-    snapshot.forEach((docSnap) => {
-      riders.push({ id: docSnap.id, ...docSnap.data() });
-    });
+    const rows = await querySql("SELECT * FROM riders");
+    const riders = rows.map((r: any) => ({
+      id: r.id,
+      fullName: r.fullName,
+      phone: r.phoneNumber,
+      username: r.username,
+      email: r.email,
+      active: r.active === 1 || r.active === true,
+      createdAt: r.updatedAt
+    }));
     res.json(riders);
   } catch (err: any) {
     console.error("Error fetching riders:", err);
     res.status(500).json({ error: "Failed to fetch riders directory: " + err.message });
   }
 });
-
-// 2. CREATE A RIDER
+ 
+// 2. CREATE A RIDER (now MySQL-backed)
 deliveryRouter.post("/riders", async (req, res) => {
   try {
     const { fullName, phone, username, password, email } = req.body;
     if (!fullName || !phone || !username || !password) {
       return res.status(400).json({ error: "Missing required fields for rider creation." });
     }
-
-    const db = await getFirestoreInstance();
-    const { collection, getDocs, doc, setDoc } = await import("firebase/firestore");
-
-    // Check if username already exists
-    const snapshot = await getDocs(collection(db, "riders"));
-    let exists = false;
-    snapshot.forEach((docSnap) => {
-      const data = docSnap.data();
-      if ((data.username || "").toLowerCase() === username.toLowerCase()) {
-        exists = true;
-      }
-    });
-
-    if (exists) {
+ 
+    const existing = await querySql("SELECT id FROM riders WHERE LOWER(username) = ?", [username.toLowerCase().trim()]);
+    if (existing && existing.length > 0) {
       return res.status(400).json({ error: "Username is already registered. Please choose another Username." });
     }
-
+ 
     const riderId = `rider_${Date.now()}`;
-    const riderPayload = {
+    await querySql(
+      `INSERT INTO riders (id, fullName, phoneNumber, username, password, email, active, updatedAt)
+       VALUES (?, ?, ?, ?, ?, ?, 1, ?)`,
+      [riderId, fullName.trim(), phone.trim(), username.trim().toLowerCase(), password, (email || "").trim(), new Date().toISOString()]
+    );
+ 
+    res.status(201).json({
       id: riderId,
       fullName: fullName.trim(),
       phone: phone.trim(),
       username: username.trim(),
-      password: password, // Store password securely or simple check as requested
       email: (email || "").trim(),
-      active: true,
-      createdAt: new Date().toISOString()
-    };
-
-    await setDoc(doc(db, "riders", riderId), {
-      ...riderPayload,
-      systemWriteKey: "f8d3c501-4be5-4841-a6ab-cb5e1d4d03e9"
+      active: true
     });
-    res.status(201).json(riderPayload);
   } catch (err: any) {
     console.error("Error creating rider:", err);
     res.status(500).json({ error: "Failed to create rider profile: " + err.message });
   }
 });
-
-// 3. EDIT / DEACTIVATE RIDER
+ 
+// 3. EDIT / DEACTIVATE RIDER (now MySQL-backed)
 deliveryRouter.put("/riders/:id", async (req, res) => {
   try {
     const riderId = req.params.id;
     const { fullName, phone, password, email, active } = req.body;
-
-    const db = await getFirestoreInstance();
-    const { doc, updateDoc } = await import("firebase/firestore");
-
-    const updatePayload: any = {};
-    if (fullName !== undefined) updatePayload.fullName = fullName.trim();
-    if (phone !== undefined) updatePayload.phone = phone.trim();
-    if (password !== undefined) updatePayload.password = password;
-    if (email !== undefined) updatePayload.email = email.trim();
-    if (active !== undefined) updatePayload.active = !!active;
-
-    await updateDoc(doc(db, "riders", riderId), {
-      ...updatePayload,
-      systemWriteKey: "f8d3c501-4be5-4841-a6ab-cb5e1d4d03e9"
-    });
+ 
+    let updates: string[] = [];
+    let params: any[] = [];
+    if (fullName !== undefined) { updates.push("fullName = ?"); params.push(fullName.trim()); }
+    if (phone !== undefined) { updates.push("phoneNumber = ?"); params.push(phone.trim()); }
+    if (password !== undefined) { updates.push("password = ?"); params.push(password); }
+    if (email !== undefined) { updates.push("email = ?"); params.push(email.trim()); }
+    if (active !== undefined) { updates.push("active = ?"); params.push(active ? 1 : 0); }
+ 
+    if (updates.length === 0) {
+      return res.json({ success: true, message: "No changes specified." });
+    }
+ 
+    updates.push("updatedAt = ?");
+    params.push(new Date().toISOString());
+    params.push(riderId);
+ 
+    await querySql(`UPDATE riders SET ${updates.join(", ")} WHERE id = ?`, params);
     res.json({ success: true, message: "Rider details updated successfully." });
   } catch (err: any) {
     console.error("Error updating rider:", err);
     res.status(500).json({ error: "Failed to update rider profile: " + err.message });
   }
 });
-
-// 4. RIDER LOGIN (strictly username and password)
+ 
+// 4. RIDER LOGIN (now MySQL-backed, strictly username and password)
 deliveryRouter.post("/riders/login", async (req, res) => {
   try {
     const { username, password } = req.body;
     if (!username || !password) {
       return res.status(400).json({ error: "Username and Password are required." });
     }
-
-    const db = await getFirestoreInstance();
-    const { collection, getDocs } = await import("firebase/firestore");
-
-    const snapshot = await getDocs(collection(db, "riders"));
-    let foundRider: any = null;
-
-    snapshot.forEach((docSnap) => {
-      const data = docSnap.data();
-      if (
-        (data.username || "").toLowerCase().trim() === username.toLowerCase().trim() &&
-        (data.password || "") === password
-      ) {
-        foundRider = { id: docSnap.id, ...data };
-      }
-    });
-
-    if (!foundRider) {
+ 
+    const rows = await querySql("SELECT * FROM riders WHERE LOWER(username) = ?", [username.toLowerCase().trim()]);
+ 
+    if (!rows || rows.length === 0 || rows[0].password !== password) {
       return res.status(401).json({ error: "Invalid username or password credentials." });
     }
-
-    if (foundRider.active === false) {
+ 
+    const rider = rows[0];
+    if (rider.active === 0 || rider.active === false) {
       return res.status(403).json({ error: "This rider account is currently deactivated. Please contact administration." });
     }
-
+ 
     res.json({
       success: true,
       rider: {
-        id: foundRider.id,
-        fullName: foundRider.fullName,
-        username: foundRider.username,
-        phone: foundRider.phone,
-        email: foundRider.email
+        id: rider.id,
+        fullName: rider.fullName,
+        username: rider.username,
+        phone: rider.phoneNumber,
+        email: rider.email
       }
     });
   } catch (err: any) {
@@ -186,31 +167,31 @@ deliveryRouter.post("/riders/login", async (req, res) => {
     res.status(500).json({ error: "Failed to login rider: " + err.message });
   }
 });
-import { querySql } from "../_utils/mysqlDb.js";
+ 
 // 5. ASSIGN RIDER TO ORDER & SEND EMAIL
 deliveryRouter.post("/orders/assign", async (req, res) => {
-
+ 
   try {
     const { orderId, riderId, riderName, riderPhone } = req.body;
     if (!orderId) {
       return res.status(400).json({ error: "Order ID is required." });
     }
-
+ 
     const rows = await querySql("SELECT * FROM orders WHERE id = ?", [orderId]);
     if (!rows || rows.length === 0) {
       return res.status(404).json({ error: "Order not found in system." });
     }
     const orderData = rows[0];
-
+ 
     const newStatus = riderId ? "Out for Delivery" : orderData.status;
     await querySql(
       `UPDATE orders SET assignedRiderId = ?, assignedRiderName = ?, assignedRiderPhone = ?, status = ?, updatedAt = ? WHERE id = ?`,
       [riderId || null, riderName || null, riderPhone || null, newStatus, new Date().toISOString(), orderId]
     );
-
+ 
     const customerEmail = orderData.email || "guest@example.com";
     const verificationCode = orderData.verificationCode || "N/A";
-   
+ 
     if (riderId && customerEmail && customerEmail !== "guest@example.com" && customerEmail.includes("@")) {
       const transporter = getMailTransporter();
       if (transporter) {
@@ -251,13 +232,13 @@ deliveryRouter.post("/orders/assign", async (req, res) => {
         <p style="margin: 5px 0;"><strong>Full Name:</strong> ${riderName}</p>
         <p style="margin: 5px 0;"><strong>Phone Number:</strong> <a href="tel:${riderPhone}">${riderPhone}</a></p>
       </div>
-
+ 
       <p>Upon rider arrival, you will need to provide them with your unique pickup/delivery verification code to claim your gourmet package:</p>
       
       <div class="code-box">
         🔑 DELIVERY VERIFICATION CODE: ${verificationCode}
       </div>
-
+ 
       <p style="font-size: 12px; color: #78716c; line-height: 1.5; font-style: italic;">
         Please make sure you have this 6-digit code handy when our rider reaches your sanctuary. This locks accuracy and security for your culinary service.
       </p>
@@ -274,14 +255,14 @@ deliveryRouter.post("/orders/assign", async (req, res) => {
         console.log(`[RIDER ASSIGNMENT EMAIL] Successfully dispatched email to customer: ${customerEmail}`);
       }
     }
-
+ 
     res.json({ success: true, message: "Rider assigned and customer notification dispatched." });
   } catch (err: any) {
     console.error("Rider allocation fault:", err);
     res.status(500).json({ error: "Failed to allocate rider: " + err.message });
   }
 });
-
+ 
 // 6. ORDER RECENTLY PLACED EMAIL DISPATCH & ADMIN ALERTS
 deliveryRouter.post("/notify/order-placed", async (req, res) => {
   try {
@@ -289,10 +270,10 @@ deliveryRouter.post("/notify/order-placed", async (req, res) => {
     if (!orderId || !email) {
       return res.status(400).json({ error: "Missing required details to dispatch confirmation email." });
     }
-
+ 
     const cleanEmail = email.trim().toLowerCase();
     const parsedItems = Array.isArray(items) ? items : (typeof items === "string" ? JSON.parse(items) : []);
-
+ 
     const transporter = getMailTransporter();
     if (transporter) {
       const computedFrom = getFromEmailAddress();
@@ -302,7 +283,7 @@ deliveryRouter.post("/notify/order-placed", async (req, res) => {
           <td style="padding: 10px 0; text-align: right; font-size: 13px; font-weight: bold;">₦${(it.price * it.quantity).toLocaleString()}</td>
         </tr>
       `).join("");
-
+ 
       // A. Dispatch User Confirmation (if not guest placeholder)
       if (cleanEmail !== "guest@example.com" && cleanEmail.includes("@")) {
         const mailOptions = {
@@ -376,7 +357,7 @@ deliveryRouter.post("/notify/order-placed", async (req, res) => {
         await transporter.sendMail(mailOptions);
         console.log(`[ORDER CONFIRMATION EMAIL] Dispatched to customer: ${cleanEmail}`);
       }
-
+ 
       // B. Dispatch Admin Alert immediately for a complete ERP integration
       const adminEmails = ["tosinotenaike3@gmail.com", "mophethecommerce@gmail.com"];
       const adminMailOptions = {
@@ -422,7 +403,7 @@ deliveryRouter.post("/notify/order-placed", async (req, res) => {
     <div class="meta-line">
       <span class="meta-label">VERIFY CODE     :</span> <span class="meta-value" style="background-color: #d97706; color: #000; padding: 1px 5px; font-weight: bold; border-radius: 3px;">${verificationCode}</span>
     </div>
-
+ 
     <div style="margin-top: 15px; border-top: 1px solid #44403c; padding-top: 10px;">
       <span class="meta-label">ORDERED SELECTION:</span>
       <table style="width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 11px;">
@@ -434,11 +415,11 @@ deliveryRouter.post("/notify/order-placed", async (req, res) => {
         `).join("")}
       </table>
     </div>
-
+ 
     <div class="total">
       TOTAL BILLABLE AMOUNT: ₦${Number(totalPrice).toLocaleString()}
     </div>
-
+ 
     <div class="footer">
       Upside Realtime ERP Notification Engine • Live Server Ledger Sync
     </div>
@@ -450,43 +431,33 @@ deliveryRouter.post("/notify/order-placed", async (req, res) => {
       await transporter.sendMail(adminMailOptions);
       console.log(`[ERP ADMIN ALERT] Dispatched new order warning to admins.`);
     }
-
+ 
     res.json({ success: true, message: "Order placed notification email sent both to user and admin." });
   } catch (err: any) {
     console.error("Order placed e-mail notify fault:", err);
     res.status(500).json({ error: "Failed to dispatch order placement notification email: " + err.message });
   }
 });
-
-// 7. ORDER STATUS UPDATER (ERP WORKFLOW REDIRECT WITH NOTIFICATION TRAFFIC)
+ 
+// 7. ORDER STATUS UPDATER (now MySQL-backed)
 deliveryRouter.post("/orders/update-status", async (req, res) => {
   try {
     const { orderId, status } = req.body;
     if (!orderId || !status) {
       return res.status(400).json({ error: "Order ID and target transition status are required." });
     }
-
-    const db = await getFirestoreInstance();
-    const { doc, getDoc, updateDoc } = await import("firebase/firestore");
-
-    const orderRef = doc(db, "orders", orderId);
-    const orderSnap = await getDoc(orderRef);
-    if (!orderSnap.exists()) {
-      return res.status(404).json({ error: "Order not found in firestore ledger." });
+ 
+    const rows = await querySql("SELECT * FROM orders WHERE id = ?", [orderId]);
+    if (!rows || rows.length === 0) {
+      return res.status(404).json({ error: "Order not found." });
     }
-
-    const orderData = orderSnap.data();
+    const orderData = rows[0];
     const oldStatus = orderData.status || "UNKNOWN";
-
-    // Skip update if already same status
+ 
     if (oldStatus.toLowerCase() !== status.toLowerCase()) {
-      await updateDoc(orderRef, {
-        status: status,
-        updatedAt: new Date().toISOString(),
-        systemWriteKey: "f8d3c501-4be5-4841-a6ab-cb5e1d4d03e9"
-      });
+      await querySql("UPDATE orders SET status = ?, updatedAt = ? WHERE id = ?", [status, new Date().toISOString(), orderId]);
     }
-
+ 
     const cleanEmail = (orderData.email || "").trim().toLowerCase();
     const customerName = orderData.customerName || "Premium Customer";
     const verificationCode = orderData.verificationCode || "N/A";
@@ -494,16 +465,16 @@ deliveryRouter.post("/orders/update-status", async (req, res) => {
     const items = orderData.items || [];
     const parsedItems = Array.isArray(items) ? items : (typeof items === "string" ? JSON.parse(items) : []);
     const address = orderData.address || "Boutique Self-Pickup at Lekki Sanctuary";
-
+ 
     const transporter = getMailTransporter();
     if (transporter) {
       const computedFrom = getFromEmailAddress();
-
+ 
       // Define specialized description based on status transition
       let statusDesc = `Your order status has been successfully updated to <strong>${status}</strong>.`;
       let emailSubject = `🔔 UPSIDE Order Update: #${orderId.substring(6) || orderId} is now ${status.toUpperCase()}`;
       let accentColor = "#D97706"; // amber
-
+ 
       if (status.toLowerCase().includes("prepare") || status.toLowerCase().includes("prep")) {
         statusDesc = `👨‍🍳 Great news! Our Michelin-starred chefs are currently crafting your selections with pure culinary precision. Selection prep is actively underway.`;
         emailSubject = `👨‍🍳 Prep commmenced! Order #${orderId.substring(6) || orderId} is now being prepared!`;
@@ -521,7 +492,7 @@ deliveryRouter.post("/orders/update-status", async (req, res) => {
         emailSubject = `⚠️ Order Cancelled Alert: #${orderId.substring(6) || orderId}`;
         accentColor = "#EF4444"; // red
       }
-
+ 
       // Send User Email
       if (cleanEmail && cleanEmail !== "guest@example.com" && cleanEmail.includes("@")) {
         const userHtml = `
@@ -555,14 +526,14 @@ deliveryRouter.post("/orders/update-status", async (req, res) => {
       <p style="font-size: 14px; line-height: 1.6; color: #292524;">
         ${statusDesc}
       </p>
-
+ 
       ${status.toLowerCase().includes("out") ? `
       <div class="code-box">
         🔑 YOUR SECURE DELIVERY CODE: ${verificationCode}<br/>
         <span style="font-size: 10px; font-weight: normal; color: #78716c; max-width: 400px; display: inline-block; margin-top: 5px;">Present this 6-digit credential to your rider on package handoff.</span>
       </div>
       ` : ""}
-
+ 
       <p style="font-size: 12px; color: #78716c; border-top: 1px solid #f5f5f4; padding-top: 15px; margin-top: 20px;">
         <strong>Order Ref:</strong> #${orderId.substring(6) || orderId}<br/>
         <strong>Destination Sanctuary:</strong> ${address}
@@ -575,7 +546,7 @@ deliveryRouter.post("/orders/update-status", async (req, res) => {
 </body>
 </html>
         `;
-
+ 
         await transporter.sendMail({
           from: computedFrom,
           to: cleanEmail,
@@ -584,7 +555,7 @@ deliveryRouter.post("/orders/update-status", async (req, res) => {
         });
         console.log(`[STATUS ACTION USER EMAIL] Sent update to ${cleanEmail}`);
       }
-
+ 
       // Send Admin Email
       const adminEmails = ["tosinotenaike3@gmail.com", "mophethecommerce@gmail.com"];
       const adminHtml = `
@@ -619,7 +590,7 @@ deliveryRouter.post("/orders/update-status", async (req, res) => {
 </body>
 </html>
       `;
-
+ 
       await transporter.sendMail({
         from: computedFrom,
         to: adminEmails.join(", "),
@@ -628,55 +599,45 @@ deliveryRouter.post("/orders/update-status", async (req, res) => {
       });
       console.log(`[STATUS ACTION ADMIN EMAIL] Sent logs update to admins.`);
     }
-
+ 
     res.json({ success: true, message: `Order status successfully transitioned to ${status}.` });
-
+ 
   } catch (err: any) {
     console.error("Order status update notifier fault:", err);
     res.status(500).json({ error: "Failed to update order status or dispatch logs: " + err.message });
   }
 });
-
-// 8. COURIER "START TRIP" EVENT WITH REAL-TIME EMAIL TRACKING LINK ORCHESTRATION
+ 
+// 8. COURIER "START TRIP" EVENT WITH REAL-TIME EMAIL TRACKING LINK ORCHESTRATION (now MySQL-backed)
 deliveryRouter.post("/orders/start-trip", async (req, res) => {
   try {
     const { orderId, riderId, riderName, riderPhone } = req.body;
     if (!orderId) {
       return res.status(400).json({ error: "Order ID is required to launch trip dispatch." });
     }
-
-    const db = await getFirestoreInstance();
-    const { doc, getDoc, updateDoc } = await import("firebase/firestore");
-
-    const orderRef = doc(db, "orders", orderId);
-    const orderSnap = await getDoc(orderRef);
-    if (!orderSnap.exists()) {
-      return res.status(404).json({ error: "Order not found in firestore register." });
+ 
+    const rows = await querySql("SELECT * FROM orders WHERE id = ?", [orderId]);
+    if (!rows || rows.length === 0) {
+      return res.status(404).json({ error: "Order not found." });
     }
-
-    const orderData = orderSnap.data();
-    const oldStatus = orderData.status || "UNKNOWN";
-
-    // Transition state to Out for Delivery and log trip launch indicators, with systemWriteKey for permission authorization
-    await updateDoc(orderRef, {
-      status: "Out for Delivery",
-      tripStarted: true,
-      tripStartedAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      systemWriteKey: "f8d3c501-4be5-4841-a6ab-cb5e1d4d03e9"
-    });
-
+    const orderData = rows[0];
+ 
+    await querySql(
+      "UPDATE orders SET status = ?, updatedAt = ? WHERE id = ?",
+      ["Out for Delivery", new Date().toISOString(), orderId]
+    );
+ 
     const cleanEmail = (orderData.email || "").trim().toLowerCase();
     const customerName = orderData.customerName || "Premium Customer";
     const verificationCode = orderData.verificationCode || "N/A";
     const address = orderData.address || "Boutique Venue";
-
+ 
     const transporter = getMailTransporter();
     if (transporter) {
       const computedFrom = getFromEmailAddress();
       const origin = req.headers.origin || req.headers.referer || "https://ais-pre-sbzn5bjecas4gnypehx4a5-856555242900.europe-west2.run.app";
       const liveTrackingLink = `${origin.replace(/\/$/, "")}/track?orderId=${orderId}`;
-
+ 
       const userHtml = `
 <!DOCTYPE html>
 <html>
@@ -707,25 +668,25 @@ deliveryRouter.post("/orders/start-trip", async (req, res) => {
       <p style="font-size: 14px; line-height: 1.6; color: #292524;">
         Great news! Your luxury culinary selections are securely packed and on their way. Our premium courier has just <strong>started the delivery trip</strong> to your destination and is on the move!
       </p>
-
+ 
       <div class="trip-box" style="text-align: center;">
         <h4 style="margin: 0 0 10px 0; color: #78350f; text-transform: uppercase; font-size: 11px; tracking: 0.1em;">🗺️ LIVE ROUTE TRACKING DISPATCH:</h4>
         <p style="font-size: 13px; color: #44403c; margin-bottom: 20px;">You can monitor the live transit movement, coordinate updates, and expected real-time position of our rider directly on the GPS Radar.</p>
         
         <a href="${liveTrackingLink}" target="_blank" class="cta-btn" style="color: #ffffff !important;">Track Rider Live Map</a>
       </div>
-
+ 
       <div class="code-box">
         🔑 SECURE OTP CONFIRMATION CODE: ${verificationCode}<br/>
         <span style="font-size: 10px; font-weight: normal; color: #78716c; max-width: 400px; display: inline-block; margin-top: 5px;">Provide this verification key to your rider upon arrival to hand over your package.</span>
       </div>
-
+ 
       ${riderName ? `
       <div style="font-size: 13px; color: #44403c; background-color: #f5f5f4; padding: 12px; margin-top: 15px; border-radius: 4px;">
         👨‍✈️ <strong>Courier Rider:</strong> ${riderName} ${riderPhone ? `(${riderPhone})` : ""}
       </div>
       ` : ""}
-
+ 
       <p style="font-size: 12px; color: #78716c; border-top: 1px solid #f5f5f4; padding-top: 15px; margin-top: 20px;">
         <strong>Order Ref:</strong> #${orderId.substring(6) || orderId}<br/>
         <strong>Delivery Destination:</strong> ${address}
@@ -738,7 +699,7 @@ deliveryRouter.post("/orders/start-trip", async (req, res) => {
 </body>
 </html>
       `;
-
+ 
       if (cleanEmail && cleanEmail !== "guest@example.com" && cleanEmail.includes("@")) {
         await transporter.sendMail({
           from: computedFrom,
@@ -748,7 +709,7 @@ deliveryRouter.post("/orders/start-trip", async (req, res) => {
         });
         console.log(`[START TRIP EMAIL] Live track link dispatched to ${cleanEmail}`);
       }
-
+ 
       // Send log to admins
       const adminEmails = ["tosinotenaike3@gmail.com", "mophethecommerce@gmail.com"];
       const adminHtml = `
@@ -780,7 +741,7 @@ deliveryRouter.post("/orders/start-trip", async (req, res) => {
 </body>
 </html>
       `;
-
+ 
       await transporter.sendMail({
         from: computedFrom,
         to: adminEmails.join(", "),
@@ -788,7 +749,7 @@ deliveryRouter.post("/orders/start-trip", async (req, res) => {
         html: adminHtml
       });
     }
-
+ 
     res.json({ success: true, message: "Delivery dispatch started and tracking email with link was dispatched securely to user." });
   } catch (err: any) {
     console.error("Trip start error:", err);
