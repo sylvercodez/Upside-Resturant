@@ -7,7 +7,7 @@ interface ScanSectionProps {
 
 export default function ScanSection({ onViewMenu }: ScanSectionProps) {
   return (
-    <section id="qr-ordering-section" className="max-w-7xl mx-auto px-4 md:px-8 mt-12 mb-12 scroll-mt-24">
+    <section id="qr-ordering-section" className="max-w-[1800px] mx-auto px-4 md:px-8 mt-12 mb-12 scroll-mt-24">
       <div className="relative border border-neutral-200 bg-neutral-50 p-6 md:p-10 shadow-sm overflow-hidden">
         <div className="absolute top-0 right-0 w-64 h-64 bg-amber-500/5 rounded-full blur-3xl pointer-events-none" />
         

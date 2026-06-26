@@ -28,7 +28,7 @@ export default function Footer({ onScrollToElement, onOpenReservations, branding
   };
   return (
     <footer className="bg-white text-neutral-600 font-mono text-xs border-t border-neutral-200 pt-16 pb-24 shadow-inner">
-      <div className="max-w-7xl mx-auto px-4 md:px-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-12 text-left">
+      <div className="max-w-[1800px] mx-auto px-4 md:px-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-12 text-left">
         
         {/* Brand details Column */}
         <div className="space-y-4">
@@ -250,7 +250,7 @@ export default function Footer({ onScrollToElement, onOpenReservations, branding
 
       {/* Dynamic Inline Widened Map Drawer */}
       {isMapWidened && (
-        <div className="max-w-7xl mx-auto px-4 md:px-8 mt-8 animate-fadeIn">
+        <div className="max-w-[1800px] mx-auto px-4 md:px-8 mt-8 animate-fadeIn">
           <div className="bg-neutral-900 border border-neutral-800 rounded-2xl overflow-hidden shadow-xl">
             <div className="p-4 bg-neutral-950 border-b border-neutral-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div className="flex items-center gap-3">
@@ -367,7 +367,7 @@ export default function Footer({ onScrollToElement, onOpenReservations, branding
       )}
 
       {/* Corporate details line */}
-      <div className="max-w-7xl mx-auto px-4 md:px-8 border-t border-neutral-200 mt-12 pt-8 flex flex-col md:flex-row justify-between items-center gap-4 text-[10px] text-neutral-400 text-center sm:text-left">
+      <div className="max-w-[1800px] mx-auto px-4 md:px-8 border-t border-neutral-200 mt-12 pt-8 flex flex-col md:flex-row justify-between items-center gap-4 text-[10px] text-neutral-400 text-center sm:text-left">
         <div>
           <p className="text-neutral-500 font-medium">&copy; 2026 Upside Restaurant &amp; Café. A Brand of Mopheth. All Rights Reserved.</p>
           {onNavigate && (

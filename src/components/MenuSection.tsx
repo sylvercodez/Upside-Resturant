@@ -216,7 +216,7 @@ export default function MenuSection({ onAddToCart, favorites, onToggleFavorite, 
 
   return (
     <section id="menu-fast" className="bg-white py-20 border-b border-neutral-200 px-4 md:px-8 text-neutral-900">
-      <div className="max-w-7xl mx-auto">
+      <div className="max-w-[1800px] mx-auto">
         {/* Dynamic Section Header */}
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-12">
           <div className="space-y-2">
@@ -254,7 +254,7 @@ export default function MenuSection({ onAddToCart, favorites, onToggleFavorite, 
 
         {/* FAST MENU ACCESS - STICKY CATEGORIES STRIP WITH MOBILE SWIPE */}
         <div className="sticky top-20 z-30 bg-white/95 py-4 border-y border-neutral-200 -mx-4 px-4 overflow-hidden mb-12">
-          <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
+          <div className="max-w-[1800px] mx-auto flex items-center justify-between gap-4">
             {/* Scroll Indicator (Mobile only) */}
             <div className="text-[10px] text-amber-600/75 font-mono tracking-wider animate-pulse whitespace-nowrap lg:hidden">
               Swipe Left/Right &rarr;

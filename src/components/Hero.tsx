@@ -86,7 +86,7 @@ export default function Hero({ onExploreMenu, onBookTable, onOrderNow, onAddToCa
       </div>
 
       {/* Main Container Content */}
-      <div className="relative z-20 max-w-7xl mx-auto w-full grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+      <div className="relative z-20 max-w-[1800px] mx-auto w-full grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
         {/* Left Column: Bold Copy & CTAs */}
         <div className="lg:col-span-7 flex flex-col items-start text-left space-y-6">
           {/* Tagline label */}

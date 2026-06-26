@@ -12,7 +12,7 @@ export default function DedicatedExperience({
 }: DedicatedExperienceProps) {
   return (
     <div className="bg-white min-h-screen pt-12 pb-24 px-4 md:px-8 animate-fadeIn text-left text-neutral-900" id="dedicated-experience-page">
-      <div className="max-w-6xl mx-auto space-y-16">
+      <div className="max-w-[1800px] mx-auto space-y-16">
         
         {/* Navigation Breadcrumb / Header Row */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-neutral-200 pb-6">

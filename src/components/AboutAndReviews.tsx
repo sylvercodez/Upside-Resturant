@@ -124,7 +124,7 @@ export default function AboutAndReviews({ onReadMoreExperience, onViewMenu }: Ab
     <div className="bg-white text-black space-y-20 pt-20 pb-20">
 
       {/* THE ABOUT BRAND STORY & HERITAGE */}
-      <section id="experience" className="max-w-7xl mx-auto px-4 md:px-8 grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
+      <section id="experience" className="max-w-[1800px] mx-auto px-4 md:px-8 grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
         {/* Left Column: Rich visual story grid (Bento Grid Style) */}
         <div className="lg:col-span-6 grid grid-cols-2 gap-4">
           <div className="space-y-4">
@@ -211,7 +211,7 @@ export default function AboutAndReviews({ onReadMoreExperience, onViewMenu }: Ab
       </section>
 
       {/* CINEMATIC EXPERIENTIAL VIDEO SHOWCASE */}
-      <section id="cinematic-showcase-section" className="max-w-7xl mx-auto px-4 md:px-8">
+      <section id="cinematic-showcase-section" className="max-w-[1800px] mx-auto px-4 md:px-8">
         <div className="relative border border-neutral-200 bg-neutral-50 p-6 md:p-10 space-y-8 shadow-sm">
           <div className="text-left space-y-2">
             <span className="text-[10px] tracking-[0.3em] text-amber-600 font-mono uppercase block">
@@ -284,7 +284,7 @@ export default function AboutAndReviews({ onReadMoreExperience, onViewMenu }: Ab
       </section>
 
       {/* BOLD, UNMISSABLE WHATSAPP ORDERING SECTION */}
-      <section id="whatsapp-ordering-section" className="max-w-7xl mx-auto px-4 md:px-8">
+      <section id="whatsapp-ordering-section" className="max-w-[1800px] mx-auto px-4 md:px-8">
         <div className="relative overflow-hidden border border-emerald-900/40 bg-neutral-950 p-8 md:p-12 text-white">
           {/* Subtle noise/grid ambient overlay */}
           <div className="absolute inset-0 bg-[radial-gradient(#059669_1px,transparent_1px)] [background-size:20px_20px] opacity-10 pointer-events-none" />
@@ -456,7 +456,7 @@ export default function AboutAndReviews({ onReadMoreExperience, onViewMenu }: Ab
       </section>
 
       {/* INSTAGRAM LIVE FEED SIMULATION (Lagos vibes) */}
-      <section className="max-w-7xl mx-auto px-4 md:px-8 space-y-6">
+      <section className="max-w-[1800px] mx-auto px-4 md:px-8 space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
           <div className="text-left space-y-1">
             <div className="flex items-center gap-2">

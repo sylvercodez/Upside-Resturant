@@ -47,7 +47,7 @@ export default function HomeReservation() {
 
   return (
     <section className="bg-neutral-950 py-20 px-4 border-t border-b border-neutral-900" id="home-reservation-section">
-      <div className="max-w-6xl mx-auto">
+      <div className="max-w-[1800px] mx-auto">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-start">
           
           {/* LEFT SIDE: LUXURY BRAND TEXT */}

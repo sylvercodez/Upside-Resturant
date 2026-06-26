@@ -52,7 +52,7 @@ export default function Header({
       </div>
 
       {/* Main Luxury Navigation Bar */}
-      <div className="max-w-7xl mx-auto px-4 md:px-8 h-24 md:h-28 flex items-center justify-between">
+      <div className="max-w-[1800px] mx-auto px-4 md:px-8 h-24 md:h-28 flex items-center justify-between">
         {/* Logo / Premium branding identity */}
         <button
           onClick={() => {
