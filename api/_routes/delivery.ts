@@ -593,7 +593,7 @@ deliveryRouter.post("/orders/update-status", async (req, res) => {
  
       await transporter.sendMail({
         from: computedFrom,
-        to: adminEmails.join(", "),
+      to: adminEmails,
         subject: `🔄 [ERP Order Log] #${orderId.substring(6) || orderId} transitioned: ${oldStatus} ➔ ${status}`,
         html: adminHtml
       });
@@ -744,7 +744,7 @@ deliveryRouter.post("/orders/start-trip", async (req, res) => {
  
       await transporter.sendMail({
         from: computedFrom,
-        to: adminEmails.join(", "),
+      to: adminEmails,  
         subject: `🏍️ [ERP Dispatch Alert] Rider ${riderName || "Courier"} started delivery trip for #${orderId.substring(6) || orderId}`,
         html: adminHtml
       });
