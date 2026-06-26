@@ -23,7 +23,14 @@ export function sanitizeMySQLHost(h: string): string {
   if (colonIdx !== -1) {
     clean = clean.substring(0, colonIdx);
   }
-  return clean.trim();
+  const finalized = clean.trim();
+  // DNS fallback: upside-restaurant-cafe.com resolves to CDN/Proxy (e.g. Render) which blocks MySQL on port 3306.
+  // We bypass this and route directly to the cPanel host IP 103.120.48.99.
+  if (finalized.toLowerCase() === "upside-restaurant-cafe.com" || finalized.toLowerCase() === "www.upside-restaurant-cafe.com") {
+    console.log(`[MYSQL DNS ROUTING] Automatically resolving host '${finalized}' to direct cPanel IP: '103.120.48.99'`);
+    return "103.120.48.99";
+  }
+  return finalized;
 }
 
 /**

@@ -456,13 +456,18 @@ export default function DedicatedDashboard({
     try {
       const res = await fetch(getApiUrl("/api/mysql/sync"), {
         method: "POST",
-        headers: { "Content-Type": "application/json" }
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          users: allUsers,
+          orders: allOrders,
+          riders: ridersList
+        })
       });
       const data = await res.json();
       if (!res.ok) {
         throw new Error(data.error || "Data sync aborted.");
       }
-      setMysqlActionSuccess(`Replication Success! Synchronized ${data.synced.users} users, ${data.synced.orders} orders, and ${data.synced.payments} payments into MySQL!`);
+      setMysqlActionSuccess(`Replication Success! Synchronized ${data.synced.users} users, ${data.synced.orders} orders, and ${data.synced.riders || 0} riders into MySQL!`);
       fetchMySQLStatus();
     } catch (err: any) {
       setMysqlActionError(err.message || "Data synchronization error.");

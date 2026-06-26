@@ -547,23 +547,59 @@ mysqlRouter.post("/sync", async (req: any, res: any) => {
       };
     }
 
-    const fdb = await getFirestoreAdmin(firebaseConfig, databaseId, "mysql-sync-admin");
+    let usersList = req.body.users;
+    let ordersList = req.body.orders;
+    let ridersList = req.body.riders;
+    let paymentsList = req.body.payments;
+
+    let fdb: any = null;
+
+    // Fallback: If collections are not supplied in the body, try querying via firebase-admin
+    if (!usersList || !ordersList || !ridersList) {
+      try {
+        fdb = await getFirestoreAdmin(firebaseConfig, databaseId, "mysql-sync-admin");
+        if (fdb) {
+          if (!usersList) {
+            const usersSnap = await fdb.collection("users").get();
+            usersList = usersSnap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
+          }
+          if (!ordersList) {
+            const ordersSnap = await fdb.collection("orders").get();
+            ordersList = ordersSnap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
+          }
+          if (!ridersList) {
+            const ridersSnap = await fdb.collection("riders").get();
+            ridersList = ridersSnap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
+          }
+          if (!paymentsList) {
+            const paymentsSnap = await fdb.collection("payments").get();
+            paymentsList = paymentsSnap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
+          }
+        }
+      } catch (err: any) {
+        console.warn("[MYSQL SYNC FALLBACK WARN] Could not query Firestore from backend:", err.message);
+      }
+    }
+
+    if (!usersList) usersList = [];
+    if (!ordersList) ordersList = [];
+    if (!ridersList) ridersList = [];
 
     let usersSynced = 0;
-
     let ordersSynced = 0;
     let paymentsSynced = 0;
+    let ridersSynced = 0;
 
     // A. Sync Users from Firestore to MySQL
     try {
-      const usersSnap = await fdb.collection("users").get();
-      for (const d of usersSnap.docs) {
-        const u = d.data();
+      for (const u of usersList) {
+        const id = u.id || u.uid;
+        if (!id) continue;
         await querySql(
           `INSERT INTO users (uid, email, displayName, role, disabled, createdAt)
            VALUES (?, ?, ?, ?, ?, ?)
            ON DUPLICATE KEY UPDATE email=VALUES(email), displayName=VALUES(displayName), role=VALUES(role), disabled=VALUES(disabled)`,
-          [d.id, u.email || "", u.displayName || "", u.role || "user", u.disabled ? 1 : 0, u.createdAt || ""]
+          [id, u.email || "", u.displayName || "", u.role || "user", u.disabled ? 1 : 0, u.createdAt || ""]
         );
         usersSynced++;
       }
@@ -573,9 +609,8 @@ mysqlRouter.post("/sync", async (req: any, res: any) => {
 
     // B. Sync Orders from Firestore to MySQL
     try {
-      const ordersSnap = await fdb.collection("orders").get();
-      for (const d of ordersSnap.docs) {
-        const o = d.data();
+      for (const o of ordersList) {
+        if (!o.id) continue;
         const itemsStr = typeof o.items === "string" ? o.items : JSON.stringify(o.items || []);
         await querySql(
           `INSERT INTO orders (id, userId, customerName, email, phone, totalPrice, items, address, status, paymentStatus, paymentMethod, verificationCode, assignedRiderId, assignedRiderName, assignedRiderPhone, updatedAt)
@@ -596,7 +631,7 @@ mysqlRouter.post("/sync", async (req: any, res: any) => {
              assignedRiderPhone=VALUES(assignedRiderPhone), 
              updatedAt=VALUES(updatedAt)`,
           [
-            d.id, 
+            o.id, 
             o.userId || "guest", 
             o.customerName || "", 
             o.email || "", 
@@ -621,28 +656,28 @@ mysqlRouter.post("/sync", async (req: any, res: any) => {
     }
 
     // C. Sync Payments from Firestore to MySQL
-    try {
-      const paymentsSnap = await fdb.collection("payments").get();
-      for (const d of paymentsSnap.docs) {
-        const p = d.data();
-        await querySql(
-          `INSERT INTO payments (reference, amount, paymentStatus, orderId, updatedAt)
-           VALUES (?, ?, ?, ?, ?)
-           ON DUPLICATE KEY UPDATE paymentStatus=VALUES(paymentStatus), updatedAt=VALUES(updatedAt)`,
-          [d.id, p.amount || 0, p.paymentStatus || "unpaid", p.orderId || "", p.updatedAt || ""]
-        );
-        paymentsSynced++;
+    if (paymentsList && paymentsList.length > 0) {
+      try {
+        for (const p of paymentsList) {
+          const id = p.id || p.reference;
+          if (!id) continue;
+          await querySql(
+            `INSERT INTO payments (reference, amount, paymentStatus, orderId, updatedAt)
+             VALUES (?, ?, ?, ?, ?)
+             ON DUPLICATE KEY UPDATE paymentStatus=VALUES(paymentStatus), updatedAt=VALUES(updatedAt)`,
+            [id, p.amount || 0, p.paymentStatus || "unpaid", p.orderId || "", p.updatedAt || ""]
+          );
+          paymentsSynced++;
+        }
+      } catch (pe) {
+        console.warn("Payments sync warning:", pe);
       }
-    } catch (pe) {
-      console.warn("Payments sync warning:", pe);
     }
 
     // D. Sync Riders from Firestore to MySQL
-    let ridersSynced = 0;
     try {
-      const ridersSnap = await fdb.collection("riders").get();
-      for (const d of ridersSnap.docs) {
-        const r = d.data();
+      for (const r of ridersList) {
+        if (!r.id) continue;
         await querySql(
           `INSERT INTO riders (id, fullName, phoneNumber, username, password, email, active, updatedAt)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -655,7 +690,7 @@ mysqlRouter.post("/sync", async (req: any, res: any) => {
              active = VALUES(active),
              updatedAt = VALUES(updatedAt)`,
           [
-            d.id, 
+            r.id, 
             r.fullName || "", 
             r.phoneNumber || "", 
             (r.username || "").toLowerCase().trim(), 
