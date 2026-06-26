@@ -186,41 +186,31 @@ deliveryRouter.post("/riders/login", async (req, res) => {
     res.status(500).json({ error: "Failed to login rider: " + err.message });
   }
 });
-
+import { querySql } from "../_utils/mysqlDb.js";
 // 5. ASSIGN RIDER TO ORDER & SEND EMAIL
 deliveryRouter.post("/orders/assign", async (req, res) => {
+
   try {
     const { orderId, riderId, riderName, riderPhone } = req.body;
     if (!orderId) {
       return res.status(400).json({ error: "Order ID is required." });
     }
 
-    const db = await getFirestoreInstance();
-    const { doc, getDoc, updateDoc } = await import("firebase/firestore");
-
-    const orderRef = doc(db, "orders", orderId);
-    const orderSnap = await getDoc(orderRef);
-    if (!orderSnap.exists()) {
+    const rows = await querySql("SELECT * FROM orders WHERE id = ?", [orderId]);
+    if (!rows || rows.length === 0) {
       return res.status(404).json({ error: "Order not found in system." });
     }
+    const orderData = rows[0];
 
-    const orderData = orderSnap.data();
-    
-    // Update order with rider information
-    const assignmentPayload: any = {
-      assignedRiderId: riderId || null,
-      assignedRiderName: riderName || null,
-      assignedRiderPhone: riderPhone || null,
-      status: riderId ? "Out for Delivery" : orderData.status, // transition automatically to Out for Delivery if assigned
-      systemWriteKey: "f8d3c501-4be5-4841-a6ab-cb5e1d4d03e9"
-    };
+    const newStatus = riderId ? "Out for Delivery" : orderData.status;
+    await querySql(
+      `UPDATE orders SET assignedRiderId = ?, assignedRiderName = ?, assignedRiderPhone = ?, status = ?, updatedAt = ? WHERE id = ?`,
+      [riderId || null, riderName || null, riderPhone || null, newStatus, new Date().toISOString(), orderId]
+    );
 
-    await updateDoc(orderRef, assignmentPayload);
-
-    // If a rider is assigned and customer email exists, send assignment email!
     const customerEmail = orderData.email || "guest@example.com";
     const verificationCode = orderData.verificationCode || "N/A";
-
+   
     if (riderId && customerEmail && customerEmail !== "guest@example.com" && customerEmail.includes("@")) {
       const transporter = getMailTransporter();
       if (transporter) {
