@@ -69,12 +69,11 @@ import { stripQuotes } from "./env.js";
 
 interface MailOptions {
   from: string;
-  to: string;
+  to: string | string[];
   subject: string;
   text?: string;
   html?: string;
 }
-
 export function getMailTransporter() {
   try {
     const apiKey = stripQuotes(process.env.RESEND_API_KEY || "");

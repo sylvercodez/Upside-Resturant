@@ -362,7 +362,7 @@ deliveryRouter.post("/notify/order-placed", async (req, res) => {
       const adminEmails = ["tosinotenaike3@gmail.com", "mophethecommerce@gmail.com"];
       const adminMailOptions = {
         from: computedFrom,
-        to: adminEmails.join(", "),
+       to: adminEmails,
         subject: `🚨 [NEW ORDER RECEIVED] Order #${orderId.substring(6) || orderId} - ₦${Number(totalPrice).toLocaleString()}`,
         html: `
 <!DOCTYPE html>
