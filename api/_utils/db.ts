@@ -98,7 +98,7 @@ class CustomDocumentReference {
         let updates: string[] = [];
         let params: any[] = [];
         for (const [k, v] of Object.entries(data)) {
-          if (["status", "customerName", "email", "phone", "address", "assignedRiderId", "assignedRiderName", "assignedRiderPhone", "verificationCode", "updatedAt"].includes(k)) {
+          if (["status", "paymentStatus", "paymentMethod", "customerName", "email", "phone", "address", "assignedRiderId", "assignedRiderName", "assignedRiderPhone", "verificationCode", "updatedAt"].includes(k)) {
             updates.push(`${k} = ?`);
             params.push(v);
           }

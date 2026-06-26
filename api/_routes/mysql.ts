@@ -495,10 +495,10 @@ mysqlRouter.post("/sync", async (req: any, res: any) => {
         const o = d.data();
         const itemsStr = typeof o.items === "string" ? o.items : JSON.stringify(o.items || []);
         await querySql(
-          `INSERT INTO orders (id, userId, customerName, email, phone, totalPrice, items, address, status, paymentStatus, verificationCode, assignedRiderId, assignedRiderName, assignedRiderPhone, updatedAt)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-           ON DUPLICATE KEY UPDATE status=VALUES(status), paymentStatus=VALUES(paymentStatus), verificationCode=VALUES(verificationCode), assignedRiderId=VALUES(assignedRiderId), assignedRiderName=VALUES(assignedRiderName), assignedRiderPhone=VALUES(assignedRiderPhone), updatedAt=VALUES(updatedAt)`,
-          [d.id, o.userId || "", o.customerName || "", o.email || "", o.phone || "", o.totalPrice || 0, itemsStr, o.address || "", o.status || "Prepping", o.paymentStatus || "unpaid", o.verificationCode || "", o.assignedRiderId || "", o.assignedRiderName || "", o.assignedRiderPhone || "", o.updatedAt || ""]
+          `INSERT INTO orders (id, userId, customerName, email, phone, totalPrice, items, address, status, paymentStatus, paymentMethod, verificationCode, assignedRiderId, assignedRiderName, assignedRiderPhone, updatedAt)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON DUPLICATE KEY UPDATE status=VALUES(status), paymentStatus=VALUES(paymentStatus), paymentMethod=VALUES(paymentMethod), verificationCode=VALUES(verificationCode), assignedRiderId=VALUES(assignedRiderId), assignedRiderName=VALUES(assignedRiderName), assignedRiderPhone=VALUES(assignedRiderPhone), updatedAt=VALUES(updatedAt)`,
+          [d.id, o.userId || "", o.customerName || "", o.email || "", o.phone || "", o.totalPrice || 0, itemsStr, o.address || "", o.status || "Prepping", o.paymentStatus || "unpaid", o.paymentMethod || "other", o.verificationCode || "", o.assignedRiderId || "", o.assignedRiderName || "", o.assignedRiderPhone || "", o.updatedAt || ""]
         );
         ordersSynced++;
       }
@@ -1264,8 +1264,8 @@ mysqlRouter.get("/orders", async (req: any, res: any) => {
       queryStr += " WHERE LOWER(email) = ?";
       params.push(email.toLowerCase().trim());
     } else {
-      // Backend / general administrative query: return ONLY successful paid orders
-      queryStr += " WHERE LOWER(paymentStatus) IN ('paid', 'success', 'payment_successful')";
+      // Backend / general administrative query: return successful paid orders OR WhatsApp orders (which require manual confirmation/sync)
+      queryStr += " WHERE LOWER(paymentStatus) IN ('paid', 'success', 'payment_successful') OR LOWER(paymentMethod) = 'whatsapp'";
     }
 
     queryStr += " ORDER BY createdAt DESC";
