@@ -649,6 +649,31 @@ export default function CartDrawer({
     } catch (fsErr: any) {
       console.warn("[FRONTEND SYNCHRONIZATION] Could not pre-persist Firestore payment record:", fsErr.message || fsErr);
     }
+  if (isMySQLActive) {
+      try {
+        await fetch(getApiUrl("/api/mysql/orders"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: orderId,
+            userId: currentUserId || "guest",
+            customerName: formData.customerName,
+            email: formData.email || "guest@example.com",
+            phone: formData.phone,
+            totalPrice: finalTotal,
+            items: JSON.stringify(activeOrderPayload.items),
+            address: activeOrderPayload.address,
+            status: "Prepping",
+            paymentStatus: "PENDING",
+            paymentMethod: "opay",
+            verificationCode
+          })
+        });
+        console.log("[MYSQL] Pre-created OPay order record:", orderId);
+      } catch (mysqlErr) {
+        console.error("Failed to pre-create OPay order in MySQL:", mysqlErr);
+      }
+    }
 
     const opayPayload = {
       amount: finalTotal,
