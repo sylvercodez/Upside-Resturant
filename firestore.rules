@@ -207,17 +207,15 @@ service cloud.firestore {
       allow list: if isSales();
       allow get: if isSales();
       allow create: if isSystem() || (
-                    (
-                      (isSignedIn() && request.resource.data.userId == request.auth.uid)
-                      || (!isSignedIn() && request.resource.data.userId == "guest")
-                    )
+                    isSignedIn() 
+                    && request.resource.data.userId == request.auth.uid 
                     && isValidId(paymentId)
                     && isValidPayment(request.resource.data)
                     );
       allow update: if isSystem() || (
-                    (
-                      (isSignedIn() && resource.data.userId == request.auth.uid && request.resource.data.userId == request.auth.uid && isValidPayment(request.resource.data))
-                      || (!isSignedIn() && resource.data.userId == "guest" && request.resource.data.userId == "guest" && isValidPayment(request.resource.data))
+                    isSignedIn() 
+                    && (
+                      (resource.data.userId == request.auth.uid && request.resource.data.userId == request.auth.uid && isValidPayment(request.resource.data))
                       || isSales()
                     )
                     );
@@ -240,22 +238,20 @@ service cloud.firestore {
       // Sales/Admin staff can list all orders
       allow list: if isSales();
       
-      // Allow creation of order if the creator is the owner or guest and the payload conforms to valid Order schemas
+      // Allow creation of order if the creator is the owner and the payload conforms to valid Order schemas
       allow create: if isSystem() || (
-                    (
-                      (isSignedIn() && request.resource.data.userId == request.auth.uid)
-                      || (!isSignedIn() && request.resource.data.userId == "guest")
-                    )
+                    isSignedIn() 
+                    && request.resource.data.userId == request.auth.uid
                     && isValidId(orderId)
                     && isValidOrder(request.resource.data)
                     );
 
-      // Allow updates to own or guest orders, or admin/sales pipeline updates,
+      // Allow updates to own orders, or admin/sales pipeline updates,
       // as well as unauthenticated updates by courier containing ONLY status and tracking coordinates
       allow update: if isSystem() || (
-                    (
-                      (isSignedIn() && resource.data.userId == request.auth.uid && request.resource.data.userId == request.auth.uid && isValidOrder(request.resource.data))
-                      || (!isSignedIn() && resource.data.userId == "guest" && request.resource.data.userId == "guest" && isValidOrder(request.resource.data))
+                    isSignedIn()
+                    && (
+                      (resource.data.userId == request.auth.uid && request.resource.data.userId == request.auth.uid && isValidOrder(request.resource.data))
                       || isSales()
                     )
                     ) || (
