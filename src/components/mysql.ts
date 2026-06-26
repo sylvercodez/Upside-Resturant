@@ -1673,14 +1673,12 @@ mysqlRouter.delete("/users/:uid", async (req: any, res: any) => {
 });
 
 // 5i. Key-Value Settings endpoints
-
- mysqlRouter.get("/settings/:key", async (req: any, res: any) => {
+mysqlRouter.get("/settings/:key", async (req: any, res: any) => {
   try {
     const { key } = req.params;
     const rows = await querySql("SELECT setting_value FROM settings WHERE setting_key = ?", [key]);
     if (!rows || rows.length === 0) {
-      // Not configured yet — return a default instead of erroring
-      return res.json({ configured: false });
+      return res.status(404).json({ error: "Setting not found" });
     }
     return res.json(JSON.parse(rows[0].setting_value));
   } catch (err: any) {
@@ -1755,11 +1753,11 @@ mysqlRouter.get("/riders", async (req: any, res: any) => {
     }
 
     const rows = await querySql("SELECT * FROM riders");
-    // const riders = rows.map((r: any) => ({
-    //   ...r,
-    //   active: r.active === 1 || r.active === true
-    // }));
-    // return res.json(riders);
+    const riders = rows.map((r: any) => ({
+      ...r,
+      active: r.active === 1 || r.active === true
+    }));
+    return res.json(riders);
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }

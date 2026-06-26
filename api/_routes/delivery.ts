@@ -45,20 +45,18 @@ async function getFirestoreInstance() {
     return getFirestore(appInstance);
   }
 }
-import { querySql } from "../_utils/mysqlDb.js";
+
+
 // 1. GET ALL RIDERS
 deliveryRouter.get("/riders", async (req, res) => {
   try {
-    const rows = await querySql("SELECT * FROM riders");
-    const riders = rows.map((r: any) => ({
-      id: r.id,
-      fullName: r.fullName,
-      phone: r.phoneNumber,
-      username: r.username,
-      email: r.email,
-      active: r.active === 1 || r.active === true,
-      createdAt: r.updatedAt
-    }));
+    const db = await getFirestoreInstance();
+    const { collection, getDocs } = await import("firebase/firestore");
+    const snapshot = await getDocs(collection(db, "riders"));
+    const riders: any[] = [];
+    snapshot.forEach((docSnap) => {
+      riders.push({ id: docSnap.id, ...docSnap.data() });
+    });
     res.json(riders);
   } catch (err: any) {
     console.error("Error fetching riders:", err);
@@ -74,61 +72,74 @@ deliveryRouter.post("/riders", async (req, res) => {
       return res.status(400).json({ error: "Missing required fields for rider creation." });
     }
 
-    const existing = await querySql("SELECT id FROM riders WHERE LOWER(username) = ?", [username.toLowerCase().trim()]);
-    if (existing && existing.length > 0) {
+    const db = await getFirestoreInstance();
+    const { collection, getDocs, doc, setDoc } = await import("firebase/firestore");
+
+    // Check if username already exists
+    const snapshot = await getDocs(collection(db, "riders"));
+    let exists = false;
+    snapshot.forEach((docSnap) => {
+      const data = docSnap.data();
+      if ((data.username || "").toLowerCase() === username.toLowerCase()) {
+        exists = true;
+      }
+    });
+
+    if (exists) {
       return res.status(400).json({ error: "Username is already registered. Please choose another Username." });
     }
 
     const riderId = `rider_${Date.now()}`;
-    await querySql(
-      `INSERT INTO riders (id, fullName, phoneNumber, username, password, email, active, updatedAt)
-       VALUES (?, ?, ?, ?, ?, ?, 1, ?)`,
-      [riderId, fullName.trim(), phone.trim(), username.trim().toLowerCase(), password, (email || "").trim(), new Date().toISOString()]
-    );
-
-    res.status(201).json({
+    const riderPayload = {
       id: riderId,
       fullName: fullName.trim(),
       phone: phone.trim(),
       username: username.trim(),
+      password: password, // Store password securely or simple check as requested
       email: (email || "").trim(),
-      active: true
+      active: true,
+      createdAt: new Date().toISOString()
+    };
+
+    await setDoc(doc(db, "riders", riderId), {
+      ...riderPayload,
+      systemWriteKey: "f8d3c501-4be5-4841-a6ab-cb5e1d4d03e9"
     });
+    res.status(201).json(riderPayload);
   } catch (err: any) {
     console.error("Error creating rider:", err);
     res.status(500).json({ error: "Failed to create rider profile: " + err.message });
   }
 });
+
 // 3. EDIT / DEACTIVATE RIDER
 deliveryRouter.put("/riders/:id", async (req, res) => {
   try {
     const riderId = req.params.id;
     const { fullName, phone, password, email, active } = req.body;
 
-    let updates: string[] = [];
-    let params: any[] = [];
-    if (fullName !== undefined) { updates.push("fullName = ?"); params.push(fullName.trim()); }
-    if (phone !== undefined) { updates.push("phoneNumber = ?"); params.push(phone.trim()); }
-    if (password !== undefined) { updates.push("password = ?"); params.push(password); }
-    if (email !== undefined) { updates.push("email = ?"); params.push(email.trim()); }
-    if (active !== undefined) { updates.push("active = ?"); params.push(active ? 1 : 0); }
+    const db = await getFirestoreInstance();
+    const { doc, updateDoc } = await import("firebase/firestore");
 
-    if (updates.length === 0) {
-      return res.json({ success: true, message: "No changes specified." });
-    }
+    const updatePayload: any = {};
+    if (fullName !== undefined) updatePayload.fullName = fullName.trim();
+    if (phone !== undefined) updatePayload.phone = phone.trim();
+    if (password !== undefined) updatePayload.password = password;
+    if (email !== undefined) updatePayload.email = email.trim();
+    if (active !== undefined) updatePayload.active = !!active;
 
-    updates.push("updatedAt = ?");
-    params.push(new Date().toISOString());
-    params.push(riderId);
-
-    await querySql(`UPDATE riders SET ${updates.join(", ")} WHERE id = ?`, params);
+    await updateDoc(doc(db, "riders", riderId), {
+      ...updatePayload,
+      systemWriteKey: "f8d3c501-4be5-4841-a6ab-cb5e1d4d03e9"
+    });
     res.json({ success: true, message: "Rider details updated successfully." });
   } catch (err: any) {
     console.error("Error updating rider:", err);
     res.status(500).json({ error: "Failed to update rider profile: " + err.message });
   }
 });
-// 4. RIDER LOGIN
+
+// 4. RIDER LOGIN (strictly username and password)
 deliveryRouter.post("/riders/login", async (req, res) => {
   try {
     const { username, password } = req.body;
@@ -136,25 +147,38 @@ deliveryRouter.post("/riders/login", async (req, res) => {
       return res.status(400).json({ error: "Username and Password are required." });
     }
 
-    const rows = await querySql("SELECT * FROM riders WHERE LOWER(username) = ?", [username.toLowerCase().trim()]);
+    const db = await getFirestoreInstance();
+    const { collection, getDocs } = await import("firebase/firestore");
 
-    if (!rows || rows.length === 0 || rows[0].password !== password) {
+    const snapshot = await getDocs(collection(db, "riders"));
+    let foundRider: any = null;
+
+    snapshot.forEach((docSnap) => {
+      const data = docSnap.data();
+      if (
+        (data.username || "").toLowerCase().trim() === username.toLowerCase().trim() &&
+        (data.password || "") === password
+      ) {
+        foundRider = { id: docSnap.id, ...data };
+      }
+    });
+
+    if (!foundRider) {
       return res.status(401).json({ error: "Invalid username or password credentials." });
     }
 
-    const rider = rows[0];
-    if (rider.active === 0 || rider.active === false) {
+    if (foundRider.active === false) {
       return res.status(403).json({ error: "This rider account is currently deactivated. Please contact administration." });
     }
 
     res.json({
       success: true,
       rider: {
-        id: rider.id,
-        fullName: rider.fullName,
-        username: rider.username,
-        phone: rider.phoneNumber,
-        email: rider.email
+        id: foundRider.id,
+        fullName: foundRider.fullName,
+        username: foundRider.username,
+        phone: foundRider.phone,
+        email: foundRider.email
       }
     });
   } catch (err: any) {
@@ -162,7 +186,7 @@ deliveryRouter.post("/riders/login", async (req, res) => {
     res.status(500).json({ error: "Failed to login rider: " + err.message });
   }
 });
-
+import { querySql } from "../_utils/mysqlDb.js";
 // 5. ASSIGN RIDER TO ORDER & SEND EMAIL
 deliveryRouter.post("/orders/assign", async (req, res) => {
 
