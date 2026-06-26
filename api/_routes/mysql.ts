@@ -497,8 +497,39 @@ mysqlRouter.post("/sync", async (req: any, res: any) => {
         await querySql(
           `INSERT INTO orders (id, userId, customerName, email, phone, totalPrice, items, address, status, paymentStatus, paymentMethod, verificationCode, assignedRiderId, assignedRiderName, assignedRiderPhone, updatedAt)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-           ON DUPLICATE KEY UPDATE status=VALUES(status), paymentStatus=VALUES(paymentStatus), paymentMethod=VALUES(paymentMethod), verificationCode=VALUES(verificationCode), assignedRiderId=VALUES(assignedRiderId), assignedRiderName=VALUES(assignedRiderName), assignedRiderPhone=VALUES(assignedRiderPhone), updatedAt=VALUES(updatedAt)`,
-          [d.id, o.userId || "", o.customerName || "", o.email || "", o.phone || "", o.totalPrice || 0, itemsStr, o.address || "", o.status || "Prepping", o.paymentStatus || "unpaid", o.paymentMethod || "other", o.verificationCode || "", o.assignedRiderId || "", o.assignedRiderName || "", o.assignedRiderPhone || "", o.updatedAt || ""]
+           ON DUPLICATE KEY UPDATE 
+             customerName=VALUES(customerName), 
+             email=VALUES(email), 
+             phone=VALUES(phone), 
+             totalPrice=VALUES(totalPrice), 
+             items=VALUES(items), 
+             address=VALUES(address), 
+             status=VALUES(status), 
+             paymentStatus=VALUES(paymentStatus), 
+             paymentMethod=VALUES(paymentMethod), 
+             verificationCode=VALUES(verificationCode), 
+             assignedRiderId=VALUES(assignedRiderId), 
+             assignedRiderName=VALUES(assignedRiderName), 
+             assignedRiderPhone=VALUES(assignedRiderPhone), 
+             updatedAt=VALUES(updatedAt)`,
+          [
+            d.id, 
+            o.userId || "guest", 
+            o.customerName || "", 
+            o.email || "", 
+            o.phone || "", 
+            parseFloat(String(o.totalPrice || o.totalAmount || o.amount || 0)), 
+            itemsStr, 
+            o.address || "", 
+            o.status || "Prepping", 
+            o.paymentStatus || "unpaid", 
+            o.paymentMethod || o.type || o.method || "other", 
+            o.verificationCode || "", 
+            o.assignedRiderId || "", 
+            o.assignedRiderName || "", 
+            o.assignedRiderPhone || "", 
+            o.updatedAt || (o.timestamp ? new Date(o.timestamp).toISOString() : "") || ""
+          ]
         );
         ordersSynced++;
       }

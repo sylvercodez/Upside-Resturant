@@ -65,13 +65,51 @@ class CustomDocumentReference {
           [this.docId, orderId || this.docId, amount || 0, status || "pending", reference || "", method || "opay", currency || "NGN", channel || "", description || "", new Date().toISOString(), new Date().toISOString()]
         );
       } else if (this.collectionName === "orders") {
-        const { customerName, email, phone, type, address, area, paymentMethod, promoCode, customNotes, cartItems, itemsCount, totalAmount, status } = data;
-        const cartStr = typeof cartItems === "string" ? cartItems : JSON.stringify(cartItems || []);
+        const { userId, customerName, email, phone, totalPrice, items, cartItems, totalAmount, address, status, paymentStatus, paymentMethod, verificationCode, assignedRiderId, assignedRiderName, assignedRiderPhone } = data;
+        
+        // Handle items representation
+        let itemsVal = items || cartItems || [];
+        const itemsStr = typeof itemsVal === "string" ? itemsVal : JSON.stringify(itemsVal);
+        
+        // Handle totalPrice representation
+        const finalPrice = totalPrice !== undefined ? totalPrice : (totalAmount !== undefined ? totalAmount : 0);
+
         await querySql(
-          `INSERT INTO orders (id, customerName, email, phone, type, address, area, paymentMethod, promoCode, customNotes, cartItems, itemsCount, totalAmount, status, createdAt, updatedAt)
+          `INSERT INTO orders (id, userId, customerName, email, phone, totalPrice, items, address, status, paymentStatus, paymentMethod, verificationCode, assignedRiderId, assignedRiderName, assignedRiderPhone, updatedAt)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-           ON DUPLICATE KEY UPDATE status=VALUES(status), updatedAt=VALUES(updatedAt)`,
-          [this.docId, customerName, email, phone, type, address, area, paymentMethod, promoCode, customNotes, cartStr, itemsCount || 0, totalAmount || 0, status || "pending", new Date().toISOString(), new Date().toISOString()]
+           ON DUPLICATE KEY UPDATE 
+             customerName=VALUES(customerName), 
+             email=VALUES(email), 
+             phone=VALUES(phone), 
+             totalPrice=VALUES(totalPrice), 
+             items=VALUES(items), 
+             address=VALUES(address), 
+             status=VALUES(status), 
+             paymentStatus=VALUES(paymentStatus), 
+             paymentMethod=VALUES(paymentMethod), 
+             verificationCode=VALUES(verificationCode), 
+             assignedRiderId=VALUES(assignedRiderId), 
+             assignedRiderName=VALUES(assignedRiderName), 
+             assignedRiderPhone=VALUES(assignedRiderPhone), 
+             updatedAt=VALUES(updatedAt)`,
+          [
+            this.docId,
+            userId || "guest",
+            customerName || "",
+            email || "",
+            phone || "",
+            parseFloat(String(finalPrice || "0")),
+            itemsStr,
+            address || "",
+            status || "Prepping",
+            paymentStatus || "unpaid",
+            paymentMethod || "other",
+            verificationCode || "",
+            assignedRiderId || "",
+            assignedRiderName || "",
+            assignedRiderPhone || "",
+            new Date().toISOString()
+          ]
         );
       }
     } catch (err) {
