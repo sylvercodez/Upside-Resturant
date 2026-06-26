@@ -1174,7 +1174,7 @@ export default function DedicatedDashboard({
       const response = await fetch(getApiUrl("/api/opay/verify-payment"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orderRef: orderId })
+        body: JSON.stringify({ reference: orderId })
       });
       const data = await response.json();
       if (response.ok && data.success) {
@@ -1432,7 +1432,7 @@ export default function DedicatedDashboard({
 
   // Filtration logic for global orders pipeline
   const filteredOrders = allOrders.filter(ord => {
-    const isOpay = ord.paymentMethod === "opay" || ord.paymentMethod === "OPay" || ord.type === "opay";
+    const isOpay = ord.paymentMethod === "opay" || ord.paymentMethod === "OPay" || ord.type === "opay" || (!ord.paymentMethod && ord.id?.startsWith("order_"));
     const isWhatsapp = ord.paymentMethod === "whatsapp" || ord.type === "whatsapp";
 
     // Channel filter
@@ -1600,7 +1600,7 @@ export default function DedicatedDashboard({
                             : "text-amber-600 hover:text-amber-500 hover:bg-amber-100"
                         }`}
                       >
-                        🛍️ Orders Pipeline ({allOrders.filter(o => ["paid", "success", "payment_successful"].includes((o.paymentStatus || "").toLowerCase())).length})
+                        🛍️ Orders Pipeline ({allOrders.length})
                       </button>
                       <button
                         onClick={() => setActiveTab("whatsapp_orders")}
@@ -1610,7 +1610,7 @@ export default function DedicatedDashboard({
                             : "text-neutral-600 hover:text-neutral-900 hover:bg-neutral-200"
                         }`}
                       >
-                        💬 WhatsApp Orders ({allOrders.filter(o => o.paymentMethod === "whatsapp").length})
+                        💬 WhatsApp Orders ({allOrders.filter(o => o.paymentMethod === "whatsapp" || o.type === "whatsapp").length})
                       </button>
                     </>
                   )}
@@ -1854,7 +1854,7 @@ export default function DedicatedDashboard({
                     <div className="flex border-b border-neutral-800 font-mono text-[10px]">
                       {[
                         { id: "all", label: "🌐 All Channels", count: allOrders.length },
-                        { id: "opay", label: "💳 OPay Checkout", count: allOrders.filter(o => o.paymentMethod === "opay" || o.paymentMethod === "OPay" || o.type === "opay").length },
+                        { id: "opay", label: "💳 OPay Checkout", count: allOrders.filter(o => o.paymentMethod === "opay" || o.paymentMethod === "OPay" || o.type === "opay" || (!o.paymentMethod && o.id?.startsWith("order_"))).length },
                         { id: "whatsapp", label: "💬 WhatsApp Checkout", count: allOrders.filter(o => o.paymentMethod === "whatsapp" || o.type === "whatsapp").length }
                       ].map((tab) => (
                         <button
@@ -1870,6 +1870,53 @@ export default function DedicatedDashboard({
                         </button>
                       ))}
                     </div>
+
+                    {/* Channel-specific functional dashboards */}
+                    {pipelineChannelFilter === "opay" && (
+                      <div className="bg-gradient-to-r from-[#ff6b00]/10 to-transparent border border-[#ff6b00]/20 p-4 font-mono space-y-2">
+                        <div className="flex items-center justify-between">
+                          <h3 className="text-[11px] text-[#ff6b00] font-black uppercase tracking-wider flex items-center gap-1.5">
+                            <span>💳</span> OPay Automated Clearing House & Verification Terminal
+                          </h3>
+                          <span className="text-[8px] bg-[#ff6b00]/25 text-[#ff6b00] border border-[#ff6b00]/30 px-2 py-0.5 uppercase font-bold animate-pulse">
+                            Live Sync Active
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-neutral-400 font-sans leading-relaxed">
+                          Verify user payments against the OPay central transaction ledger instantly. Unpaid or pending checkouts can be queried manually to confirm status hooks, or force-marked as paid.
+                        </p>
+                        <div className="flex flex-wrap gap-4 text-[9.5px] text-neutral-500 font-mono pt-1">
+                          <span>Total OPay Records: <strong className="text-white">{allOrders.filter(o => o.paymentMethod === "opay" || o.paymentMethod === "OPay" || o.type === "opay" || (!o.paymentMethod && o.id?.startsWith("order_"))).length}</strong></span>
+                          <span>•</span>
+                          <span>Successful: <strong className="text-emerald-400">{allOrders.filter(o => (o.paymentMethod === "opay" || o.paymentMethod === "OPay" || o.type === "opay" || (!o.paymentMethod && o.id?.startsWith("order_"))) && ["paid", "success", "payment_successful"].includes((o.paymentStatus || "").toLowerCase())).length}</strong></span>
+                          <span>•</span>
+                          <span>Pending / Unpaid: <strong className="text-amber-500">{allOrders.filter(o => (o.paymentMethod === "opay" || o.paymentMethod === "OPay" || o.type === "opay" || (!o.paymentMethod && o.id?.startsWith("order_"))) && !["paid", "success", "payment_successful"].includes((o.paymentStatus || "").toLowerCase())).length}</strong></span>
+                        </div>
+                      </div>
+                    )}
+
+                    {pipelineChannelFilter === "whatsapp" && (
+                      <div className="bg-gradient-to-r from-emerald-600/10 to-transparent border border-emerald-500/20 p-4 font-mono space-y-2">
+                        <div className="flex items-center justify-between">
+                          <h3 className="text-[11px] text-emerald-400 font-black uppercase tracking-wider flex items-center gap-1.5">
+                            <span>💬</span> WhatsApp Direct Order & Billing Console
+                          </h3>
+                          <span className="text-[8px] bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 uppercase font-bold">
+                            Manual Settlement
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-neutral-400 font-sans leading-relaxed">
+                          Review offline manual checkout receipts placed by clients in Lagos. Coordinate deliveries, initiate customer chat, update billing statuses manually, and trigger chef cooking queues once cash or bank transfer is confirmed.
+                        </p>
+                        <div className="flex flex-wrap gap-4 text-[9.5px] text-neutral-500 font-mono pt-1">
+                          <span>WhatsApp Orders: <strong className="text-white">{allOrders.filter(o => o.paymentMethod === "whatsapp" || o.type === "whatsapp").length}</strong></span>
+                          <span>•</span>
+                          <span>Paid: <strong className="text-emerald-400">{allOrders.filter(o => (o.paymentMethod === "whatsapp" || o.type === "whatsapp") && ["paid", "success", "payment_successful"].includes((o.paymentStatus || "").toLowerCase())).length}</strong></span>
+                          <span>•</span>
+                          <span>Waiting Payment: <strong className="text-amber-500">{allOrders.filter(o => (o.paymentMethod === "whatsapp" || o.type === "whatsapp") && !["paid", "success", "payment_successful"].includes((o.paymentStatus || "").toLowerCase())).length}</strong></span>
+                        </div>
+                      </div>
+                    )}
 
                     {/* Search Field */}
                     <div className="relative max-w-md">
@@ -1925,7 +1972,7 @@ export default function DedicatedDashboard({
 
                                   {/* Channel and payment indicators */}
                                   {(() => {
-                                    const isOpay = ord.paymentMethod === "opay" || ord.paymentMethod === "OPay" || ord.type === "opay";
+                                    const isOpay = ord.paymentMethod === "opay" || ord.paymentMethod === "OPay" || ord.type === "opay" || (!ord.paymentMethod && ord.id?.startsWith("order_"));
                                     const isWhatsapp = ord.paymentMethod === "whatsapp" || ord.type === "whatsapp";
                                     const payStatus = (ord.paymentStatus || "").toLowerCase();
                                     const isPaid = ["paid", "success", "payment_successful"].includes(payStatus);
@@ -2153,7 +2200,7 @@ export default function DedicatedDashboard({
 
                                     {/* Channel-Specific Verification Controls */}
                                     {(() => {
-                                      const isOpay = ord.paymentMethod === "opay" || ord.paymentMethod === "OPay" || ord.type === "opay";
+                                      const isOpay = ord.paymentMethod === "opay" || ord.paymentMethod === "OPay" || ord.type === "opay" || (!ord.paymentMethod && ord.id?.startsWith("order_"));
                                       const isWhatsapp = ord.paymentMethod === "whatsapp" || ord.type === "whatsapp";
                                       const payStatus = (ord.paymentStatus || "").toLowerCase();
                                       const isPaid = ["paid", "success", "payment_successful"].includes(payStatus);

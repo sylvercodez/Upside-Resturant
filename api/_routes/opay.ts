@@ -628,8 +628,7 @@ opayRouter.get("/debug", async (req: any, res: any) => {
 // Route: Query / Verify OPay Checkout
 opayRouter.post("/verify-payment", async (req: any, res: any) => {
   try {
-    const { reference } = req.body.reference ? req.body : req.query; 
-    const orderRef = reference || req.body.reference;
+    const orderRef = req.body.reference || req.body.orderRef || req.body.orderId || req.query.reference || req.query.orderRef || req.query.orderId;
     if (!orderRef) {
       return res.status(400).json({ error: "Missing reference parameter in query or body" });
     }

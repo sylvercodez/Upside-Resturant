@@ -616,6 +616,8 @@ export default function CartDrawer({
       items: cartItems.map(item => ({ name: item.name, quantity: item.quantity, price: item.price })),
       address: formData.type === "delivery" ? `${formData.address}, ${formData.area}` : "Boutique Self-Pickup",
       status: "Prepping",
+      paymentMethod: "opay",
+      paymentStatus: "PENDING",
       timestamp: Date.now(),
       type: formData.type,
       verificationCode
