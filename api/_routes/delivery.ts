@@ -33,8 +33,19 @@ async function getFirestoreInstance() {
   } else {
     appInstance = initializeApp(firebaseConfig, appName);
   }
-  return getFirestore(appInstance, databaseId);
+
+  try {
+    const fdb = getFirestore(appInstance, databaseId);
+    // Test query to see if it exists
+    const { collection, getDocs, limit, query } = await import("firebase/firestore");
+    await getDocs(query(collection(fdb, "users"), limit(1)));
+    return fdb;
+  } catch (err: any) {
+    console.warn(`Firestore client with DB ID ${databaseId} failed (${err.message}), falling back to default database.`);
+    return getFirestore(appInstance);
+  }
 }
+
 
 // 1. GET ALL RIDERS
 deliveryRouter.get("/riders", async (req, res) => {

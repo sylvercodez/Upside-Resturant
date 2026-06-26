@@ -2330,7 +2330,7 @@ export default function DedicatedDashboard({
                           {["all", "waiting for payment", "not paid", "paid", "cancel"].map((st) => {
                             const count = allOrders.filter(
                               (o) =>
-                                o.paymentMethod === "whatsapp" &&
+                                (o.paymentMethod === "whatsapp" || o.type === "whatsapp") &&
                                 (st === "all" || (o.paymentStatus || "").toLowerCase() === st)
                             ).length;
                             return (
@@ -2354,7 +2354,7 @@ export default function DedicatedDashboard({
                     {/* Filtered list */}
                     {(() => {
                       const filtered = allOrders
-                        .filter((o) => o.paymentMethod === "whatsapp")
+                        .filter((o) => o.paymentMethod === "whatsapp" || o.type === "whatsapp")
                         .filter((o) => {
                           const statusMatch =
                             whatsappStatusFilter === "all" ||

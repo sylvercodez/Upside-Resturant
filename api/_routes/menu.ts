@@ -21,13 +21,30 @@ menuRouter.get("/", async (req, res) => {
       };
     }
 
-    const { initializeApp: seedInitApp } = await import("firebase/app");
+    const { initializeApp: seedInitApp, getApp: seedGetApp, getApps: seedGetApps } = await import("firebase/app");
     const { getFirestore: seedGetFirestore, doc: seedDoc, getDocs: seedGetDocs, collection: seedCollection, setDoc: seedSetDoc } = await import("firebase/firestore");
 
-    const clientApp = seedInitApp(firebaseConfig, "seed-menu-app");
-    const db = seedGetFirestore(clientApp, databaseId);
+    let clientApp;
+    const appName = "seed-menu-app";
+    const currentApps = seedGetApps();
+    if (currentApps.some(a => a.name === appName)) {
+      clientApp = seedGetApp(appName);
+    } else {
+      clientApp = seedInitApp(firebaseConfig, appName);
+    }
+
+    let db;
+    try {
+      db = seedGetFirestore(clientApp, databaseId);
+      // Test check
+      const testQuerySnapshot = await seedGetDocs(seedCollection(db, "categories"));
+    } catch (err: any) {
+      console.warn(`[Menu Seed] Firestore with DB ID ${databaseId} failed (${err.message}). Falling back to default database.`);
+      db = seedGetFirestore(clientApp);
+    }
 
     const systemKey = "f8d3c501-4be5-4841-a6ab-cb5e1d4d03e9";
+
 
     // 1. Mark obsolete categories as deleted
     const catQuerySnapshot = await seedGetDocs(seedCollection(db, "categories"));

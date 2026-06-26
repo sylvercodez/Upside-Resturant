@@ -26,6 +26,30 @@ const LAGOS_AREAS = [
 
 export const mysqlRouter = express.Router();
 
+async function getFirestoreAdmin(firebaseConfig: any, databaseId: string, appName: string) {
+  const { default: admin } = await import("firebase-admin");
+  let appInstance;
+  try {
+    appInstance = admin.app(appName);
+  } catch (_) {
+    appInstance = admin.initializeApp({
+      projectId: firebaseConfig.projectId
+    }, appName);
+  }
+
+  let fdb;
+  try {
+    fdb = databaseId ? appInstance.firestore(databaseId) : appInstance.firestore();
+    // Test check with collection.limit(1) query to see if it exists
+    await fdb.collection("users").limit(1).get();
+  } catch (err: any) {
+    console.warn(`[getFirestoreAdmin] Firestore with custom database ID ${databaseId} failed (${err.message}). Falling back to default database.`);
+    fdb = appInstance.firestore();
+  }
+  return fdb;
+}
+
+
 // // 1. Route: Save MySQL credentials from the admin UI configurations to .env and running memory process
 // mysqlRouter.post("/convert-to-env", async (req: any, res: any) => {
 //   try {
@@ -144,6 +168,76 @@ mysqlRouter.get("/status", async (req: any, res: any) => {
       message: `Failed to connect to MySQL host: ${err.message}`,
       config: { host, port, user, database }
     });
+  }
+});
+
+// Route: Detailed database discrepancy debugger for Firestore and MySQL comparison
+mysqlRouter.get("/debug-sync", async (req: any, res: any) => {
+  try {
+    const configPath = path.join(process.cwd(), "firebase-applet-config.json");
+    let databaseId = "ai-studio-7ee29b67-2013-4587-a753-b479a6e19155";
+    let firebaseConfig: any = null;
+    
+    if (fs.existsSync(configPath)) {
+      firebaseConfig = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+      if (firebaseConfig.firestoreDatabaseId) databaseId = firebaseConfig.firestoreDatabaseId;
+    } else {
+      firebaseConfig = {
+        projectId: process.env.FIREBASE_PROJECT_ID || process.env.GCLOUD_PROJECT || "gen-lang-client-0332471137",
+      };
+    }
+
+    let fdb;
+    let fUsers: any[] = [];
+    let fOrders: any[] = [];
+    let fRiders: any[] = [];
+    let firestoreError: string | null = null;
+
+    try {
+      fdb = await getFirestoreAdmin(firebaseConfig, databaseId, "mysql-sync-admin-debug");
+
+      // Fetch users from both
+      const fUsersSnap = await fdb.collection("users").get();
+      fUsers = fUsersSnap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
+
+      // Fetch orders from both
+      const fOrdersSnap = await fdb.collection("orders").get();
+      fOrders = fOrdersSnap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
+
+      // Fetch riders from both
+      const fRidersSnap = await fdb.collection("riders").get();
+      fRiders = fRidersSnap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
+    } catch (fsErr: any) {
+      firestoreError = fsErr.message;
+      console.warn("Firestore querying failed in debug-sync:", fsErr.message);
+    }
+
+
+    const mUsers = await querySql("SELECT * FROM users");
+    const mOrders = await querySql("SELECT * FROM orders");
+    const mRiders = await querySql("SELECT * FROM riders");
+
+    return res.json({
+      firestoreError,
+      firestore: {
+        usersCount: fUsers.length,
+        users: fUsers,
+        ordersCount: fOrders.length,
+        orders: fOrders,
+        ridersCount: fRiders.length,
+        riders: fRiders
+      },
+      mysql: {
+        usersCount: mUsers.length,
+        users: mUsers,
+        ordersCount: mOrders.length,
+        orders: mOrders,
+        ridersCount: mRiders.length,
+        riders: mRiders
+      }
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message, stack: err.stack });
   }
 });
 
@@ -453,21 +547,10 @@ mysqlRouter.post("/sync", async (req: any, res: any) => {
       };
     }
 
-    const { default: admin } = await import("firebase-admin");
-
-    let appInstance;
-    try {
-      appInstance = admin.app("mysql-sync-admin");
-    } catch (_) {
-      appInstance = admin.initializeApp({
-        projectId: firebaseConfig.projectId
-      }, "mysql-sync-admin");
-    }
-
-    // Support databaseId in firebase-admin (passing databaseId to firestore() if defined)
-    const fdb = databaseId ? appInstance.firestore(databaseId) : appInstance.firestore();
+    const fdb = await getFirestoreAdmin(firebaseConfig, databaseId, "mysql-sync-admin");
 
     let usersSynced = 0;
+
     let ordersSynced = 0;
     let paymentsSynced = 0;
 
@@ -1590,18 +1673,9 @@ mysqlRouter.get("/riders", async (req: any, res: any) => {
         };
       }
 
-      const { default: admin } = await import("firebase-admin");
-      let appInstance;
-      try {
-        appInstance = admin.app("mysql-sync-admin-get");
-      } catch (_) {
-        appInstance = admin.initializeApp({
-          projectId: firebaseConfig.projectId
-        }, "mysql-sync-admin-get");
-      }
-
-      const fdb = databaseId ? appInstance.firestore(databaseId) : appInstance.firestore();
+      const fdb = await getFirestoreAdmin(firebaseConfig, databaseId, "mysql-sync-admin-get");
       const ridersSnap = await fdb.collection("riders").get();
+
       for (const d of ridersSnap.docs) {
         const r = d.data();
         await querySql(
