@@ -1752,15 +1752,7 @@ mysqlRouter.get("/riders", async (req: any, res: any) => {
       console.warn("Auto-sync of riders from Firestore failed (proceeding to MySQL only):", syncErr);
     }
 
-    const rows = await querySql("SELECT * FROM riders");
-    const riders = rows.map((r: any) => ({
-      ...r,
-      active: r.active === 1 || r.active === true
-    }));
-    return res.json(riders);
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message });
-  }
+   
 });
 
 mysqlRouter.get("/riders/:id", async (req: any, res: any) => {
