@@ -562,8 +562,10 @@ export default function CartDrawer({
     // Always persist to Firestore as well to allow real-time notifications, map tracking, and rider dispatch updates
     try {
       await setDoc(doc(db, "orders", orderId), activeOrderPayload);
-    } catch (dbErr) {
+    } catch (dbErr: any) {
       console.error("Failed to persist order to Firestore:", dbErr);
+      setCheckoutError("Failed to register order in our secure reservation system. Please check your network connection and try again.");
+      return;
     }
 
     // Trigger confirmation e-mail asynchronously - SUPPRESSED for WhatsApp order until admin marks as paid
@@ -786,8 +788,11 @@ export default function CartDrawer({
     // Always persist to Firestore as well to allow real-time notifications, map tracking, and rider dispatch updates
     try {
       await setDoc(doc(db, "orders", orderId), activeOrderPayload);
-    } catch (dbErr) {
+    } catch (dbErr: any) {
       console.error("Failed to persist order to Firestore:", dbErr);
+      setCheckoutError("Failed to register order in our secure reservation system. Please check your network connection and try again.");
+      setIsProcessingOpay(false);
+      return;
     }
 
     // Trigger confirmation e-mail asynchronously
