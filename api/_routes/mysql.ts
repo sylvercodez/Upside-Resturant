@@ -1705,53 +1705,6 @@ mysqlRouter.post("/settings/:key", async (req: any, res: any) => {
 // ==========================================
 mysqlRouter.get("/riders", async (req: any, res: any) => {
   try {
-    // Attempt automatic real-time sync from Firestore to MySQL on query
-    try {
-      const configPath = path.join(process.cwd(), "firebase-applet-config.json");
-      let databaseId = "ai-studio-7ee29b67-2013-4587-a753-b479a6e19155";
-      let firebaseConfig: any = null;
-      
-      if (fs.existsSync(configPath)) {
-        firebaseConfig = JSON.parse(fs.readFileSync(configPath, "utf-8"));
-        if (firebaseConfig.firestoreDatabaseId) databaseId = firebaseConfig.firestoreDatabaseId;
-      } else {
-        firebaseConfig = {
-          projectId: process.env.FIREBASE_PROJECT_ID || process.env.GCLOUD_PROJECT || "gen-lang-client-0332471137",
-        };
-      }
-
-      const fdb = await getFirestoreAdmin(firebaseConfig, databaseId, "mysql-sync-admin-get");
-      const ridersSnap = await fdb.collection("riders").get();
-
-      for (const d of ridersSnap.docs) {
-        const r = d.data();
-        await querySql(
-          `INSERT INTO riders (id, fullName, phoneNumber, username, password, email, active, updatedAt)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-           ON DUPLICATE KEY UPDATE 
-             fullName = VALUES(fullName),
-             phoneNumber = VALUES(phoneNumber),
-             username = VALUES(username),
-             password = VALUES(password),
-             email = VALUES(email),
-             active = VALUES(active),
-             updatedAt = VALUES(updatedAt)`,
-          [
-            d.id, 
-            r.fullName || "", 
-            r.phoneNumber || "", 
-            (r.username || "").toLowerCase().trim(), 
-            r.password || "", 
-            r.email || "", 
-            r.active ? 1 : 0, 
-            r.updatedAt || new Date().toISOString()
-          ]
-        );
-      }
-    } catch (syncErr) {
-      console.warn("Auto-sync of riders from Firestore failed (proceeding to MySQL only):", syncErr);
-    }
-
     const rows = await querySql("SELECT * FROM riders");
     const riders = rows.map((r: any) => ({
       ...r,
