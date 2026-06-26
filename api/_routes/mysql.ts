@@ -381,9 +381,21 @@ mysqlRouter.post("/setup", async (req: any, res: any) => {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     `);
 
-    try {
-      await querySql("ALTER TABLE orders ADD COLUMN paymentMethod VARCHAR(100) DEFAULT 'other'");
-    } catch (_) {}
+     // Retroactively add any columns that may be missing from an older orders table
+    const orderColumnsToEnsure = [
+      "ALTER TABLE orders ADD COLUMN paymentMethod VARCHAR(100) DEFAULT 'other'",
+      "ALTER TABLE orders ADD COLUMN verificationCode VARCHAR(100) DEFAULT NULL",
+      "ALTER TABLE orders ADD COLUMN assignedRiderId VARCHAR(255) DEFAULT NULL",
+      "ALTER TABLE orders ADD COLUMN assignedRiderName VARCHAR(255) DEFAULT NULL",
+      "ALTER TABLE orders ADD COLUMN assignedRiderPhone VARCHAR(255) DEFAULT NULL",
+    ];
+    for (const stmt of orderColumnsToEnsure) {
+      try {
+        await querySql(stmt);
+      } catch (_) {
+        // Column already exists — safe to ignore
+      }
+    }
 
     // Create payments table
     await querySql(`
