@@ -101,8 +101,11 @@ function CustomerGoogleOrderMap({ activeOrder, getStableCoords }: { activeOrder:
     polylinesRef.current.forEach((p) => p.setMap(null));
     polylinesRef.current = [];
 
+    const startLat = (visualRiderPos?.lat !== undefined) ? visualRiderPos.lat : kitchenLat;
+    const startLng = (visualRiderPos?.lng !== undefined) ? visualRiderPos.lng : kitchenLng;
+
     routesLib.Route.computeRoutes({
-      origin: { lat: kitchenLat, lng: kitchenLng },
+      origin: { lat: startLat, lng: startLng },
       destination: { lat: orderLat, lng: orderLng },
       travelMode: "DRIVING",
       fields: ["path", "viewport"],
@@ -129,8 +132,7 @@ function CustomerGoogleOrderMap({ activeOrder, getStableCoords }: { activeOrder:
         console.warn("Google Routes API compute failed, using standard straight-line fallback:", err);
         const flightPoly = new google.maps.Polyline({
           path: [
-            { lat: kitchenLat, lng: kitchenLng },
-            ...(visualRiderPos ? [visualRiderPos] : []),
+            { lat: startLat, lng: startLng },
             { lat: orderLat, lng: orderLng },
           ],
           strokeColor: "#d97706",
@@ -142,9 +144,8 @@ function CustomerGoogleOrderMap({ activeOrder, getStableCoords }: { activeOrder:
 
         // Zoom map to cover points
         const bounds = new google.maps.LatLngBounds();
-        bounds.extend({ lat: kitchenLat, lng: kitchenLng });
+        bounds.extend({ lat: startLat, lng: startLng });
         bounds.extend({ lat: orderLat, lng: orderLng });
-        if (visualRiderPos) bounds.extend(visualRiderPos);
         map.fitBounds(bounds);
       });
 
@@ -221,7 +222,9 @@ function CustomerOrderMap({ activeOrder, leafletLoaded, getStableCoords }: Custo
     let isMounted = true;
     const fetchOSRMRoute = async () => {
       try {
-        const url = `https://router.project-osrm.org/route/v1/driving/${kitchenLng},${kitchenLat};${orderLng},${orderLat}?overview=full&geometries=geojson`;
+        const startLat = (rLat !== undefined && rLat !== null) ? rLat : kitchenLat;
+        const startLng = (rLng !== undefined && rLng !== null) ? rLng : kitchenLng;
+        const url = `https://router.project-osrm.org/route/v1/driving/${startLng},${startLat};${orderLng},${orderLat}?overview=full&geometries=geojson`;
         const res = await fetch(url);
         if (!res.ok) throw new Error("OSRM routing failed");
         const data = await res.json();
@@ -239,7 +242,7 @@ function CustomerOrderMap({ activeOrder, leafletLoaded, getStableCoords }: Custo
     return () => {
       isMounted = false;
     };
-  }, [orderLat, orderLng, hasGoogleKey]);
+  }, [orderLat, orderLng, rLat, rLng, hasGoogleKey]);
 
   // Generates a descriptive street grid representation for high fidelity aesthetics
   const getStreetPath = (p1: [number, number], p2: [number, number], seed: string) => {
@@ -326,38 +329,19 @@ function CustomerOrderMap({ activeOrder, leafletLoaded, getStableCoords }: Custo
         .bindPopup("<b>Express Rider</b><br/>En route with your hot meal!")
         .openPopup();
 
-      // Find closest segment in roadCoords to segregate transit covered leg from active route
-      let closestIdx = 0;
-      if (roadCoords.length > 0) {
-        let minDist = Infinity;
-        for (let i = 0; i < roadCoords.length; i++) {
-          const [lat, lng] = roadCoords[i];
-          const dist = Math.pow(lat - rLat, 2) + Math.pow(lng - rLng, 2);
-          if (dist < minDist) {
-            minDist = dist;
-            closestIdx = i;
-          }
-        }
-      }
-
-      // Draw routing paths "from here to there" (Origin -> Rider -> Destination)
-      
-      // Part A: Covered transit corridor (Kitchen to Rider position)
-      const pathKitchenToRider = roadCoords.length > 0 
-        ? roadCoords.slice(0, closestIdx + 1)
-        : getStreetPath([kitchenLat, kitchenLng], [rLat, rLng], (activeOrder.id || "rider") + "_covered");
-        
+      // Subtle covered transit corridor (Kitchen to Rider position)
+      const pathKitchenToRider = getStreetPath([kitchenLat, kitchenLng], [rLat, rLng], (activeOrder.id || "rider") + "_covered");
       L.polyline(pathKitchenToRider, {
         color: "#6b7280", // Slate gray trail for completed leg
-        weight: 3.5,
+        weight: 3,
         dashArray: "4, 6",
-        opacity: 0.7,
+        opacity: 0.5,
         lineCap: "round"
       }).addTo(map);
 
-      // Part B: Active dispatch delivery route (Rider position to Customer)
+      // Active dispatch delivery route (Rider position to Customer)
       const pathRiderToCustomer = roadCoords.length > 0 
-        ? roadCoords.slice(closestIdx)
+        ? roadCoords
         : getStreetPath([rLat, rLng], [orderLat, orderLng], (activeOrder.id || "customer") + "_active");
       
       // Deep blue outline glow
@@ -378,8 +362,8 @@ function CustomerOrderMap({ activeOrder, leafletLoaded, getStableCoords }: Custo
         lineJoin: "round"
       }).addTo(map);
 
-      // Show the entire dispatch grid spanning Kitchen, Courier, and Customer
-      const bounds = L.latLngBounds([[kitchenLat, kitchenLng], [orderLat, orderLng], [rLat, rLng]]);
+      // Focus bounds specifically on the Rider's current position and the Customer's destination
+      const bounds = L.latLngBounds([[rLat, rLng], [orderLat, orderLng]]);
       map.fitBounds(bounds, { padding: [50, 50] });
     } else {
       // No dispatched rider live yet - draw predicted route line from Kitchen directly to customer
@@ -503,20 +487,7 @@ function CustomerOrderMap({ activeOrder, leafletLoaded, getStableCoords }: Custo
         </div>
       </div>
 
-      {/* Unlock Google Maps Key Card */}
-      <div className="bg-amber-950/20 border border-amber-900/40 p-3 space-y-1.5 text-left border-t border-neutral-850">
-        <h6 className="text-[10px] font-mono tracking-widest text-amber-500 font-bold uppercase flex items-center gap-1.5">
-          ✨ UNLOCK UBER-STYLE ROAD MOVEMENTS:
-        </h6>
-        <p className="text-[10px] font-sans text-neutral-300 leading-normal">
-          To activate the ultra-realistic Google Maps engine with actual turn-by-turn road routing and smoothly gliding delivery vehicles:
-        </p>
-        <div className="text-[9px] font-mono text-neutral-400 space-y-1 pl-1 leading-snug">
-          <p>1. Open <strong className="text-white">Settings</strong> (⚙️ top-right gear icon) → <strong className="text-white">Secrets</strong></p>
-          <p>2. Set Key: <code className="text-amber-500 font-bold">GOOGLE_MAPS_PLATFORM_KEY</code></p>
-          <p>3. Value: Paste your Google Maps API Key &amp; press Enter</p>
-        </div>
-      </div>
+
     </div>
   );
 }
@@ -1120,11 +1091,15 @@ export default function OrderTracker({ onBackToCart, orderId, userRole = "user" 
                   🚚
                 </div>
                 <div className="flex-grow">
-                  <p className="text-[10px] text-neutral-500 font-bold uppercase">Assigned Rider Line</p>
-                  <p className="text-[11px] font-mono text-amber-500 font-bold">+234 (91) 464-6767</p>
+                  <p className="text-[10px] text-neutral-500 font-bold uppercase">
+                    {activeOrder.riderName ? `Rider: ${activeOrder.riderName}` : "Assigned Rider Line"}
+                  </p>
+                  <p className="text-[11px] font-mono text-amber-500 font-bold">
+                    {activeOrder.riderPhone || activeOrder.rider_phone || "+234 (91) 464-6767"}
+                  </p>
                 </div>
                 <a
-                  href="tel:+2349114646767"
+                  href={`tel:${(activeOrder.riderPhone || activeOrder.rider_phone || "+2349114646767").replace(/\s+/g, "").replace(/[()]/g, "")}`}
                   className="px-3 py-1.5 border border-neutral-800 hover:border-neutral-700 text-[10px] bg-neutral-950 text-neutral-300 font-mono uppercase font-bold transition-all"
                 >
                   Call Rider
