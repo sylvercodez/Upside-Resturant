@@ -5,6 +5,7 @@ import OrderHistory from "./OrderHistory";
 import OrderTracker from "./OrderTracker";
 import AdminAnalyticsPanel from "./AdminAnalyticsPanel";
 import RidersManagementPanel from "./RidersManagementPanel";
+import SupportManagementPanel from "./SupportManagementPanel";
 import { 
   ShieldCheck, 
   MapPin, 
@@ -1723,6 +1724,16 @@ export default function DedicatedDashboard({
                         }`}
                       >
                         🚴 Logistics & Riders
+                      </button>
+                      <button
+                        onClick={() => setActiveTab("support_panel")}
+                        className={`px-6 py-3 text-xs tracking-wider uppercase font-bold text-center transition-all cursor-pointer flex items-center gap-1.5 ${
+                          activeTab === "support_panel"
+                            ? "bg-amber-600 text-white"
+                            : "text-neutral-600 hover:text-neutral-900 hover:bg-neutral-200"
+                        }`}
+                      >
+                        🎧 Support Desk Chats
                       </button>
                     </>
                   )}
@@ -3917,6 +3928,10 @@ export default function DedicatedDashboard({
 
                 {userRole === "admin" && activeTab === "riders_panel" && (
                   <RidersManagementPanel />
+                )}
+
+                {userRole === "admin" && activeTab === "support_panel" && (
+                  <SupportManagementPanel />
                 )}
 
                 {userRole === "admin" && activeTab === "mysql_panel" && (

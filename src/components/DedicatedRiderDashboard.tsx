@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from "react";
-import { LogIn, LogOut, Clipboard, CheckCircle, Package, User, Phone, MapPin, Eye, ShieldAlert, Key, RefreshCw, Compass, Info, Lock, ShieldCheck, Clock } from "lucide-react";
+import { LogIn, LogOut, Clipboard, CheckCircle, Package, User, Phone, MapPin, Eye, ShieldAlert, Key, RefreshCw, Compass, Info, Lock, ShieldCheck, Clock, MessageSquare } from "lucide-react";
 import { collection, query, where, onSnapshot, doc, updateDoc, getDocs } from "firebase/firestore";
 import { db } from "../firebase";
 import { getApiUrl } from "../types";
 import { APIProvider, Map, AdvancedMarker, useMap, useMapsLibrary } from "@vis.gl/react-google-maps";
+import LiveChat from "./LiveChat";
 
 interface RiderOrderMapProps {
   ord: any;
@@ -472,6 +473,7 @@ export default function DedicatedRiderDashboard() {
   };
   const [expandedMapId, setExpandedMapId] = useState<string | null>(null);
   const [isTracking, setIsTracking] = useState<string | null>(null); // orderId that is currently tracking
+  const [activeChatOrderId, setActiveChatOrderId] = useState<string | null>(null);
   const [watchId, setWatchId] = useState<number | null>(null);
   const [useSimulator, setUseSimulator] = useState<boolean>(true); // default to true so it works flawlessly in sandboxed environments!
   const [simulationIntervalId, setSimulationIntervalId] = useState<any>(null);
@@ -857,6 +859,19 @@ export default function DedicatedRiderDashboard() {
         throw new Error(data.error || "Failed to initiate delivery trip on backend.");
       }
 
+      // Update Firestore with rider details immediately for live tracking sync
+      try {
+        const orderRef = doc(db, "orders", order.id);
+        await updateDoc(orderRef, {
+          riderId: loggedInRider.id,
+          riderName: loggedInRider.fullName,
+          riderPhone: loggedInRider.phoneNumber || loggedInRider.phone || "",
+          updatedAt: new Date().toISOString()
+        });
+      } catch (firestoreErr) {
+        console.warn("Bypassed non-critical Firestore order update during start-trip:", firestoreErr);
+      }
+
       // Automatically expand and start tracking coordinates in real-time
       setExpandedMapId(order.id);
       startTracking(order.id);
@@ -1211,9 +1226,10 @@ export default function DedicatedRiderDashboard() {
                 const formattedEtaTime = etaTimestamp.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
                 return (
-                  <div key={ord.id} className="bg-white border border-neutral-200 p-6 shadow-sm flex flex-col md:flex-row justify-between gap-6">
+                  <div key={ord.id} className="bg-white border border-neutral-200 p-6 shadow-sm flex flex-col gap-6">
+                    <div className="flex flex-col md:flex-row justify-between gap-6">
                   
-                  {/* Left Column information */}
+                    {/* Left Column information */}
                   <div className="flex-grow space-y-4">
                     
                     <div className="flex items-center gap-3 flex-wrap">
@@ -1445,15 +1461,44 @@ export default function DedicatedRiderDashboard() {
                       );
                     })()}
 
+                    <button
+                      onClick={() => setActiveChatOrderId(activeChatOrderId === ord.id ? null : ord.id)}
+                      className={`w-full py-2.5 font-mono text-[10px] tracking-wider uppercase text-center cursor-pointer transition-all border ${
+                        activeChatOrderId === ord.id 
+                          ? "bg-amber-500 text-black border-amber-600 hover:bg-amber-400 font-bold" 
+                          : "bg-neutral-900 text-white border-neutral-950 hover:bg-neutral-800"
+                      }`}
+                    >
+                      <span className="flex items-center justify-center gap-1.5">
+                        <MessageSquare className="w-3.5 h-3.5" />
+                        <span>Chat with Customer</span>
+                      </span>
+                    </button>
+
                     <a
                       href={`tel:${ord.phone}`}
-                      className="w-full py-2.5 bg-white border border-neutral-200 text-neutral-600 hover:text-neutral-900 font-mono text-[10px] tracking-wider uppercase text-center cursor-pointer transition-colors"
+                      className="w-full py-2 bg-white border border-neutral-200 text-neutral-600 hover:text-neutral-900 font-mono text-[9px] tracking-wider uppercase text-center cursor-pointer transition-colors"
                     >
                       Call Consignee
                     </a>
                   </div>
-
                 </div>
+
+                {/* Live Real-time Customer Chat Section */}
+                {activeChatOrderId === ord.id && (
+                  <div className="border-t border-neutral-200 pt-4 animate-fadeIn">
+                    <LiveChat
+                      orderId={ord.id}
+                      senderId={loggedInRider.username || "rider_courier"}
+                      senderName={loggedInRider.fullName || "Courier Rider"}
+                      recipientName={ord.customerName || "Customer"}
+                      onClose={() => setActiveChatOrderId(null)}
+                      theme="light"
+                    />
+                  </div>
+                )}
+
+              </div>
               ); })}
             </div>
           )}

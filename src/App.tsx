@@ -17,6 +17,7 @@ import DedicatedAuth from "./components/DedicatedAuth";
 import DedicatedTrack from "./components/DedicatedTrack";
 import DedicatedLegal from "./components/DedicatedLegal";
 import DedicatedRiderDashboard from "./components/DedicatedRiderDashboard";
+import SupportChatWidget from "./components/SupportChatWidget";
 import { CartItem, ShippingLocation, LAGOS_AREAS, getApiUrl } from "./types";
 import { MenuItem, MENU_ITEMS, Category, CATEGORIES } from "./data/menu";
 import { getBranding, auth, db } from "./firebase";
@@ -946,6 +947,11 @@ useEffect(() => {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Global Live Helpdesk Support Chat widget */}
+      {activeView !== "rider" && (
+        <SupportChatWidget currentUser={currentUser} />
+      )}
 
     </div>
   );

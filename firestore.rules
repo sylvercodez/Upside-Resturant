@@ -75,6 +75,16 @@ service cloud.firestore {
           && data.type is string;
     }
 
+    function isValidMessage(data) {
+      return data.senderId is string
+          && data.senderId.size() <= 128
+          && data.senderName is string
+          && data.senderName.size() <= 100
+          && data.text is string
+          && data.text.size() <= 1000
+          && data.timestamp is string;
+    }
+
     // App and branding settings: publicly readable, validated writes (Admin-only or system)
     match /settings/branding {
       allow read: if true;
@@ -261,6 +271,13 @@ service cloud.firestore {
 
       // Admins can delete orders if necessary, standard users can delete their own if delivered
       allow delete: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid && resource.data.status == "Delivered");
+
+      // Chat messages subcollection nested rules
+      match /messages/{messageId} {
+        allow read, list: if true;
+        allow create: if isValidId(messageId) && isValidMessage(request.resource.data);
+        allow update, delete: if false; // Messages are immutable
+      }
     }
 
     // Analytics Events Rules: Anyone can register events, but only administrators can read or query them
@@ -275,6 +292,17 @@ service cloud.firestore {
       allow create: if isValidId(eventId) && isValidAnalyticsEvent(request.resource.data);
       allow read, list: if isAdmin();
       allow update, delete: if false; // Security Invariant: Analytics events are immutable log files
+    }
+
+    // Support Chats Rules
+    match /support_chats/{chatId} {
+      allow read, write: if true;
+      
+      match /messages/{messageId} {
+        allow read, list: if true;
+        allow create: if isValidId(messageId) && isValidMessage(request.resource.data);
+        allow update, delete: if false; // support messages are immutable
+      }
     }
   }
 }

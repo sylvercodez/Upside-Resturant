@@ -252,9 +252,46 @@
         "active": { "type": "boolean" }
       },
       "required": ["fullName", "phoneNumber", "username", "password", "active"]
+    },
+    "Message": {
+      "title": "Message",
+      "description": "Real-time direct chat messages exchanged between courier rider and customer during a delivery trip",
+      "type": "object",
+      "properties": {
+        "senderId": { "type": "string", "description": "Sender identifier, either rider username, user UID, or descriptive string" },
+        "senderName": { "type": "string", "description": "Full name or display name of the message sender" },
+        "text": { "type": "string", "description": "Message content string text" },
+        "timestamp": { "type": "string", "format": "date-time", "description": "ISO-8601 string representation of creation date-time" }
+      },
+      "required": ["senderId", "senderName", "text", "timestamp"]
+    },
+    "SupportChat": {
+      "title": "SupportChat",
+      "description": "Session document for live contact support chats between client/guests and service desk",
+      "type": "object",
+      "properties": {
+        "chatId": { "type": "string" },
+        "customerName": { "type": "string" },
+        "email": { "type": "string" },
+        "status": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["chatId", "customerName", "email", "status", "updatedAt"]
     }
   },
   "firestore": {
+    "support_chats/{chatId}": {
+      "schema": "SupportChat",
+      "description": "Active help-desk communication sessions for live assistance"
+    },
+    "support_chats/{chatId}/messages/{messageId}": {
+      "schema": "Message",
+      "description": "Sequence logs of help-desk messages exchanged with support staff"
+    },
+    "orders/{orderId}/messages/{messageId}": {
+      "schema": "Message",
+      "description": "Real-time communication logs between tracking guest/user and assigned courier rider"
+    },
     "shipping_areas/{areaId}": {
       "schema": "ShippingArea",
       "description": "Shipping regions with corresponding delivery fees inside Lagos State"

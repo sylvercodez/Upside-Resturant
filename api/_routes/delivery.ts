@@ -623,8 +623,8 @@ deliveryRouter.post("/orders/start-trip", async (req, res) => {
     const orderData = rows[0];
  
     await querySql(
-      "UPDATE orders SET status = ?, updatedAt = ? WHERE id = ?",
-      ["Out for Delivery", new Date().toISOString(), orderId]
+      "UPDATE orders SET status = ?, riderId = ?, riderName = ?, riderPhone = ?, updatedAt = ? WHERE id = ?",
+      ["Out for Delivery", riderId || null, riderName || null, riderPhone || null, new Date().toISOString(), orderId]
     );
  
     const cleanEmail = (orderData.email || "").trim().toLowerCase();

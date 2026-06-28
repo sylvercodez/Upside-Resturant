@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from "react";
-import { ChefHat, Flame, Truck, CheckCircle2, RefreshCw, Clock, MapPin } from "lucide-react";
+import { ChefHat, Flame, Truck, CheckCircle2, RefreshCw, Clock, MapPin, MessageSquare } from "lucide-react";
 import { doc, onSnapshot, deleteDoc, updateDoc, getDoc } from "firebase/firestore";
 import { db } from "../firebase";
 import { getApiUrl } from "../types";
 import { APIProvider, Map, AdvancedMarker, Pin, useMap, useMapsLibrary } from "@vis.gl/react-google-maps";
+import LiveChat from "./LiveChat";
 
 
 interface CustomerOrderMapProps {
@@ -340,9 +341,9 @@ function CustomerOrderMap({ activeOrder, leafletLoaded, getStableCoords }: Custo
       }).addTo(map);
 
       // Active dispatch delivery route (Rider position to Customer)
-      const pathRiderToCustomer = roadCoords.length > 0 
-        ? roadCoords
-        : getStreetPath([rLat, rLng], [orderLat, orderLng], (activeOrder.id || "customer") + "_active");
+      // We use the high-fidelity street grid path starting precisely at the rider's live coordinate
+      // to ensure the active blue route line is always perfectly aligned and updated in real-time.
+      const pathRiderToCustomer = getStreetPath([rLat, rLng], [orderLat, orderLng], (activeOrder.id || "customer") + "_active");
       
       // Deep blue outline glow
       L.polyline(pathRiderToCustomer, {
@@ -498,34 +499,7 @@ function useRiderCoordinates(orderId: string | null, setActiveOrder: React.Dispa
     if (!orderId) return;
 
     const fetchCoords = async () => {
-      // 1. Fetch from MySQL Router API first
-      try {
-        const res = await fetch(getApiUrl(`/api/mysql/orders/${orderId}`));
-        if (res.ok) {
-          const data = await res.json();
-          if (data && data.id) {
-            setActiveOrder((prev: any) => {
-              if (!prev) return data;
-              const lat = data.riderLatitude ?? data.rider_latitude;
-              const lng = data.riderLongitude ?? data.rider_longitude;
-              if (prev.riderLatitude === lat && prev.riderLongitude === lng && prev.status === data.status) {
-                return prev;
-              }
-              return {
-                ...prev,
-                riderLatitude: lat,
-                riderLongitude: lng,
-                status: data.status ?? prev.status,
-              };
-            });
-            return;
-          }
-        }
-      } catch (err) {
-        console.warn("[useRiderCoordinates] MySQL coordinate polling check bypassed/failed:", err);
-      }
-
-      // 2. Fallback to Firestore check
+      // Fetch live coordinates, rider details, and status from Firestore (primary real-time source of truth)
       try {
         const docRef = doc(db, "orders", orderId);
         const docSnap = await getDoc(docRef);
@@ -533,14 +507,9 @@ function useRiderCoordinates(orderId: string | null, setActiveOrder: React.Dispa
           const data = docSnap.data();
           setActiveOrder((prev: any) => {
             if (!prev) return { id: orderId, ...data };
-            if (prev.riderLatitude === data.riderLatitude && prev.riderLongitude === data.riderLongitude && prev.status === data.status) {
-              return prev;
-            }
             return {
               ...prev,
-              riderLatitude: data.riderLatitude,
-              riderLongitude: data.riderLongitude,
-              status: data.status ?? prev.status,
+              ...data, // merge all real-time fields from Firestore (riderLatitude, riderLongitude, riderName, riderPhone, status, etc.)
             };
           });
         }
@@ -564,6 +533,7 @@ interface OrderTrackerProps {
 export default function OrderTracker({ onBackToCart, orderId, userRole = "user" }: OrderTrackerProps) {
   const [activeOrder, setActiveOrder] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [showChat, setShowChat] = useState(false);
 
   const [leafletLoaded, setLeafletLoaded] = useState(false);
 
@@ -656,13 +626,28 @@ export default function OrderTracker({ onBackToCart, orderId, userRole = "user" 
     let unsubscribeFirestore: (() => void) | null = null;
     let pollIntervalId: any = null;
 
-    // Helper to fetch from MySQL Router API
+    // Helper to fetch from MySQL Router API and merge real-time coordinates & details from Firestore
     const fetchMySQLOrder = async () => {
       try {
         const res = await fetch(getApiUrl(`/api/mysql/orders/${targetDocId}`));
         if (res.ok) {
           const data = await res.json();
           if (data && data.id) {
+            // Merge actual live tracking, status, and rider metadata from Firestore
+            try {
+              const docRef = doc(db, "orders", targetDocId);
+              const docSnap = await getDoc(docRef);
+              if (docSnap.exists()) {
+                const fsData = docSnap.data();
+                setActiveOrder({
+                  ...data,
+                  ...fsData, // Firestore live values overwrite stale SQL static values
+                });
+                return true;
+              }
+            } catch (fsErr) {
+              console.warn("[OrderTracker] Firestore side-car merge bypassed:", fsErr);
+            }
             setActiveOrder(data);
             return true;
           }
@@ -1098,13 +1083,39 @@ export default function OrderTracker({ onBackToCart, orderId, userRole = "user" 
                     {activeOrder.riderPhone || activeOrder.rider_phone || "+234 (91) 464-6767"}
                   </p>
                 </div>
-                <a
-                  href={`tel:${(activeOrder.riderPhone || activeOrder.rider_phone || "+2349114646767").replace(/\s+/g, "").replace(/[()]/g, "")}`}
-                  className="px-3 py-1.5 border border-neutral-800 hover:border-neutral-700 text-[10px] bg-neutral-950 text-neutral-300 font-mono uppercase font-bold transition-all"
-                >
-                  Call Rider
-                </a>
+                <div className="flex gap-1.5">
+                  <button
+                    onClick={() => setShowChat(!showChat)}
+                    className={`px-2.5 py-1.5 border text-[10px] font-mono uppercase font-bold transition-all flex items-center gap-1 cursor-pointer ${
+                      showChat 
+                        ? "bg-amber-500 text-black border-amber-600 hover:bg-amber-400" 
+                        : "bg-neutral-950 text-amber-500 border-amber-500/20 hover:border-amber-500/40"
+                    }`}
+                  >
+                    <MessageSquare className="w-3 h-3" />
+                    <span>Chat</span>
+                  </button>
+                  <a
+                    href={`tel:${(activeOrder.riderPhone || activeOrder.rider_phone || "+2349114646767").replace(/\s+/g, "").replace(/[()]/g, "")}`}
+                    className="px-2.5 py-1.5 border border-neutral-800 hover:border-neutral-700 text-[10px] bg-neutral-950 text-neutral-300 font-mono uppercase font-bold transition-all"
+                  >
+                    Call Rider
+                  </a>
+                </div>
               </div>
+
+              {showChat && (
+                <div className="mt-3 border-t border-neutral-800 pt-3 animate-fadeIn">
+                  <LiveChat
+                    orderId={activeOrder.id}
+                    senderId={activeOrder.userId || "anonymous_customer"}
+                    senderName={activeOrder.customerName || "Customer"}
+                    recipientName={activeOrder.riderName || "Courier Rider"}
+                    onClose={() => setShowChat(false)}
+                    theme="dark"
+                  />
+                </div>
+              )}
             </div>
 
             {activeOrder.status === "Delivered" && (
