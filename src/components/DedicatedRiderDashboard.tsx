@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { LogIn, LogOut, Clipboard, CheckCircle, Package, User, Phone, MapPin, Eye, ShieldAlert, Key, RefreshCw, Compass, Info, Lock, ShieldCheck } from "lucide-react";
 import { collection, query, where, onSnapshot, doc, updateDoc, getDocs } from "firebase/firestore";
 import { db } from "../firebase";
 import { getApiUrl } from "../types";
+import { APIProvider, Map, AdvancedMarker, useMap, useMapsLibrary } from "@vis.gl/react-google-maps";
 
 interface RiderOrderMapProps {
   ord: any;
@@ -13,6 +14,106 @@ interface RiderOrderMapProps {
   onStopTracking: () => void;
   riderLat: number | null;
   riderLng: number | null;
+  onRouteComputed?: (path: { lat: number; lng: number }[]) => void;
+}
+
+function RiderGoogleOrderMap({
+  ord,
+  getStableCoords,
+  isTracking,
+  riderLat,
+  riderLng,
+  onRouteComputed
+}: {
+  ord: any;
+  getStableCoords: any;
+  isTracking: boolean;
+  riderLat: number | null;
+  riderLng: number | null;
+  onRouteComputed?: (path: { lat: number; lng: number }[]) => void;
+}) {
+  const map = useMap();
+  const routesLib = useMapsLibrary("routes");
+  const polylinesRef = useRef<google.maps.Polyline[]>([]);
+
+  const orderLat = ord.latitude ?? ord.lat ?? ord.deliveryLatitude ?? getStableCoords(ord.address, ord.id).lat;
+  const orderLng = ord.longitude ?? ord.lng ?? ord.deliveryLongitude ?? getStableCoords(ord.address, ord.id).lng;
+
+  const kitchenLat = 6.4527;
+  const kitchenLng = 3.3932;
+
+  useEffect(() => {
+    if (!routesLib || !map) return;
+
+    polylinesRef.current.forEach(p => p.setMap(null));
+    polylinesRef.current = [];
+
+    routesLib.Route.computeRoutes({
+      origin: { lat: kitchenLat, lng: kitchenLng },
+      destination: { lat: orderLat, lng: orderLng },
+      travelMode: "DRIVING",
+      fields: ["path", "viewport"],
+    }).then(({ routes }) => {
+      if (routes?.[0]) {
+        const newPolylines = routes[0].createPolylines();
+        newPolylines.forEach(p => {
+          p.setOptions({
+            strokeColor: "#3b82f6",
+            strokeWeight: 6,
+            strokeOpacity: 0.9
+          });
+          p.setMap(map);
+        });
+        polylinesRef.current = newPolylines;
+
+        // Callback with the points path for the simulation engine
+        if (routes[0].path && onRouteComputed) {
+          const coords = routes[0].path.map(pt => {
+            const latVal = typeof pt.lat === "function" ? (pt.lat as any)() : pt.lat;
+            const lngVal = typeof pt.lng === "function" ? (pt.lng as any)() : pt.lng;
+            return { lat: latVal, lng: lngVal };
+          });
+          onRouteComputed(coords);
+        }
+
+        if (routes[0].viewport) {
+          map.fitBounds(routes[0].viewport);
+        }
+      }
+    }).catch(err => {
+      console.warn("Rider Routes API failed, drawing simple direct line:", err);
+    });
+
+    return () => {
+      polylinesRef.current.forEach(p => p.setMap(null));
+    };
+  }, [routesLib, map, orderLat, orderLng]);
+
+  return (
+    <>
+      <AdvancedMarker position={{ lat: kitchenLat, lng: kitchenLng }} title="Upside Kitchen">
+        <div className="bg-black text-amber-500 rounded-full p-1 border-2 border-amber-500 shadow-md flex items-center justify-center font-bold text-[11px]" style={{ width: "28px", height: "28px" }}>
+          🍳
+        </div>
+      </AdvancedMarker>
+
+      <AdvancedMarker position={{ lat: orderLat, lng: orderLng }} title="Customer Venue">
+        <div className="bg-amber-500 text-white rounded-full p-1.5 border-2 border-white shadow-md flex items-center justify-center font-bold text-xs" style={{ width: "28px", height: "28px" }}>
+          📍
+        </div>
+      </AdvancedMarker>
+
+      {isTracking && riderLat !== null && riderLng !== null && (
+        <AdvancedMarker position={{ lat: riderLat, lng: riderLng }} title="Your Live Location">
+          <div style={{ width: "40px", height: "40px" }} className="flex items-center justify-center">
+            <div className="w-9 h-9 bg-blue-600 rounded-full flex items-center justify-center border-2 border-white text-base animate-pulse shadow-lg">
+              🏍️
+            </div>
+          </div>
+        </AdvancedMarker>
+      )}
+    </>
+  );
 }
 
 function RiderOrderMap({
@@ -23,7 +124,8 @@ function RiderOrderMap({
   onStartTracking,
   onStopTracking,
   riderLat,
-  riderLng
+  riderLng,
+  onRouteComputed
 }: RiderOrderMapProps) {
   const mapContainerRef = React.useRef<HTMLDivElement>(null);
   const mapRef = React.useRef<any>(null);
@@ -34,6 +136,14 @@ function RiderOrderMap({
   // Baseline restaurant position
   const kitchenLat = 6.4527;
   const kitchenLng = 3.3932;
+
+  // Detect Google Maps API Key
+  const GOOGLE_MAPS_KEY =
+    process.env.GOOGLE_MAPS_PLATFORM_KEY ||
+    (import.meta as any).env?.VITE_GOOGLE_MAPS_PLATFORM_KEY ||
+    (globalThis as any).GOOGLE_MAPS_PLATFORM_KEY ||
+    "";
+  const hasGoogleKey = Boolean(GOOGLE_MAPS_KEY) && GOOGLE_MAPS_KEY !== "YOUR_API_KEY" && GOOGLE_MAPS_KEY !== "";
 
   // Generates a descriptive street grid representation for high fidelity aesthetics
   const getStreetPath = (p1: [number, number], p2: [number, number], seed: string) => {
@@ -61,6 +171,7 @@ function RiderOrderMap({
   };
 
   React.useEffect(() => {
+    if (hasGoogleKey) return; // Skip Leaflet setup if Google Maps is active
     if (!leafletLoaded || !mapContainerRef.current) return;
     const L = (window as any).L;
     if (!L) return;
@@ -185,7 +296,59 @@ function RiderOrderMap({
         mapRef.current = null;
       }
     };
-  }, [leafletLoaded, orderLat, orderLng, isTracking, riderLat, riderLng]);
+  }, [leafletLoaded, orderLat, orderLng, isTracking, riderLat, riderLng, hasGoogleKey]);
+
+  if (hasGoogleKey) {
+    return (
+      <div className="border border-neutral-200 mt-4 overflow-hidden bg-neutral-900 shadow-inner">
+        <div className="bg-neutral-950 p-3 flex justify-between items-center border-b border-neutral-850">
+          <span className="text-[10px] font-mono tracking-widest text-[#d97706] uppercase font-bold flex items-center gap-1">
+            <Compass className="w-3.5 h-3.5 text-amber-600 animate-spin" />
+            Live Google Dispatch Radar
+          </span>
+          <button
+            onClick={isTracking ? onStopTracking : onStartTracking}
+            className={`px-3 py-1 text-[9px] font-mono font-bold tracking-widest uppercase cursor-pointer border transition-colors ${
+              isTracking
+                ? "bg-rose-950/40 border-rose-800 text-rose-500 hover:bg-rose-900/30 animate-pulse"
+                : "bg-amber-500 border-amber-600 text-white hover:bg-amber-600"
+            }`}
+          >
+            {isTracking ? "● Live On" : "Track Delivery Live"}
+          </button>
+        </div>
+
+        <APIProvider apiKey={GOOGLE_MAPS_KEY} version="weekly">
+          <div className="w-full h-64 bg-neutral-900 relative" style={{ minHeight: "240px" }}>
+            <Map
+              defaultCenter={{ lat: orderLat, lng: orderLng }}
+              defaultZoom={14}
+              mapId="DEMO_MAP_ID"
+              internalUsageAttributionIds={["gmp_mcp_codeassist_v1_aistudio"]}
+              style={{ width: "100%", height: "100%" }}
+              disableDefaultUI={true}
+              zoomControl={true}
+            >
+              <RiderGoogleOrderMap
+                ord={ord}
+                getStableCoords={getStableCoords}
+                isTracking={isTracking}
+                riderLat={riderLat}
+                riderLng={riderLng}
+                onRouteComputed={onRouteComputed}
+              />
+            </Map>
+          </div>
+        </APIProvider>
+
+        {isTracking && (
+          <div className="bg-blue-950/40 border-t border-blue-900/30 p-2 text-center text-[9px] font-mono text-blue-400 tracking-wider uppercase leading-none">
+            📡 Auto-syncing GPS coordinates dynamically via Google Roads to customer.
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="border border-neutral-200 mt-4 overflow-hidden bg-neutral-50 shadow-inner">
@@ -218,6 +381,7 @@ function RiderOrderMap({
   );
 }
 
+
 export default function DedicatedRiderDashboard() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -229,6 +393,7 @@ export default function DedicatedRiderDashboard() {
   });
 
   // Leaflet and Live Geolocation Tracking States
+  const [computedRoadPaths, setComputedRoadPaths] = useState<Record<string, { lat: number; lng: number }[]>>({});
   const [leafletLoaded, setLeafletLoaded] = useState(false);
   const [expandedMapId, setExpandedMapId] = useState<string | null>(null);
   const [isTracking, setIsTracking] = useState<string | null>(null); // orderId that is currently tracking
@@ -329,8 +494,11 @@ export default function DedicatedRiderDashboard() {
     setIsTracking(orderId);
 
     if (useSimulator) {
+      const roadPoints = computedRoadPaths[orderId] || [];
+      const hasRoadPoints = roadPoints.length > 0;
+      const totalSteps = hasRoadPoints ? roadPoints.length : 15;
+
       let currentStep = 0;
-      const totalSteps = 15;
 
       setRiderLat(startLat);
       setRiderLng(startLng);
@@ -363,12 +531,25 @@ export default function DedicatedRiderDashboard() {
           return;
         }
 
-        const progress = currentStep / totalSteps;
-        // Jitter steps slightly for real-life route realism
-        const jitterX = (Math.sin(currentStep) * 0.0002);
-        const jitterY = (Math.cos(currentStep) * 0.0002);
-        const nextLat = startLat + (orderLat - startLat) * progress + jitterX;
-        const nextLng = startLng + (orderLng - startLng) * progress + jitterY;
+        let nextLat = startLat;
+        let nextLng = startLng;
+
+        if (hasRoadPoints) {
+          const pt = roadPoints[currentStep];
+          if (pt) {
+            nextLat = pt.lat;
+            nextLng = pt.lng;
+          } else {
+            nextLat = orderLat;
+            nextLng = orderLng;
+          }
+        } else {
+          const progress = currentStep / totalSteps;
+          const jitterX = (Math.sin(currentStep) * 0.0002);
+          const jitterY = (Math.cos(currentStep) * 0.0002);
+          nextLat = startLat + (orderLat - startLat) * progress + jitterX;
+          nextLng = startLng + (orderLng - startLng) * progress + jitterY;
+        }
 
         setRiderLat(nextLat);
         setRiderLng(nextLng);
@@ -1077,6 +1258,9 @@ export default function DedicatedRiderDashboard() {
                           onStopTracking={stopTracking}
                           riderLat={isTracking === ord.id ? riderLat : null}
                           riderLng={isTracking === ord.id ? riderLng : null}
+                          onRouteComputed={(path) => {
+                            setComputedRoadPaths(prev => ({ ...prev, [ord.id]: path }));
+                          }}
                         />
                       )}
                     </div>

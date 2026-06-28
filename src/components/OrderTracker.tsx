@@ -1,13 +1,193 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { ChefHat, Flame, Truck, CheckCircle2, RefreshCw, Clock, MapPin } from "lucide-react";
 import { doc, onSnapshot, deleteDoc, updateDoc } from "firebase/firestore";
 import { db } from "../firebase";
 import { getApiUrl } from "../types";
+import { APIProvider, Map, AdvancedMarker, Pin, useMap, useMapsLibrary } from "@vis.gl/react-google-maps";
+
 
 interface CustomerOrderMapProps {
   activeOrder: any;
   leafletLoaded: boolean;
   getStableCoords: (address: string, id: string) => { lat: number; lng: number };
+}
+
+function CustomerGoogleOrderMap({ activeOrder, getStableCoords }: { activeOrder: any; getStableCoords: any }) {
+  const map = useMap();
+  const routesLib = useMapsLibrary("routes");
+  const polylinesRef = useRef<google.maps.Polyline[]>([]);
+
+  const orderLat = activeOrder.latitude ?? activeOrder.lat ?? activeOrder.deliveryLatitude ?? getStableCoords(activeOrder.address, activeOrder.id).lat;
+  const orderLng = activeOrder.longitude ?? activeOrder.lng ?? activeOrder.deliveryLongitude ?? getStableCoords(activeOrder.address, activeOrder.id).lng;
+
+  const rLat = activeOrder.riderLatitude;
+  const rLng = activeOrder.riderLongitude;
+
+  // Let's model the baseline restaurant position
+  const kitchenLat = 6.4527;
+  const kitchenLng = 3.3932;
+
+  // 1. Smooth interpolation states
+  const [visualRiderPos, setVisualRiderPos] = useState<{ lat: number; lng: number } | null>(null);
+  const [visualHeading, setVisualHeading] = useState<number>(0);
+  const prevRiderPosRef = useRef<{ lat: number; lng: number } | null>(null);
+  const animationRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (rLat === undefined || rLng === undefined || rLat === null || rLng === null) {
+      setVisualRiderPos(null);
+      prevRiderPosRef.current = null;
+      return;
+    }
+
+    const targetPos = { lat: rLat, lng: rLng };
+
+    if (!prevRiderPosRef.current) {
+      // Initial state
+      setVisualRiderPos(targetPos);
+      prevRiderPosRef.current = targetPos;
+      return;
+    }
+
+    // Cancel active animation
+    if (animationRef.current) {
+      cancelAnimationFrame(animationRef.current);
+    }
+
+    const startPos = prevRiderPosRef.current;
+    const startTime = performance.now();
+    const duration = 4000; // interpolate over 4 seconds
+
+    // Calculate heading/bearing
+    const dy = targetPos.lat - startPos.lat;
+    const dx = targetPos.lng - startPos.lng;
+    if (Math.abs(dy) > 1e-6 || Math.abs(dx) > 1e-6) {
+      // Convert to degrees (90 - angle to make 0 deg point North)
+      const angle = Math.atan2(dx, dy) * (180 / Math.PI);
+      setVisualHeading(angle);
+    }
+
+    const animate = (now: number) => {
+      const elapsed = now - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+
+      const currentLat = startPos.lat + (targetPos.lat - startPos.lat) * progress;
+      const currentLng = startPos.lng + (targetPos.lng - startPos.lng) * progress;
+
+      const currentPos = { lat: currentLat, lng: currentLng };
+      setVisualRiderPos(currentPos);
+      prevRiderPosRef.current = currentPos;
+
+      if (progress < 1) {
+        animationRef.current = requestAnimationFrame(animate);
+      } else {
+        animationRef.current = null;
+      }
+    };
+
+    animationRef.current = requestAnimationFrame(animate);
+
+    return () => {
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+      }
+    };
+  }, [rLat, rLng]);
+
+  // 2. Fetch routes and draw beautifully
+  useEffect(() => {
+    if (!routesLib || !map) return;
+
+    polylinesRef.current.forEach((p) => p.setMap(null));
+    polylinesRef.current = [];
+
+    routesLib.Route.computeRoutes({
+      origin: { lat: kitchenLat, lng: kitchenLng },
+      destination: { lat: orderLat, lng: orderLng },
+      travelMode: "DRIVING",
+      fields: ["path", "viewport"],
+    })
+      .then(({ routes }) => {
+        if (routes?.[0]) {
+          const newPolylines = routes[0].createPolylines();
+          newPolylines.forEach((p) => {
+            p.setOptions({
+              strokeColor: "#3b82f6", // Uber-like neon blue
+              strokeWeight: 6,
+              strokeOpacity: 0.9,
+            });
+            p.setMap(map);
+          });
+          polylinesRef.current = newPolylines;
+
+          if (routes[0].viewport) {
+            map.fitBounds(routes[0].viewport);
+          }
+        }
+      })
+      .catch((err) => {
+        console.warn("Google Routes API compute failed, using standard straight-line fallback:", err);
+        const flightPoly = new google.maps.Polyline({
+          path: [
+            { lat: kitchenLat, lng: kitchenLng },
+            ...(visualRiderPos ? [visualRiderPos] : []),
+            { lat: orderLat, lng: orderLng },
+          ],
+          strokeColor: "#d97706",
+          strokeWeight: 4,
+          strokeOpacity: 0.8,
+        });
+        flightPoly.setMap(map);
+        polylinesRef.current = [flightPoly];
+
+        // Zoom map to cover points
+        const bounds = new google.maps.LatLngBounds();
+        bounds.extend({ lat: kitchenLat, lng: kitchenLng });
+        bounds.extend({ lat: orderLat, lng: orderLng });
+        if (visualRiderPos) bounds.extend(visualRiderPos);
+        map.fitBounds(bounds);
+      });
+
+    return () => {
+      polylinesRef.current.forEach((p) => p.setMap(null));
+    };
+  }, [routesLib, map, orderLat, orderLng, visualRiderPos]);
+
+  return (
+    <>
+      {/* 1. Kitchen Location */}
+      <AdvancedMarker position={{ lat: kitchenLat, lng: kitchenLng }} title="Upside Sanctuary Kitchen">
+        <div className="bg-black text-amber-500 rounded-full p-1 border-2 border-amber-500 shadow-md flex items-center justify-center font-bold text-[11px] animate-pulse" style={{ width: "28px", height: "28px", boxShadow: "0 0 12px rgba(245, 158, 11, 0.55)" }}>
+          🍳
+        </div>
+      </AdvancedMarker>
+
+      {/* 2. Customer Destination */}
+      <AdvancedMarker position={{ lat: orderLat, lng: orderLng }} title="Your Sanctuary Venue">
+        <div className="bg-amber-500 text-white rounded-full p-1.5 border-2 border-white shadow-md flex items-center justify-center font-bold text-xs" style={{ width: "28px", height: "28px" }}>
+          📍
+        </div>
+      </AdvancedMarker>
+
+      {/* 3. Smooth animated Rider Location */}
+      {visualRiderPos && (
+        <AdvancedMarker position={visualRiderPos} title="Upside Express Rider">
+          <div style={{ width: "40px", height: "40px" }} className="flex items-center justify-center">
+            <div
+              style={{
+                transform: `rotate(${visualHeading}deg)`,
+                transition: "transform 0.3s ease-out",
+                boxShadow: "0 0 14px rgba(59, 130, 246, 0.85)",
+              }}
+              className="w-9 h-9 bg-blue-600 rounded-full flex items-center justify-center border-2 border-white text-base animate-pulse"
+            >
+              🏍️
+            </div>
+          </div>
+        </AdvancedMarker>
+      )}
+    </>
+  );
 }
 
 function CustomerOrderMap({ activeOrder, leafletLoaded, getStableCoords }: CustomerOrderMapProps) {
@@ -23,6 +203,14 @@ function CustomerOrderMap({ activeOrder, leafletLoaded, getStableCoords }: Custo
   // Let's model the baseline restaurant position
   const kitchenLat = 6.4527;
   const kitchenLng = 3.3932;
+
+  // Detect Google Maps API Key
+  const GOOGLE_MAPS_KEY =
+    process.env.GOOGLE_MAPS_PLATFORM_KEY ||
+    (import.meta as any).env?.VITE_GOOGLE_MAPS_PLATFORM_KEY ||
+    (globalThis as any).GOOGLE_MAPS_PLATFORM_KEY ||
+    "";
+  const hasGoogleKey = Boolean(GOOGLE_MAPS_KEY) && GOOGLE_MAPS_KEY !== "YOUR_API_KEY" && GOOGLE_MAPS_KEY !== "";
 
   // Generates a descriptive street grid representation for high fidelity aesthetics
   const getStreetPath = (p1: [number, number], p2: [number, number], seed: string) => {
@@ -50,6 +238,7 @@ function CustomerOrderMap({ activeOrder, leafletLoaded, getStableCoords }: Custo
   };
 
   React.useEffect(() => {
+    if (hasGoogleKey) return; // Skip Leaflet setup if Google Maps is active
     if (!leafletLoaded || !mapContainerRef.current) return;
     const L = (window as any).L;
     if (!L) return;
@@ -178,14 +367,61 @@ function CustomerOrderMap({ activeOrder, leafletLoaded, getStableCoords }: Custo
         mapRef.current = null;
       }
     };
-  }, [leafletLoaded, orderLat, orderLng, rLat, rLng]);
+  }, [leafletLoaded, orderLat, orderLng, rLat, rLng, hasGoogleKey]);
+
+  if (hasGoogleKey) {
+    return (
+      <div className="bg-[#121212] border border-neutral-800 p-2 relative overflow-hidden" id="customer-tracker-map-box">
+        <div className="p-2 border-b border-neutral-850 flex justify-between items-center bg-neutral-950">
+          <span className="text-[10px] font-mono tracking-widest text-[#d97706] uppercase font-black flex items-center gap-1.5">
+            <Truck className="w-3.5 h-3.5 text-amber-500 animate-pulse" />
+            Live Uber-Style GPS Radar (Google Maps)
+          </span>
+          <span className="text-[9px] font-mono text-neutral-400 uppercase tracking-widest bg-neutral-900 px-2 py-0.5 font-bold border border-neutral-800">
+            📡 Live Road Tracking Active
+          </span>
+        </div>
+
+        <APIProvider apiKey={GOOGLE_MAPS_KEY} version="weekly">
+          <div className="w-full h-64 bg-neutral-900 border border-neutral-850 relative" style={{ minHeight: "280px" }}>
+            <Map
+              defaultCenter={{ lat: orderLat, lng: orderLng }}
+              defaultZoom={14}
+              mapId="DEMO_MAP_ID"
+              internalUsageAttributionIds={["gmp_mcp_codeassist_v1_aistudio"]}
+              style={{ width: "100%", height: "100%" }}
+              disableDefaultUI={true}
+              zoomControl={true}
+            >
+              <CustomerGoogleOrderMap activeOrder={activeOrder} getStableCoords={getStableCoords} />
+            </Map>
+          </div>
+        </APIProvider>
+
+        <div className="mt-2 bg-neutral-950 p-2.5 border border-neutral-850 grid grid-cols-2 md:grid-cols-3 gap-2 text-[9px] font-mono tracking-wider uppercase text-neutral-400">
+          <div className="flex items-center gap-2">
+            <span className="inline-block w-4 h-2 bg-amber-500 rounded" />
+            <span>🍳 Kitchen</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="inline-block w-4 h-2 bg-blue-500 rounded" />
+            <span>🏍️ Rider (Gliding Roads)</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="inline-block w-4.5 h-4.5 text-center leading-none text-xs">📍</span>
+            <span>Venue Sanctuary</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-[#121212] border border-neutral-800 p-2 relative overflow-hidden" id="customer-tracker-map-box">
       <div className="p-2 border-b border-neutral-850 flex justify-between items-center bg-neutral-950">
         <span className="text-[10px] font-mono tracking-widest text-[#d97706] uppercase font-black flex items-center gap-1.5">
           <Truck className="w-3.5 h-3.5 text-amber-500 animate-pulse" />
-          Live Courier GPS Dispatch
+          Live Courier GPS Dispatch (Voyager Fallback)
         </span>
         <span className="text-[9px] font-mono text-neutral-400 uppercase tracking-widest bg-neutral-900 px-2 py-0.5 font-bold border border-neutral-800">
           {rLat !== undefined && rLng !== undefined && rLat !== null && rLng !== null ? "📡 Signals Live & Active" : "⏱️ Awaiting Dispatch Signal"}
@@ -194,10 +430,10 @@ function CustomerOrderMap({ activeOrder, leafletLoaded, getStableCoords }: Custo
       <div ref={mapContainerRef} className="w-full h-64 bg-neutral-900 border border-neutral-850 relative" style={{ minHeight: "280px", zIndex: 1 }} />
       
       {/* Dynamic interactive legend overlay summarizing the paths */}
-      <div className="mt-2 bg-neutral-950 p-2.5 border border-neutral-850 grid grid-cols-2 md:grid-cols-4 gap-2 text-[9px] font-mono tracking-wider uppercase text-neutral-400">
+      <div className="mt-2 bg-neutral-950 p-2.5 border border-neutral-850 grid grid-cols-2 md:grid-cols-4 gap-2 text-[9px] font-mono tracking-wider uppercase text-neutral-400 border-b-0">
         <div className="flex items-center gap-2">
           <span className="inline-block w-4 h-2 bg-amber-500 rounded" />
-          <span>🍳 Kitchen → Your Venue</span>
+          <span>🍳 Kitchen → Venue</span>
         </div>
         <div className="flex items-center gap-2">
           <span className="inline-block w-4 h-2 border-t-2 border-dashed border-[#6b7280]" />
@@ -210,6 +446,21 @@ function CustomerOrderMap({ activeOrder, leafletLoaded, getStableCoords }: Custo
         <div className="flex items-center gap-2">
           <span className="inline-block w-4 h-2 border-t-2 border-dashed border-[#d97706]" />
           <span>Planned/Preparing Leg</span>
+        </div>
+      </div>
+
+      {/* Unlock Google Maps Key Card */}
+      <div className="bg-amber-950/20 border border-amber-900/40 p-3 space-y-1.5 text-left border-t border-neutral-850">
+        <h6 className="text-[10px] font-mono tracking-widest text-amber-500 font-bold uppercase flex items-center gap-1.5">
+          ✨ UNLOCK UBER-STYLE ROAD MOVEMENTS:
+        </h6>
+        <p className="text-[10px] font-sans text-neutral-300 leading-normal">
+          To activate the ultra-realistic Google Maps engine with actual turn-by-turn road routing and smoothly gliding delivery vehicles:
+        </p>
+        <div className="text-[9px] font-mono text-neutral-400 space-y-1 pl-1 leading-snug">
+          <p>1. Open <strong className="text-white">Settings</strong> (⚙️ top-right gear icon) → <strong className="text-white">Secrets</strong></p>
+          <p>2. Set Key: <code className="text-amber-500 font-bold">GOOGLE_MAPS_PLATFORM_KEY</code></p>
+          <p>3. Value: Paste your Google Maps API Key &amp; press Enter</p>
         </div>
       </div>
     </div>
