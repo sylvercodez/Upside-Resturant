@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { LogIn, LogOut, Clipboard, CheckCircle, Package, User, Phone, MapPin, Eye, ShieldAlert, Key, RefreshCw, Compass, Info, Lock, ShieldCheck } from "lucide-react";
+import { LogIn, LogOut, Clipboard, CheckCircle, Package, User, Phone, MapPin, Eye, ShieldAlert, Key, RefreshCw, Compass, Info, Lock, ShieldCheck, Clock } from "lucide-react";
 import { collection, query, where, onSnapshot, doc, updateDoc, getDocs } from "firebase/firestore";
 import { db } from "../firebase";
 import { getApiUrl } from "../types";
@@ -446,8 +446,30 @@ export default function DedicatedRiderDashboard() {
   });
 
   // Leaflet and Live Geolocation Tracking States
+  const [currentTime, setCurrentTime] = useState<Date>(new Date());
   const [computedRoadPaths, setComputedRoadPaths] = useState<Record<string, { lat: number; lng: number }[]>>({});
   const [leafletLoaded, setLeafletLoaded] = useState(false);
+
+  // Periodically update the timestamp every 5 seconds to keep the estimated time of arrival fresh
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
+    if (!lat1 || !lon1 || !lat2 || !lon2) return 0;
+    const R = 6371; // Earth radius in km
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c; // Distance in km
+  };
   const [expandedMapId, setExpandedMapId] = useState<string | null>(null);
   const [isTracking, setIsTracking] = useState<string | null>(null); // orderId that is currently tracking
   const [watchId, setWatchId] = useState<number | null>(null);
@@ -1175,8 +1197,21 @@ export default function DedicatedRiderDashboard() {
             </div>
           ) : (
             <div className="space-y-5">
-              {assignedActive.map((ord) => (
-                <div key={ord.id} className="bg-white border border-neutral-200 p-6 shadow-sm flex flex-col md:flex-row justify-between gap-6">
+              {assignedActive.map((ord) => {
+                const currentRiderLat = isTracking === ord.id && riderLat ? riderLat : (ord.riderLatitude ?? ord.rider_latitude ?? deviceLat ?? 6.4527);
+                const currentRiderLng = isTracking === ord.id && riderLng ? riderLng : (ord.riderLongitude ?? ord.rider_longitude ?? deviceLng ?? 3.3932);
+                
+                const destCoords = getStableCoords(ord.address || "Lagos", ord.id);
+                const orderLat = ord.latitude ?? ord.lat ?? ord.deliveryLatitude ?? destCoords.lat;
+                const orderLng = ord.longitude ?? ord.lng ?? ord.deliveryLongitude ?? destCoords.lng;
+                
+                const distance = calculateDistance(currentRiderLat, currentRiderLng, orderLat, orderLng);
+                const etaMinutes = Math.max(2, Math.round(distance * 2.4));
+                const etaTimestamp = new Date(currentTime.getTime() + etaMinutes * 60 * 1000);
+                const formattedEtaTime = etaTimestamp.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+                return (
+                  <div key={ord.id} className="bg-white border border-neutral-200 p-6 shadow-sm flex flex-col md:flex-row justify-between gap-6">
                   
                   {/* Left Column information */}
                   <div className="flex-grow space-y-4">
@@ -1216,6 +1251,47 @@ export default function DedicatedRiderDashboard() {
                           <MapPin className="w-3.5 h-3.5 text-neutral-400 shrink-0 mt-0.5" />
                           <span>{ord.address}</span>
                         </p>
+                      </div>
+                    </div>
+
+                    {/* Live ETA & Courier Dispatch Stats Box */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 bg-amber-500/[0.04] border border-amber-500/15 p-4 text-xs rounded-sm">
+                      <div className="space-y-1">
+                        <span className="text-[8px] font-mono tracking-widest text-neutral-400 font-extrabold uppercase block">
+                          Rider GPS Position
+                        </span>
+                        <p className="text-neutral-900 font-mono font-bold text-xs">
+                          {currentRiderLat.toFixed(5)}, {currentRiderLng.toFixed(5)}
+                        </p>
+                        <span className="text-[9px] text-neutral-400 font-mono flex items-center gap-1 mt-1">
+                          <span className={`w-1.5 h-1.5 rounded-full ${isTracking === ord.id ? "bg-emerald-500 animate-ping" : "bg-neutral-400"}`} />
+                          {isTracking === ord.id ? "Live GPS Signal active" : "Last synchronized"}
+                        </span>
+                      </div>
+                      
+                      <div className="space-y-1 border-l border-neutral-200 pl-0 md:pl-4">
+                        <span className="text-[8px] font-mono tracking-widest text-neutral-400 font-extrabold uppercase block">
+                          Total Route Distance
+                        </span>
+                        <p className="text-neutral-900 font-bold text-sm">
+                          {distance.toFixed(2)} km
+                        </p>
+                        <span className="text-[9px] text-neutral-400 font-sans block mt-1">
+                          Direct air route projection
+                        </span>
+                      </div>
+
+                      <div className="space-y-1 border-l border-neutral-200 pl-0 md:pl-4 bg-amber-500/[0.06] p-2 -m-2 rounded">
+                        <span className="text-[8px] font-mono tracking-widest text-[#d97706] font-black uppercase block">
+                          Estimated Time of Arrival (ETA)
+                        </span>
+                        <p className="text-[#d97706] font-black text-sm flex items-center gap-1.5">
+                          <Clock className="w-3.5 h-3.5 text-amber-500" />
+                          <span>{formattedEtaTime}</span>
+                        </p>
+                        <span className="text-[9.5px] text-[#b45309] font-mono font-extrabold uppercase tracking-wider block mt-0.5">
+                          In ~{etaMinutes} mins (Dynamic)
+                        </span>
                       </div>
                     </div>
 
@@ -1378,7 +1454,7 @@ export default function DedicatedRiderDashboard() {
                   </div>
 
                 </div>
-              ))}
+              ); })}
             </div>
           )}
         </div>
