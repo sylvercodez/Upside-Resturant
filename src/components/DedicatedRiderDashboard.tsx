@@ -145,6 +145,38 @@ function RiderOrderMap({
     "";
   const hasGoogleKey = Boolean(GOOGLE_MAPS_KEY) && GOOGLE_MAPS_KEY !== "YOUR_API_KEY" && GOOGLE_MAPS_KEY !== "";
 
+  // Dynamic state for free OSRM road coordinates
+  const [roadCoords, setRoadCoords] = React.useState<[number, number][]>([]);
+
+  React.useEffect(() => {
+    if (hasGoogleKey) return;
+    
+    let isMounted = true;
+    const fetchOSRMRoute = async () => {
+      try {
+        const url = `https://router.project-osrm.org/route/v1/driving/${kitchenLng},${kitchenLat};${orderLng},${orderLat}?overview=full&geometries=geojson`;
+        const res = await fetch(url);
+        if (!res.ok) throw new Error("OSRM routing failed");
+        const data = await res.json();
+        const route = data.routes?.[0];
+        if (route?.geometry?.coordinates && isMounted) {
+          const coords: [number, number][] = route.geometry.coordinates.map((pt: [number, number]) => [pt[1], pt[0]]);
+          setRoadCoords(coords);
+          if (onRouteComputed) {
+            onRouteComputed(coords.map(([lat, lng]) => ({ lat, lng })));
+          }
+        }
+      } catch (err) {
+        console.warn("OSRM routing query failed, falling back to street grid:", err);
+      }
+    };
+
+    fetchOSRMRoute();
+    return () => {
+      isMounted = false;
+    };
+  }, [orderLat, orderLng, hasGoogleKey]);
+
   // Generates a descriptive street grid representation for high fidelity aesthetics
   const getStreetPath = (p1: [number, number], p2: [number, number], seed: string) => {
     const [lat1, lng1] = p1;
@@ -230,8 +262,25 @@ function RiderOrderMap({
         .bindPopup("<b>Your live location</b><br/>Syncing location in real-time...")
         .openPopup();
 
+      // Find closest segment in roadCoords to segregate transit covered leg from active route
+      let closestIdx = 0;
+      if (roadCoords.length > 0) {
+        let minDist = Infinity;
+        for (let i = 0; i < roadCoords.length; i++) {
+          const [lat, lng] = roadCoords[i];
+          const dist = Math.pow(lat - riderLat, 2) + Math.pow(lng - riderLng, 2);
+          if (dist < minDist) {
+            minDist = dist;
+            closestIdx = i;
+          }
+        }
+      }
+
       // Part A: Covered transit path (Kitchen to Rider position)
-      const pathKitchenToRider = getStreetPath([kitchenLat, kitchenLng], [riderLat, riderLng], (ord.id || "rider") + "_covered");
+      const pathKitchenToRider = roadCoords.length > 0
+        ? roadCoords.slice(0, closestIdx + 1)
+        : getStreetPath([kitchenLat, kitchenLng], [riderLat, riderLng], (ord.id || "rider") + "_covered");
+
       L.polyline(pathKitchenToRider, {
         color: "#6b7280", // Slate grey completed leg
         weight: 3.5,
@@ -241,7 +290,9 @@ function RiderOrderMap({
       }).addTo(map);
 
       // Part B: Active dispatch delivery route (Rider position to Customer)
-      const pathRiderToCustomer = getStreetPath([riderLat, riderLng], [orderLat, orderLng], (ord.id || "customer") + "_active");
+      const pathRiderToCustomer = roadCoords.length > 0
+        ? roadCoords.slice(closestIdx)
+        : getStreetPath([riderLat, riderLng], [orderLat, orderLng], (ord.id || "customer") + "_active");
       
       // Deep blue outline
       L.polyline(pathRiderToCustomer, {
@@ -265,7 +316,9 @@ function RiderOrderMap({
       map.fitBounds(bounds, { padding: [50, 50] });
     } else {
       // No active GPS coordinate streams from rider yet - draw expected path from kitchen to customer
-      const pathKitchenToCustomer = getStreetPath([kitchenLat, kitchenLng], [orderLat, orderLng], (ord.id || "direct") + "_predicted");
+      const pathKitchenToCustomer = roadCoords.length > 0
+        ? roadCoords
+        : getStreetPath([kitchenLat, kitchenLng], [orderLat, orderLng], (ord.id || "direct") + "_predicted");
       
       L.polyline(pathKitchenToCustomer, {
         color: "#d97706",
@@ -296,7 +349,7 @@ function RiderOrderMap({
         mapRef.current = null;
       }
     };
-  }, [leafletLoaded, orderLat, orderLng, isTracking, riderLat, riderLng, hasGoogleKey]);
+  }, [leafletLoaded, orderLat, orderLng, isTracking, riderLat, riderLng, hasGoogleKey, roadCoords]);
 
   if (hasGoogleKey) {
     return (

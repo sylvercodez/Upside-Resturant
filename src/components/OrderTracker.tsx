@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { ChefHat, Flame, Truck, CheckCircle2, RefreshCw, Clock, MapPin } from "lucide-react";
-import { doc, onSnapshot, deleteDoc, updateDoc } from "firebase/firestore";
+import { doc, onSnapshot, deleteDoc, updateDoc, getDoc } from "firebase/firestore";
 import { db } from "../firebase";
 import { getApiUrl } from "../types";
 import { APIProvider, Map, AdvancedMarker, Pin, useMap, useMapsLibrary } from "@vis.gl/react-google-maps";
@@ -212,6 +212,35 @@ function CustomerOrderMap({ activeOrder, leafletLoaded, getStableCoords }: Custo
     "";
   const hasGoogleKey = Boolean(GOOGLE_MAPS_KEY) && GOOGLE_MAPS_KEY !== "YOUR_API_KEY" && GOOGLE_MAPS_KEY !== "";
 
+  // Dynamic state for free OSRM road coordinates
+  const [roadCoords, setRoadCoords] = React.useState<[number, number][]>([]);
+
+  React.useEffect(() => {
+    if (hasGoogleKey) return;
+    
+    let isMounted = true;
+    const fetchOSRMRoute = async () => {
+      try {
+        const url = `https://router.project-osrm.org/route/v1/driving/${kitchenLng},${kitchenLat};${orderLng},${orderLat}?overview=full&geometries=geojson`;
+        const res = await fetch(url);
+        if (!res.ok) throw new Error("OSRM routing failed");
+        const data = await res.json();
+        const route = data.routes?.[0];
+        if (route?.geometry?.coordinates && isMounted) {
+          const coords: [number, number][] = route.geometry.coordinates.map((pt: [number, number]) => [pt[1], pt[0]]);
+          setRoadCoords(coords);
+        }
+      } catch (err) {
+        console.warn("OSRM routing query failed, falling back to street grid:", err);
+      }
+    };
+
+    fetchOSRMRoute();
+    return () => {
+      isMounted = false;
+    };
+  }, [orderLat, orderLng, hasGoogleKey]);
+
   // Generates a descriptive street grid representation for high fidelity aesthetics
   const getStreetPath = (p1: [number, number], p2: [number, number], seed: string) => {
     const [lat1, lng1] = p1;
@@ -297,10 +326,27 @@ function CustomerOrderMap({ activeOrder, leafletLoaded, getStableCoords }: Custo
         .bindPopup("<b>Express Rider</b><br/>En route with your hot meal!")
         .openPopup();
 
+      // Find closest segment in roadCoords to segregate transit covered leg from active route
+      let closestIdx = 0;
+      if (roadCoords.length > 0) {
+        let minDist = Infinity;
+        for (let i = 0; i < roadCoords.length; i++) {
+          const [lat, lng] = roadCoords[i];
+          const dist = Math.pow(lat - rLat, 2) + Math.pow(lng - rLng, 2);
+          if (dist < minDist) {
+            minDist = dist;
+            closestIdx = i;
+          }
+        }
+      }
+
       // Draw routing paths "from here to there" (Origin -> Rider -> Destination)
       
       // Part A: Covered transit corridor (Kitchen to Rider position)
-      const pathKitchenToRider = getStreetPath([kitchenLat, kitchenLng], [rLat, rLng], (activeOrder.id || "rider") + "_covered");
+      const pathKitchenToRider = roadCoords.length > 0 
+        ? roadCoords.slice(0, closestIdx + 1)
+        : getStreetPath([kitchenLat, kitchenLng], [rLat, rLng], (activeOrder.id || "rider") + "_covered");
+        
       L.polyline(pathKitchenToRider, {
         color: "#6b7280", // Slate gray trail for completed leg
         weight: 3.5,
@@ -310,7 +356,9 @@ function CustomerOrderMap({ activeOrder, leafletLoaded, getStableCoords }: Custo
       }).addTo(map);
 
       // Part B: Active dispatch delivery route (Rider position to Customer)
-      const pathRiderToCustomer = getStreetPath([rLat, rLng], [orderLat, orderLng], (activeOrder.id || "customer") + "_active");
+      const pathRiderToCustomer = roadCoords.length > 0 
+        ? roadCoords.slice(closestIdx)
+        : getStreetPath([rLat, rLng], [orderLat, orderLng], (activeOrder.id || "customer") + "_active");
       
       // Deep blue outline glow
       L.polyline(pathRiderToCustomer, {
@@ -335,7 +383,9 @@ function CustomerOrderMap({ activeOrder, leafletLoaded, getStableCoords }: Custo
       map.fitBounds(bounds, { padding: [50, 50] });
     } else {
       // No dispatched rider live yet - draw predicted route line from Kitchen directly to customer
-      const pathKitchenToCustomer = getStreetPath([kitchenLat, kitchenLng], [orderLat, orderLng], (activeOrder.id || "direct") + "_predicted");
+      const pathKitchenToCustomer = roadCoords.length > 0
+        ? roadCoords
+        : getStreetPath([kitchenLat, kitchenLng], [orderLat, orderLng], (activeOrder.id || "direct") + "_predicted");
       
       // Warm gold planning route
       L.polyline(pathKitchenToCustomer, {
@@ -367,7 +417,7 @@ function CustomerOrderMap({ activeOrder, leafletLoaded, getStableCoords }: Custo
         mapRef.current = null;
       }
     };
-  }, [leafletLoaded, orderLat, orderLng, rLat, rLng, hasGoogleKey]);
+  }, [leafletLoaded, orderLat, orderLng, rLat, rLng, hasGoogleKey, roadCoords]);
 
   if (hasGoogleKey) {
     return (
@@ -421,7 +471,7 @@ function CustomerOrderMap({ activeOrder, leafletLoaded, getStableCoords }: Custo
       <div className="p-2 border-b border-neutral-850 flex justify-between items-center bg-neutral-950">
         <span className="text-[10px] font-mono tracking-widest text-[#d97706] uppercase font-black flex items-center gap-1.5">
           <Truck className="w-3.5 h-3.5 text-amber-500 animate-pulse" />
-          Live Courier GPS Dispatch (Voyager Fallback)
+          {roadCoords.length > 0 ? "Live Courier GPS Dispatch (Free OSRM Road Router)" : "Live Courier GPS Dispatch (Voyager Fallback)"}
         </span>
         <span className="text-[9px] font-mono text-neutral-400 uppercase tracking-widest bg-neutral-900 px-2 py-0.5 font-bold border border-neutral-800">
           {rLat !== undefined && rLng !== undefined && rLat !== null && rLng !== null ? "📡 Signals Live & Active" : "⏱️ Awaiting Dispatch Signal"}
@@ -467,6 +517,69 @@ function CustomerOrderMap({ activeOrder, leafletLoaded, getStableCoords }: Custo
   );
 }
 
+// Custom hook to fetch updated real-time coordinates for the rider every 5 seconds to ensure smooth map movement
+function useRiderCoordinates(orderId: string | null, setActiveOrder: React.Dispatch<React.SetStateAction<any>>) {
+  useEffect(() => {
+    if (!orderId) return;
+
+    const fetchCoords = async () => {
+      // 1. Fetch from MySQL Router API first
+      try {
+        const res = await fetch(getApiUrl(`/api/mysql/orders/${orderId}`));
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.id) {
+            setActiveOrder((prev: any) => {
+              if (!prev) return data;
+              const lat = data.riderLatitude ?? data.rider_latitude;
+              const lng = data.riderLongitude ?? data.rider_longitude;
+              if (prev.riderLatitude === lat && prev.riderLongitude === lng && prev.status === data.status) {
+                return prev;
+              }
+              return {
+                ...prev,
+                riderLatitude: lat,
+                riderLongitude: lng,
+                status: data.status ?? prev.status,
+              };
+            });
+            return;
+          }
+        }
+      } catch (err) {
+        console.warn("[useRiderCoordinates] MySQL coordinate polling check bypassed/failed:", err);
+      }
+
+      // 2. Fallback to Firestore check
+      try {
+        const docRef = doc(db, "orders", orderId);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          setActiveOrder((prev: any) => {
+            if (!prev) return { id: orderId, ...data };
+            if (prev.riderLatitude === data.riderLatitude && prev.riderLongitude === data.riderLongitude && prev.status === data.status) {
+              return prev;
+            }
+            return {
+              ...prev,
+              riderLatitude: data.riderLatitude,
+              riderLongitude: data.riderLongitude,
+              status: data.status ?? prev.status,
+            };
+          });
+        }
+      } catch (err) {
+        console.warn("[useRiderCoordinates] Firestore coordinate polling check bypassed/failed:", err);
+      }
+    };
+
+    // Poll every 5 seconds to guarantee fresh coordinates update
+    const intervalId = setInterval(fetchCoords, 5000);
+    return () => clearInterval(intervalId);
+  }, [orderId, setActiveOrder]);
+}
+
 interface OrderTrackerProps {
   onBackToCart?: () => void;
   orderId?: string | null;
@@ -478,6 +591,28 @@ export default function OrderTracker({ onBackToCart, orderId, userRole = "user" 
   const [loading, setLoading] = useState(true);
 
   const [leafletLoaded, setLeafletLoaded] = useState(false);
+
+  // State to hold resolved order ID for the custom hook
+  const [resolvedOrderId, setResolvedOrderId] = useState<string | null>(orderId || null);
+
+  useEffect(() => {
+    if (orderId) {
+      setResolvedOrderId(orderId);
+    } else {
+      const saved = localStorage.getItem("upside_active_order");
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (parsed.id) {
+            setResolvedOrderId(parsed.id);
+          }
+        } catch (_) {}
+      }
+    }
+  }, [orderId]);
+
+  // Hook to fetch updated real-time coordinates for the rider every 5 seconds to keep map movement smooth
+  useRiderCoordinates(resolvedOrderId, setActiveOrder);
 
   // Dynamic Leaflet Resources Loader
   useEffect(() => {
