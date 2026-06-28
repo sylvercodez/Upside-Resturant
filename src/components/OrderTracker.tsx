@@ -474,7 +474,11 @@ function CustomerOrderMap({ activeOrder, leafletLoaded, getStableCoords }: Custo
           {roadCoords.length > 0 ? "Live Courier GPS Dispatch (Free OSRM Road Router)" : "Live Courier GPS Dispatch (Voyager Fallback)"}
         </span>
         <span className="text-[9px] font-mono text-neutral-400 uppercase tracking-widest bg-neutral-900 px-2 py-0.5 font-bold border border-neutral-800">
-          {rLat !== undefined && rLng !== undefined && rLat !== null && rLng !== null ? "📡 Signals Live & Active" : "⏱️ Awaiting Dispatch Signal"}
+          {rLat !== undefined && rLng !== undefined && rLat !== null && rLng !== null
+            ? "📡 Signals Live & Active"
+            : (activeOrder?.status === "Out for Delivery" || activeOrder?.status === "Delivered")
+            ? "🏍️ Trip Started (Connecting GPS...)"
+            : "⏱️ Awaiting Dispatch Signal"}
         </span>
       </div>
       <div ref={mapContainerRef} className="w-full h-64 bg-neutral-900 border border-neutral-850 relative" style={{ minHeight: "280px", zIndex: 1 }} />
