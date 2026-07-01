@@ -180,7 +180,7 @@ export default function DedicatedDashboard({
 
   // Load Instagram configuration
   useEffect(() => {
-    if (currentUser && userRole === "admin") {
+    if (currentUser && (userRole === "admin" || userRole === "developer")) {
       const unsub = onSnapshot(doc(db, "settings", "instagram"), (docSnap) => {
         if (docSnap.exists()) {
           const data = docSnap.data();
@@ -197,7 +197,7 @@ export default function DedicatedDashboard({
 
   // Load current Instagram posts in database
   useEffect(() => {
-    if (currentUser && userRole === "admin") {
+    if (currentUser && (userRole === "admin" || userRole === "developer")) {
       const q = query(collection(db, "instagram_posts"));
       const unsubscribe = onSnapshot(q, (snapshot) => {
         const posts: any[] = [];
@@ -229,7 +229,7 @@ export default function DedicatedDashboard({
 
   // Load OPay settings config
   useEffect(() => {
-    if (currentUser && userRole === "admin") {
+    if (currentUser && (userRole === "admin" || userRole === "developer")) {
       const unsub = onSnapshot(doc(db, "settings", "opay"), (docSnap) => {
         if (docSnap.exists()) {
           const data = docSnap.data();
@@ -1675,8 +1675,8 @@ export default function DedicatedDashboard({
                     </>
                   )}
 
-                  {/* Admin-only system panels */}
-                  {userRole === "admin" && (
+                  {/* Admin or Developer system panels */}
+                  {(userRole === "admin" || userRole === "developer") && (
                     <>
                       <button
                         onClick={() => setActiveTab("instagram_panel")}
@@ -3475,7 +3475,7 @@ export default function DedicatedDashboard({
                   </div>
                 )}
 
-                {userRole === "admin" && activeTab === "instagram_panel" && (
+                {(userRole === "admin" || userRole === "developer") && activeTab === "instagram_panel" && (
                   <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 text-left" id="dashboard-instagram-control">
                     
                     {/* Left side splits: API Config & Hand curations */}
@@ -3714,7 +3714,7 @@ export default function DedicatedDashboard({
                   </div>
                 )}
 
-                {userRole === "admin" && activeTab === "opay_panel" && (
+                {(userRole === "admin" || userRole === "developer") && activeTab === "opay_panel" && (
                   <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 text-left" id="dashboard-opay-control">
                     
                     {/* Left Column: Documentation & Status */}

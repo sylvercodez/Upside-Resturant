@@ -41,6 +41,11 @@ export default function SupportChatWidget({ currentUser }: SupportChatWidgetProp
   useEffect(() => {
     const savedChatId = localStorage.getItem("upside_support_chat_id");
     const savedHasStarted = localStorage.getItem("upside_support_chat_started");
+    const savedName = localStorage.getItem("upside_support_chat_name");
+    const savedEmail = localStorage.getItem("upside_support_chat_email");
+    
+    if (savedName) setName(savedName);
+    if (savedEmail) setEmail(savedEmail);
     
     if (savedChatId) {
       setChatId(savedChatId);
@@ -134,6 +139,10 @@ export default function SupportChatWidget({ currentUser }: SupportChatWidgetProp
     setError(null);
 
     try {
+      // Save name and email to localStorage so they are remembered on refresh
+      localStorage.setItem("upside_support_chat_name", name.trim());
+      localStorage.setItem("upside_support_chat_email", email.trim());
+
       // 1. Write the main support chat document
       const chatDocRef = doc(db, "support_chats", chatId!);
       const payload = {
@@ -290,13 +299,25 @@ export default function SupportChatWidget({ currentUser }: SupportChatWidgetProp
                 </div>
               </div>
             </div>
-            <button
-              onClick={() => setIsOpen(false)}
-              className="p-1.5 hover:bg-neutral-800 text-neutral-400 hover:text-white transition-colors"
-              title="Minimize chat"
-            >
-              <X className="w-4 h-4" />
-            </button>
+            <div className="flex items-center gap-1">
+              {hasStarted && (
+                <button
+                  type="button"
+                  onClick={handleResetSession}
+                  className="px-2 py-1 text-[9px] font-mono uppercase bg-neutral-800 border border-neutral-700 hover:border-amber-500 text-neutral-400 hover:text-amber-500 transition-colors"
+                  title="Reset Support Session"
+                >
+                  Reset
+                </button>
+              )}
+              <button
+                onClick={() => setIsOpen(false)}
+                className="p-1.5 hover:bg-neutral-800 text-neutral-400 hover:text-white transition-colors"
+                title="Minimize chat"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
           </div>
 
           {/* Form screen (for guest users to input name/email) */}
@@ -379,11 +400,23 @@ export default function SupportChatWidget({ currentUser }: SupportChatWidgetProp
               {/* Messages Grid */}
               <div className="flex-1 p-4 overflow-y-auto space-y-4 scrollbar-thin scrollbar-thumb-neutral-850 bg-[#161616]">
                 {messages.length === 0 ? (
-                  <div className="h-full flex flex-col items-center justify-center text-center p-4 space-y-2 opacity-60">
-                    <MessageSquare className="w-8 h-8 text-neutral-700" />
-                    <p className="text-[10px] font-mono tracking-wider uppercase">
-                      Initializing Session...
-                    </p>
+                  <div className="h-full flex flex-col items-center justify-center text-center p-4 space-y-3 opacity-90">
+                    <MessageSquare className="w-8 h-8 text-neutral-600 animate-pulse" />
+                    <div className="space-y-1">
+                      <p className="text-[10px] font-mono tracking-wider uppercase text-amber-500 font-bold">
+                        Initializing Session...
+                      </p>
+                      <p className="text-[11px] text-neutral-400 max-w-xs leading-relaxed font-sans">
+                        If this screen does not load or you cannot send/receive messages, your chat session might have expired.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleResetSession}
+                      className="px-4 py-2 mt-2 bg-amber-500 hover:bg-amber-600 text-neutral-950 font-mono text-[9px] tracking-widest uppercase font-bold transition-colors cursor-pointer"
+                    >
+                      Start New Session
+                    </button>
                   </div>
                 ) : (
                   messages.map((msg) => {
