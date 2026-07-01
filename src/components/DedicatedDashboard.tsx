@@ -985,6 +985,10 @@ export default function DedicatedDashboard({
       setActiveTab("users_panel");
     } else if (userRole === "sales" || userRole === "chef") {
       setActiveTab("orders_pipeline");
+    } else if (userRole === "menu_lister") {
+      setActiveTab("menus_panel");
+    } else if (userRole === "developer") {
+      setActiveTab("mysql_panel");
     } else {
       setActiveTab("history");
     }
@@ -1303,10 +1307,10 @@ export default function DedicatedDashboard({
             // Convert to highly optimized JPEG so it is perfectly lightweight for Firestore document limits
             const compressedBase64 = canvas.toDataURL("image/jpeg", 0.70);
             setNewMenuData(prev => ({ ...prev, image: compressedBase64 }));
-            setMenuFormSuccess("Gourmet image successfully processed and optimized for database storage!");
+            setMenuFormSuccess("Menu image successfully processed and optimized for database storage!");
           } else {
             setNewMenuData(prev => ({ ...prev, image: reader.result as string }));
-            setMenuFormSuccess("Gourmet image successfully read into memory.");
+            setMenuFormSuccess("Menu image successfully read into memory.");
           }
         };
         img.onerror = () => {
@@ -1341,7 +1345,7 @@ export default function DedicatedDashboard({
     try {
       const parsedId = newMenuData.id.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "");
       if (!parsedId) {
-        setMenuFormError("Gourmet Slug Id must contain valid small case alpha-numeric characters only.");
+        setMenuFormError("Menu Slug Id must contain valid small case alpha-numeric characters only.");
         return;
       }
 
@@ -1392,7 +1396,7 @@ export default function DedicatedDashboard({
       });
     } catch (err: any) {
       console.error("Menu save error:", err);
-      setMenuFormError(`Failed to save gourmet item to database: ${err.message}`);
+      setMenuFormError(`Failed to save menu item to database: ${err.message}`);
     }
   };
 
@@ -1596,7 +1600,7 @@ export default function DedicatedDashboard({
                   </button>
 
                   {/* Privileged pipeline (Sales, Chef, Admin) */}
-                  {isPrivileged && (
+                  {(userRole === "admin" || userRole === "sales" || userRole === "chef") && (
                     <>
                       <button
                         onClick={() => setActiveTab("orders_pipeline")}
@@ -1621,19 +1625,23 @@ export default function DedicatedDashboard({
                     </>
                   )}
 
-                  {/* Admin-only user manager and dynamic menu creator */}
+                  {/* Admin-only user directory */}
                   {userRole === "admin" && (
+                    <button
+                      onClick={() => setActiveTab("users_panel")}
+                      className={`px-6 py-3 text-xs tracking-wider uppercase font-bold text-center transition-all cursor-pointer flex items-center gap-1.5 ${
+                        activeTab === "users_panel"
+                          ? "bg-amber-600 text-white"
+                          : "text-neutral-600 hover:text-neutral-900 hover:bg-neutral-200"
+                      }`}
+                    >
+                      👥 User Directory ({allUsers.length})
+                    </button>
+                  )}
+
+                  {/* Admin or Menu Lister menu managers */}
+                  {(userRole === "admin" || userRole === "menu_lister") && (
                     <>
-                      <button
-                        onClick={() => setActiveTab("users_panel")}
-                        className={`px-6 py-3 text-xs tracking-wider uppercase font-bold text-center transition-all cursor-pointer flex items-center gap-1.5 ${
-                          activeTab === "users_panel"
-                            ? "bg-amber-600 text-white"
-                            : "text-neutral-600 hover:text-neutral-900 hover:bg-neutral-200"
-                        }`}
-                      >
-                        👥 User Directory ({allUsers.length})
-                      </button>
                       <button
                         onClick={() => setActiveTab("menus_panel")}
                         className={`px-6 py-3 text-xs tracking-wider uppercase font-bold text-center transition-all cursor-pointer flex items-center gap-1.5 ${
@@ -1660,10 +1668,16 @@ export default function DedicatedDashboard({
                           activeTab === "images_panel"
                             ? "bg-amber-600 text-white"
                             : "text-neutral-600 hover:text-neutral-900 hover:bg-neutral-200"
-                        }`}
-                      >
-                        🖼️ Image Library ({customImages.length + PRESET_IMAGES.length})
-                      </button>
+                      }`}
+                    >
+                      🖼️ Image Library ({customImages.length + PRESET_IMAGES.length})
+                    </button>
+                    </>
+                  )}
+
+                  {/* Admin-only system panels */}
+                  {userRole === "admin" && (
+                    <>
                       <button
                         onClick={() => setActiveTab("instagram_panel")}
                         className={`px-6 py-3 text-xs tracking-wider uppercase font-bold text-center transition-all cursor-pointer flex items-center gap-1.5 ${
@@ -1684,16 +1698,26 @@ export default function DedicatedDashboard({
                       >
                         💳 OPay Gateway Settings
                       </button>
-                      <button
-                        onClick={() => setActiveTab("mysql_panel")}
-                        className={`px-6 py-3 text-xs tracking-wider uppercase font-bold text-center transition-all cursor-pointer flex items-center gap-1.5 ${
-                          activeTab === "mysql_panel"
-                            ? "bg-amber-600 text-white"
-                            : "text-neutral-600 hover:text-neutral-900 hover:bg-neutral-200"
-                        }`}
-                      >
-                        🗄️ MySQL Database Console
-                      </button>
+                    </>
+                  )}
+
+                  {/* Admin or Developer MySQL console */}
+                  {(userRole === "admin" || userRole === "developer") && (
+                    <button
+                      onClick={() => setActiveTab("mysql_panel")}
+                      className={`px-6 py-3 text-xs tracking-wider uppercase font-bold text-center transition-all cursor-pointer flex items-center gap-1.5 ${
+                        activeTab === "mysql_panel"
+                          ? "bg-amber-600 text-white"
+                          : "text-neutral-600 hover:text-neutral-900 hover:bg-neutral-200"
+                      }`}
+                    >
+                      🗄️ MySQL Database Console
+                    </button>
+                  )}
+
+                  {/* Admin-only shipping & riders */}
+                  {userRole === "admin" && (
+                    <>
                       <button
                         onClick={() => setActiveTab("shipping_panel")}
                         className={`px-6 py-3 text-xs tracking-wider uppercase font-bold text-center transition-all cursor-pointer flex items-center gap-1.5 ${
@@ -1706,16 +1730,6 @@ export default function DedicatedDashboard({
                         🚚 Delivery Locations
                       </button>
                       <button
-                        onClick={() => setActiveTab("analytics_panel")}
-                        className={`px-6 py-3 text-xs tracking-wider uppercase font-bold text-center transition-all cursor-pointer flex items-center gap-1.5 ${
-                          activeTab === "analytics_panel"
-                            ? "bg-amber-600 text-white"
-                            : "text-neutral-600 hover:text-neutral-900 hover:bg-neutral-200"
-                        }`}
-                      >
-                        📊 Analytics & Conversions
-                      </button>
-                      <button
                         onClick={() => setActiveTab("riders_panel")}
                         className={`px-6 py-3 text-xs tracking-wider uppercase font-bold text-center transition-all cursor-pointer flex items-center gap-1.5 ${
                           activeTab === "riders_panel"
@@ -1724,6 +1738,22 @@ export default function DedicatedDashboard({
                         }`}
                       >
                         🚴 Logistics & Riders
+                      </button>
+                    </>
+                  )}
+
+                  {/* Admin or Sales Panels */}
+                  {(userRole === "admin" || userRole === "sales") && (
+                    <>
+                      <button
+                        onClick={() => setActiveTab("analytics_panel")}
+                        className={`px-6 py-3 text-xs tracking-wider uppercase font-bold text-center transition-all cursor-pointer flex items-center gap-1.5 ${
+                          activeTab === "analytics_panel"
+                            ? "bg-amber-600 text-white"
+                            : "text-neutral-600 hover:text-neutral-900 hover:bg-neutral-200"
+                        }`}
+                      >
+                        📊 Analytics & Conversions
                       </button>
                       <button
                         onClick={() => setActiveTab("support_panel")}
@@ -1850,7 +1880,7 @@ export default function DedicatedDashboard({
 
                       {/* Status quick tags bar */}
                       <div className="flex flex-wrap gap-1.5 font-mono text-[9px]">
-                        {["all", "Prepping", "In Oven", "Out for Delivery", "Delivered"].map((st) => (
+                        {["all", "Prepping", "In Oven", "Awaiting Pickup", "Out for Delivery", "Delivered"].map((st) => (
                           <button
                             key={st}
                             onClick={() => setSelectedOrderTab(st)}
@@ -1933,6 +1963,37 @@ export default function DedicatedDashboard({
                         </div>
                       </div>
                     )}
+
+                    {/* Awaiting Pickup Notifications Alert */}
+                    {(() => {
+                      const awaitingPickupOrders = allOrders.filter(o => o.status === "Awaiting Pickup");
+                      if (awaitingPickupOrders.length === 0) return null;
+                      return (
+                        <div className="bg-amber-500/10 border border-amber-500/30 p-4 font-mono rounded animate-pulse flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <span className="text-lg">🔔</span>
+                            <div>
+                              <p className="text-xs font-bold text-amber-500 uppercase tracking-wide">Orders Ready for Pickup</p>
+                              <p className="text-[10px] text-neutral-300 font-sans mt-0.5">
+                                {awaitingPickupOrders.length} {awaitingPickupOrders.length === 1 ? "order is" : "orders are"} currently ready and waiting at the kitchen. Change status to "Out for Delivery" once collected by couriers.
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex gap-2">
+                            {awaitingPickupOrders.slice(0, 3).map((o, idx) => (
+                              <span key={o.id} className="text-[8px] bg-amber-500/20 text-amber-400 border border-amber-500/40 px-1.5 py-0.5 rounded font-mono uppercase">
+                                #{o.id?.slice(-5).toUpperCase()}
+                              </span>
+                            ))}
+                            {awaitingPickupOrders.length > 3 && (
+                              <span className="text-[8px] bg-neutral-800 text-neutral-400 px-1.5 py-0.5 rounded font-mono">
+                                +{awaitingPickupOrders.length - 3} more
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })()}
 
                     {/* Search Field */}
                     <div className="relative max-w-md">
@@ -2032,7 +2093,7 @@ export default function DedicatedDashboard({
                                     <p className="text-[9px] text-neutral-400">{ord.phone}</p>
                                   </div>
                                   <div className="md:col-span-2">
-                                    <p className="text-[8px] text-neutral-500 uppercase tracking-widest font-bold">Fulfillment Sanctuary</p>
+                                    <p className="text-[8px] text-neutral-500 uppercase tracking-widest font-bold">Fulfillment Method</p>
                                     <p className="text-neutral-200 mt-0.5 line-clamp-2">{ord.address}</p>
                                   </div>
                                   <div className="bg-neutral-900 border border-neutral-800 p-2 text-center flex flex-col justify-center">
@@ -2067,7 +2128,7 @@ export default function DedicatedDashboard({
                                       return itemsArray.map((it: any, index: number) => (
                                         <div key={index} className="flex justify-between items-center bg-black/30 px-2 py-1 select-text">
                                           <span className="text-neutral-300">
-                                            {(it?.quantity || 1)}x <span className="font-sans text-white">{it?.name || "Gourmet Dish"}</span>
+                                            {(it?.quantity || 1)}x <span className="font-sans text-white">{it?.name || "Menu Item"}</span>
                                           </span>
                                           <span className="text-neutral-400">₦{((it?.price || 5000) * (it?.quantity || 1)).toLocaleString()}</span>
                                         </div>
@@ -2169,47 +2230,104 @@ export default function DedicatedDashboard({
                                   
                                   {/* Multi Action buttons for fast logistic clicks */}
                                   <div className="flex flex-col gap-1 text-[9px] uppercase font-bold tracking-wider">
+                                    {/* 1. Prepping */}
                                     <button
-                                      disabled={ordStatus === "Prepping"}
+                                      disabled={
+                                        ordStatus === "Prepping" || 
+                                        !(userRole === "admin" || userRole === "chef")
+                                      }
                                       onClick={() => handleSetOrderStatus(ord.id, "Prepping")}
-                                      className={`py-1.5 px-2.5 text-center border cursor-pointer ${
+                                      className={`py-1.5 px-2.5 text-center border transition-all cursor-pointer ${
                                         ordStatus === "Prepping" 
                                           ? "bg-amber-600/15 text-amber-500 border-amber-500/20" 
-                                          : "bg-neutral-900 border-neutral-800 text-neutral-400 hover:text-white"
+                                          : (userRole === "admin" || userRole === "chef")
+                                            ? "bg-neutral-900 border-neutral-800 text-neutral-400 hover:text-white"
+                                            : "bg-neutral-950 border-neutral-900/40 text-neutral-600 cursor-not-allowed"
                                       }`}
+                                      title={!(userRole === "admin" || userRole === "chef") ? "Kitchen privilege required" : "Mark as Prepping"}
                                     >
                                       Prepping
                                     </button>
+
+                                    {/* 2. In Oven */}
                                     <button
-                                      disabled={ordStatus === "In Oven"}
+                                      disabled={
+                                        ordStatus === "In Oven" || 
+                                        !(userRole === "admin" || userRole === "chef")
+                                      }
                                       onClick={() => handleSetOrderStatus(ord.id, "In Oven")}
-                                      className={`py-1.5 px-2.5 text-center border cursor-pointer ${
+                                      className={`py-1.5 px-2.5 text-center border transition-all cursor-pointer ${
                                         ordStatus === "In Oven" 
                                           ? "bg-amber-600/15 text-amber-500 border-amber-500/20" 
-                                          : "bg-neutral-900 border-neutral-800 text-neutral-400 hover:text-white"
+                                          : (userRole === "admin" || userRole === "chef")
+                                            ? "bg-neutral-900 border-neutral-800 text-neutral-400 hover:text-white"
+                                            : "bg-neutral-950 border-neutral-900/40 text-neutral-600 cursor-not-allowed"
                                       }`}
+                                      title={!(userRole === "admin" || userRole === "chef") ? "Kitchen privilege required" : "Mark as In Oven"}
                                     >
                                       In Oven
                                     </button>
+
+                                    {/* 3. Awaiting Pickup */}
                                     <button
-                                      disabled={ordStatus === "Out for Delivery"}
+                                      disabled={
+                                        ordStatus === "Awaiting Pickup" || 
+                                        !(userRole === "admin" || userRole === "chef")
+                                      }
+                                      onClick={() => handleSetOrderStatus(ord.id, "Awaiting Pickup")}
+                                      className={`py-1.5 px-2.5 text-center border transition-all cursor-pointer ${
+                                        ordStatus === "Awaiting Pickup" 
+                                          ? "bg-amber-600/15 text-amber-500 border-amber-500/20" 
+                                          : (userRole === "admin" || userRole === "chef")
+                                            ? "bg-neutral-900 border-neutral-800 text-neutral-400 hover:text-white"
+                                            : "bg-neutral-950 border-neutral-900/40 text-neutral-600 cursor-not-allowed"
+                                      }`}
+                                      title={!(userRole === "admin" || userRole === "chef") ? "Kitchen privilege required" : "Mark as Awaiting Pickup"}
+                                    >
+                                      Awaiting Pickup 📦
+                                    </button>
+
+                                    {/* 4. Out for Delivery */}
+                                    <button
+                                      disabled={
+                                        ordStatus === "Out for Delivery" || 
+                                        (userRole === "sales" && ordStatus !== "Awaiting Pickup") ||
+                                        !(userRole === "admin" || userRole === "sales")
+                                      }
                                       onClick={() => handleSetOrderStatus(ord.id, "Out for Delivery")}
-                                      className={`py-1.5 px-2.5 text-center border cursor-pointer ${
+                                      className={`py-1.5 px-2.5 text-center border transition-all cursor-pointer ${
                                         ordStatus === "Out for Delivery" 
                                           ? "bg-amber-600/15 text-amber-500 border-amber-500/20" 
-                                          : "bg-neutral-900 border-neutral-800 text-neutral-400 hover:text-white"
+                                          : (userRole === "admin" || (userRole === "sales" && ordStatus === "Awaiting Pickup"))
+                                            ? "bg-neutral-900 border-neutral-800 text-neutral-400 hover:text-white hover:border-amber-500"
+                                            : "bg-neutral-950 border-neutral-900/40 text-neutral-600 cursor-not-allowed"
                                       }`}
+                                      title={
+                                        userRole === "chef" 
+                                          ? "Sales privilege required" 
+                                          : (userRole === "sales" && ordStatus !== "Awaiting Pickup")
+                                            ? "Can only dispatch when order is Awaiting Pickup"
+                                            : "Mark as Out for Delivery"
+                                      }
                                     >
                                       Out for Delivery
                                     </button>
+
+                                    {/* 5. Delivered */}
                                     <button
-                                      disabled={ordStatus === "Delivered"}
+                                      disabled={
+                                        ordStatus === "Delivered" || 
+                                        !(userRole === "admin" || userRole === "sales")
+                                      }
                                       onClick={() => handleSetOrderStatus(ord.id, "Delivered")}
-                                      className={`py-1.5 px-2.5 text-center border cursor-pointer ${
+                                      className={`py-1.5 px-2.5 text-center border transition-all cursor-pointer ${
                                         ordStatus === "Delivered" 
                                           ? "bg-emerald-600/15 text-emerald-400 border-emerald-500/25 font-extrabold" 
-                                          : "bg-neutral-900 border-neutral-800 text-neutral-400 hover:text-emerald-400"
+                                          : (userRole === "admin" || userRole === "sales")
+                                            ? "bg-neutral-900 border-neutral-800 text-neutral-400 hover:text-emerald-400 hover:border-emerald-500"
+                                            : "bg-neutral-950 border-neutral-900/40 text-neutral-600 cursor-not-allowed"
                                       }`}
+                                      title={!(userRole === "admin" || userRole === "sales") ? "Sales privilege required" : "Mark as Delivered"}
                                     >
                                       Delivered ✓
                                     </button>
@@ -2623,6 +2741,8 @@ export default function DedicatedDashboard({
                                   <option value="user">User</option>
                                   <option value="chef">Chef</option>
                                   <option value="sales">Sales</option>
+                                  <option value="menu_lister">Menu Lister</option>
+                                  <option value="developer">Developer</option>
                                   <option value="admin">Admin</option>
                                 </select>
                               </td>
@@ -2634,8 +2754,8 @@ export default function DedicatedDashboard({
                   </div>
                 )}
 
-                {/* TAB 5S: GLOBAL MENU CREATE MANAGEMENT (Admins Only) */}
-                {userRole === "admin" && activeTab === "menus_panel" && (
+                {/* TAB 5S: GLOBAL MENU CREATE MANAGEMENT (Admins / Menu Listers) */}
+                {(userRole === "admin" || userRole === "menu_lister") && activeTab === "menus_panel" && (
                   <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 text-left" id="dashboard-menus-control-panel-grid">
                     
                     {/* Add/Edit Menu Item Form */}
@@ -2646,7 +2766,7 @@ export default function DedicatedDashboard({
                             {editingItemId ? `📝 Edit Menu Item: ${editingItemId}` : "🍜 Create New Menu Item"}
                           </h2>
                           <p className="text-[10px] text-neutral-500 font-sans mt-0.5">
-                            {editingItemId ? "Modify and update this gourmet dish parameters in real-time." : "Define a luxury gourmet dish from scratch. Auto-updates immediately on save."}
+                            {editingItemId ? "Modify and update this menu item in real-time." : "Define a menu item from scratch. Auto-updates immediately on save."}
                           </p>
                         </div>
                         {editingItemId && (
@@ -2738,7 +2858,7 @@ export default function DedicatedDashboard({
                         </div>
 
                         <div className="space-y-1">
-                          <label className="text-[9px] text-neutral-400 uppercase tracking-widest block font-bold">Gourmet Food Name *</label>
+                          <label className="text-[9px] text-neutral-400 uppercase tracking-widest block font-bold">Food Name *</label>
                           <input
                             type="text"
                             required
@@ -2809,7 +2929,7 @@ export default function DedicatedDashboard({
                                 }}
                               />
                               <div className="font-mono text-[9px] space-y-0.5 overflow-hidden flex-1">
-                                <span className="text-neutral-300 block truncate font-bold">Preview: {newMenuData.name || "Unnamed Gourmet Food Item"}</span>
+                                <span className="text-neutral-300 block truncate font-bold">Preview: {newMenuData.name || "Unnamed Food Item"}</span>
                                 <span className="text-neutral-500 block text-[8px] truncate">
                                   {newMenuData.image.startsWith("data:image/") 
                                     ? `Direct Base64 DB Format (~${Math.round(newMenuData.image.length / 1024)} KB)` 
@@ -2824,7 +2944,7 @@ export default function DedicatedDashboard({
                           <label className="text-[9px] text-neutral-400 uppercase tracking-widest block font-bold">Short Elegant Description</label>
                           <textarea
                             rows={3}
-                            placeholder="State gourmet spices, flavors, textures..."
+                            placeholder="State ingredients, flavors, textures..."
                             value={newMenuData.description}
                             onChange={(e) => setNewMenuData(prev => ({ ...prev, description: e.target.value }))}
                             className="w-full bg-neutral-950 border border-neutral-850 p-2 text-white focus:outline-none focus:border-amber-500"
@@ -2873,7 +2993,7 @@ export default function DedicatedDashboard({
                           className="w-full py-3 bg-amber-600 hover:bg-amber-700 text-white font-bold tracking-widest uppercase transition-colors rounded-none cursor-pointer flex items-center justify-center gap-2"
                         >
                           <Plus className="w-4 h-4" />
-                          <span>{editingItemId ? "SAVE PRODUCT CHANGES" : "PUBLISH GOURMET ITEM"}</span>
+                          <span>{editingItemId ? "SAVE PRODUCT CHANGES" : "PUBLISH ITEM"}</span>
                         </button>
                       </form>
                     </div>
@@ -3018,7 +3138,7 @@ export default function DedicatedDashboard({
                   </div>
                 )}
 
-                {userRole === "admin" && activeTab === "categories_panel" && (
+                {(userRole === "admin" || userRole === "menu_lister") && activeTab === "categories_panel" && (
                   <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 text-left" id="dashboard-categories-control">
                     <div className="xl:col-span-5 bg-[#121212] border border-neutral-850 p-6 space-y-4 font-mono">
                       <div>
@@ -3218,7 +3338,7 @@ export default function DedicatedDashboard({
                   </div>
                 )}
 
-                {userRole === "admin" && activeTab === "images_panel" && (
+                {(userRole === "admin" || userRole === "menu_lister") && activeTab === "images_panel" && (
                   <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 text-left" id="dashboard-images-control">
                     {/* Add Image Form */}
                     <div className="xl:col-span-4 bg-[#121212] border border-neutral-850 p-6 space-y-4 font-mono">
@@ -3758,7 +3878,7 @@ export default function DedicatedDashboard({
                     <div className="bg-amber-900/10 border border-amber-800/30 p-3 text-[11px] font-mono text-amber-500/90 leading-relaxed flex items-start gap-2">
                       <span className="text-sm">⚠️</span>
                       <div>
-                        <span className="font-bold">Operational Scope Info:</span> We only operate in Lagos Island neighborhoods (Ikoyi, V.I., Lekki, Banana Island) and designated Mainland neighborhoods (Ikeja, Gbagada, etc.) to ensure rapid gourmet express delivery.
+                        <span className="font-bold">Operational Scope Info:</span> We only operate in Lagos Island neighborhoods (Ikoyi, V.I., Lekki, Banana Island) and designated Mainland neighborhoods (Ikeja, Gbagada, etc.) to ensure rapid express delivery.
                       </div>
                     </div>
 
@@ -3922,7 +4042,7 @@ export default function DedicatedDashboard({
                   </div>
                 )}
 
-                {userRole === "admin" && activeTab === "analytics_panel" && (
+                {(userRole === "admin" || userRole === "sales") && activeTab === "analytics_panel" && (
                   <AdminAnalyticsPanel />
                 )}
 
@@ -3930,11 +4050,11 @@ export default function DedicatedDashboard({
                   <RidersManagementPanel />
                 )}
 
-                {userRole === "admin" && activeTab === "support_panel" && (
+                {(userRole === "admin" || userRole === "sales") && activeTab === "support_panel" && (
                   <SupportManagementPanel />
                 )}
 
-                {userRole === "admin" && activeTab === "mysql_panel" && (
+                {(userRole === "admin" || userRole === "developer") && activeTab === "mysql_panel" && (
                   <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 text-left" id="dashboard-mysql-control">
                     
                     {/* Left Column: Connection Check and Schema Monitor */}

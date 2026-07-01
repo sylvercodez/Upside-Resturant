@@ -211,7 +211,7 @@ useEffect(() => {
         const userRef = doc(db, "users", user.uid);
         const emailLower = (user.email || "").toLowerCase().trim();
         const isAdminEmail = 
-          emailLower === "tosinotenaike3@gmail.com" || 
+          emailLower === "hello@mophethonline.com" || 
           emailLower === "tobi@gmail.com" || 
           emailLower === "mophethecommerce@gmail.com" ||
           emailLower === "mophethecommerce3@gmail.com" ||

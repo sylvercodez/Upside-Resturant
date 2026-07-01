@@ -59,6 +59,22 @@ service cloud.firestore {
           );
     }
 
+    function isMenuLister() {
+      return isSignedIn() 
+          && (
+            isAdmin()
+            || (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && getUserRole(request.auth.uid) == "menu_lister")
+          );
+    }
+
+    function isDeveloper() {
+      return isSignedIn() 
+          && (
+            isAdmin()
+            || (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && getUserRole(request.auth.uid) == "developer")
+          );
+    }
+
     function isValidOrder(data) {
       return data.userId is string 
           && data.userId.size() <= 128
@@ -163,8 +179,8 @@ service cloud.firestore {
       // Menus are publicly readable
       allow read, list: if true;
       
-      // Only admin or system can write custom menus
-      allow write, create, update, delete: if isAdmin() || isSystem();
+      // Only admin, menu lister, or system can write custom menus
+      allow write, create, update, delete: if isAdmin() || isMenuLister() || isSystem();
     }
 
     // Categories Collection Rules
@@ -172,8 +188,8 @@ service cloud.firestore {
       // Categories are publicly readable
       allow read, list: if true;
       
-      // Only admin or system can create, update, or delete categories
-      allow write, create, update, delete: if isAdmin() || isSystem();
+      // Only admin, menu lister, or system can create, update, or delete categories
+      allow write, create, update, delete: if isAdmin() || isMenuLister() || isSystem();
     }
 
     // Shipping Areas Collection Rules
@@ -187,8 +203,8 @@ service cloud.firestore {
       // Assets are publicly readable
       allow read, list: if true;
       
-      // Only admin can manage assets
-      allow write, create, update, delete: if isAdmin();
+      // Only admin or menu lister can manage assets
+      allow write, create, update, delete: if isAdmin() || isMenuLister();
     }
 
     // Payments Collection Rules: Validate payment document structures
@@ -245,8 +261,8 @@ service cloud.firestore {
       // Standard users can list their own orders (optimized, no exists/get lookups)
       allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
 
-      // Sales/Admin staff can list all orders
-      allow list: if isSales();
+      // Sales/Admin/Chef staff can list all orders
+      allow list: if isSales() || isChef();
       
       // Allow creation of order if the creator is the owner and the payload conforms to valid Order schemas
       allow create: if isSystem() || (
@@ -257,12 +273,14 @@ service cloud.firestore {
                     );
 
       // Allow updates to own orders, or admin/sales pipeline updates,
+      // or chef updating status to Prepping, In Oven, or Awaiting Pickup,
       // as well as unauthenticated updates by courier containing ONLY status and tracking coordinates
       allow update: if isSystem() || (
                     isSignedIn()
                     && (
                       (resource.data.userId == request.auth.uid && request.resource.data.userId == request.auth.uid && isValidOrder(request.resource.data))
                       || isSales()
+                      || (isChef() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt']) && (request.resource.data.status == "Prepping" || request.resource.data.status == "In Oven" || request.resource.data.status == "Awaiting Pickup"))
                     )
                     ) || (
                       // Unauthenticated rider can only update status, updatedAt, and tracking coordinates
@@ -296,12 +314,17 @@ service cloud.firestore {
 
     // Support Chats Rules
     match /support_chats/{chatId} {
-      allow read, write: if true;
+      // Allow only admin or sales to list all chats
+      allow list: if isAdmin() || isSales();
+      
+      // Allow anyone (including guests) to get or write their own chat if they have the ID
+      allow get, create, update: if true;
+      allow delete: if isAdmin();
       
       match /messages/{messageId} {
-        allow read, list: if true;
-        allow create: if isValidId(messageId) && isValidMessage(request.resource.data);
-        allow update, delete: if false; // support messages are immutable
+        // Anyone can read, list, or write messages inside the specific chat they have access to
+        allow read, list, create, update: if true;
+        allow delete: if isAdmin();
       }
     }
   }

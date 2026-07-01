@@ -200,7 +200,7 @@ export default function CartDrawer({
               phone: orderPayload?.phone || "",
               totalPrice: orderPayload?.totalPrice || 0,
               items: orderPayload?.items || [],
-              address: orderPayload?.address || "Boutique Self-Pickup",
+              address: orderPayload?.address || "Self-Pickup",
               status: orderPayload?.status || "Prepping",
               timestamp: orderPayload?.timestamp || Date.now(),
               type: orderPayload?.type || "delivery",
@@ -237,7 +237,7 @@ export default function CartDrawer({
                   verificationCode,
                   totalPrice: orderPayload?.totalPrice || 0,
                   items: orderPayload?.items || [],
-                  address: orderPayload?.address || "Boutique Self-Pickup",
+                  address: orderPayload?.address || "Self-Pickup",
                   phone: orderPayload?.phone || ""
                 })
               }).catch(err => console.error("Could not trigger email:", err));
@@ -434,7 +434,7 @@ export default function CartDrawer({
         throw new Error("Password must be at least 6 characters long to register.");
       }
       try {
-        setRegistrationMessage("Registering your premium user profile...");
+        setRegistrationMessage("Registering your user profile...");
         const userCredential = await createUserWithEmailAndPassword(auth, formData.email, checkoutPassword);
         if (formData.customerName) {
           await updateProfile(userCredential.user, {
@@ -490,7 +490,7 @@ export default function CartDrawer({
     });
 
     const promoStr = activePromo ? `Coupon applied: ${activePromo.code} (-₦${discountAmount.toLocaleString()})` : "Coupon: None";
-    const deliveryDetail = formData.type === "delivery" ? `Delivery Area: ${formData.area} (Fee: ₦${deliveryFee.toLocaleString()})\nAddress: ${formData.address}` : "Method: Boutique Self-Pickup at Lekki sanctuary";
+    const deliveryDetail = formData.type === "delivery" ? `Delivery Area: ${formData.area} (Fee: ₦${deliveryFee.toLocaleString()})\nAddress: ${formData.address}` : "Method: Self-Pickup at Lekki";
 
     const text = `*UPSIDE RESTAURANT & CAFÉ — WOOCOMMERCE ORDER*\n` +
       `==============================\n` +
@@ -524,7 +524,7 @@ export default function CartDrawer({
       phone: formData.phone,
       totalPrice: finalTotal,
       items: cartItems.map(item => ({ name: item.name, quantity: item.quantity, price: item.price })),
-      address: formData.type === "delivery" ? `${formData.address}, ${formData.area}` : "Boutique Self-Pickup",
+      address: formData.type === "delivery" ? `${formData.address}, ${formData.area}` : "Self-Pickup",
       status: "Prepping",
       paymentMethod: "whatsapp",
       paymentStatus: "waiting for payment",
@@ -547,7 +547,7 @@ export default function CartDrawer({
             phone: formData.phone,
             totalPrice: finalTotal,
             items: JSON.stringify(cartItems.map(item => ({ name: item.name, quantity: item.quantity, price: item.price }))),
-            address: formData.type === "delivery" ? `${formData.address}, ${formData.area}` : "Boutique Self-Pickup",
+            address: formData.type === "delivery" ? `${formData.address}, ${formData.area}` : "Self-Pickup",
             status: "Prepping",
             paymentStatus: "waiting for payment",
             paymentMethod: "whatsapp",
@@ -614,7 +614,7 @@ export default function CartDrawer({
       phone: formData.phone,
       totalPrice: finalTotal,
       items: cartItems.map(item => ({ name: item.name, quantity: item.quantity, price: item.price })),
-      address: formData.type === "delivery" ? `${formData.address}, ${formData.area}` : "Boutique Self-Pickup",
+      address: formData.type === "delivery" ? `${formData.address}, ${formData.area}` : "Self-Pickup",
       status: "Prepping",
       paymentMethod: "opay",
       paymentStatus: "PENDING",
@@ -776,7 +776,7 @@ export default function CartDrawer({
       phone: formData.phone,
       totalPrice: finalTotal,
       items: cartItems.map(item => ({ name: item.name, quantity: item.quantity, price: item.price })),
-      address: formData.type === "delivery" ? `${formData.address}, ${formData.area}` : "Boutique Self-Pickup",
+      address: formData.type === "delivery" ? `${formData.address}, ${formData.area}` : "Self-Pickup",
       status: "Prepping",
       timestamp: Date.now(),
       type: formData.type,
@@ -797,7 +797,7 @@ export default function CartDrawer({
             phone: formData.phone,
             totalPrice: finalTotal,
             items: JSON.stringify(cartItems.map(item => ({ name: item.name, quantity: item.quantity, price: item.price }))),
-            address: formData.type === "delivery" ? `${formData.address}, ${formData.area}` : "Boutique Self-Pickup",
+            address: formData.type === "delivery" ? `${formData.address}, ${formData.area}` : "Self-Pickup",
             status: "Prepping",
             paymentStatus: "PENDING",
             verificationCode
@@ -827,7 +827,7 @@ export default function CartDrawer({
           verificationCode,
           totalPrice: finalTotal,
           items: cartItems.map(item => ({ name: item.name, quantity: item.quantity, price: item.price })),
-          address: formData.type === "delivery" ? `${formData.address}, ${formData.area}` : "Boutique Self-Pickup",
+          address: formData.type === "delivery" ? `${formData.address}, ${formData.area}` : "Self-Pickup",
           phone: formData.phone || ""
         })
       }).catch(err => console.error("Could not trigger email:", err));
@@ -1016,7 +1016,7 @@ export default function CartDrawer({
                   <ShoppingCart className="w-12 h-12 text-neutral-300 mx-auto stroke-1" />
                   <p className="text-sm font-mono text-neutral-500">Your shopping cart is empty.</p>
                   <p className="text-xs text-neutral-600 max-w-sm mx-auto leading-normal">
-                    Experience Upside's luxury culinary excellence. Browse our single-origin coffee brew bars, artisanal brioche burgers, and masterfully grilled steaks.
+                    Welcome to Upside. Browse our coffee, burgers, and masterfully grilled steaks.
                   </p>
                   <button
                     onClick={onClose}
@@ -1294,7 +1294,7 @@ export default function CartDrawer({
                       }`}
                     >
                       <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="3" width="15" height="13" /><polygon points="16 8 20 8 23 11 23 16 16 16 16 8" /><circle cx="5.5" cy="18.5" r="2.5" /><circle cx="18.5" cy="18.5" r="2.5" /></svg>
-                      <span>Luxury Delivery</span>
+                      <span>Delivery</span>
                     </button>
                     <button
                       type="button"
@@ -1304,7 +1304,7 @@ export default function CartDrawer({
                       }`}
                     >
                       <Store className="w-3.5 h-3.5" />
-                      <span>Boutique Pickup</span>
+                      <span>Pickup</span>
                     </button>
                   </div>
 
@@ -1397,7 +1397,7 @@ export default function CartDrawer({
                           </button>
                         </div>
                         <p className="text-[10px] text-neutral-600 font-sans leading-relaxed">
-                          Provide a password to register your email and instantly create your premium lounge account, securely saving your order transactions and tracking histories.
+                          Provide a password to register your email and create an account to save your order transactions and tracking histories.
                         </p>
                         <div className="space-y-1.5 text-left">
                           <label className="text-[10px] text-neutral-700 font-mono block font-bold">Desired Account Password</label>
@@ -1471,9 +1471,9 @@ export default function CartDrawer({
                       </div>
                     ) : (
                       <div className="p-4 bg-amber-500/5 border border-amber-500/10 rounded-xl space-y-1.5 animate-fadeIn">
-                        <span className="text-[10px] font-mono text-[#ff6b00] font-extrabold uppercase">📍 Bayside Sanctuary Lounge Pickup</span>
+                        <span className="text-[10px] font-mono text-[#ff6b00] font-extrabold uppercase">📍 Pickup Location</span>
                         <p className="text-[11px] text-neutral-600 leading-relaxed font-sans font-semibold">
-                          Your premium order will be freshly prepped and await your collection directly at the VIP reception desk of **Upside Lekki Bayside sanctuary Lounge**. No delivery charges applied.
+                          Your order will be prepared and await your collection at Upside Lekki. No delivery charges applied.
                         </p>
                       </div>
                     )}
@@ -1553,7 +1553,7 @@ export default function CartDrawer({
                               {formData.type === "delivery" ? (
                                 <span>Lagos Delivery: ₦{deliveryFee.toLocaleString()}</span>
                               ) : (
-                                <span className="text-amber-600 uppercase text-[9px] font-bold">Boutique Pickup (Free)</span>
+                                <span className="text-amber-600 uppercase text-[9px] font-bold">Pickup (Free)</span>
                               )}
                             </td>
                           </tr>
@@ -1648,7 +1648,7 @@ export default function CartDrawer({
                         formData.paymentMethod === "whatsapp" ? "max-h-24 mt-3" : "max-h-0"
                       }`}>
                         <p className="text-[10.5px] text-neutral-600 leading-relaxed font-sans border-t border-emerald-600/10 pt-2.5">
-                          Review complete details and compile an official receipt invoice routed inside WhatsApp to our concierge desk, useful for direct boutique collection.
+                          Review details and compile a receipt for WhatsApp ordering, useful for direct collection.
                         </p>
                       </div>
                     </div>
@@ -1672,7 +1672,7 @@ export default function CartDrawer({
 
                   {/* Standard secure SSL guarantee bar */}
                   <p className="text-[9px] font-mono text-neutral-500 leading-normal">
-                    Your luxury order transaction forms are secured under WordPress SSL end-to-end security measures. Customer information handles in accordance with fine hospitality standards.
+                    Your order details are secure. Customer information is handled in accordance with privacy standards.
                   </p>
 
                 </div>
@@ -1689,10 +1689,10 @@ export default function CartDrawer({
               </div>
 
               <div className="space-y-2">
-                <h4 className="text-base font-serif italic text-amber-600 font-medium">A Taste of Absolute Splendor.</h4>
+                <h4 className="text-base font-serif italic text-amber-600 font-medium">Your order is confirmed.</h4>
                 <h3 className="text-xl font-sans text-neutral-900 tracking-widest uppercase font-bold">ORDER RECEIVED</h3>
                 <p className="text-xs text-neutral-600 font-mono leading-relaxed">
-                  Thank you. Your order has been received and is now being processed by our master chefs inside the main kitchen of our Upside Lekki sanctuary.
+                  Thank you. Your order has been received and is now being processed by our kitchen team at Upside Lekki.
                 </p>
               </div>
 
@@ -1704,7 +1704,7 @@ export default function CartDrawer({
                 </div>
                 <div className="flex justify-between text-[11px] text-neutral-500">
                   <span>Guest Name:</span>
-                  <span className="text-black font-semibold">{savedCustomerName || formData.customerName || "Premium Guest"}</span>
+                  <span className="text-black font-semibold">{savedCustomerName || formData.customerName || "Guest"}</span>
                 </div>
                 {(savedEmail || formData.email) && (
                   <div className="flex justify-between text-[11px] text-neutral-500">
@@ -1730,7 +1730,7 @@ export default function CartDrawer({
                 </div>
                 <div className="flex justify-between text-[11px] text-neutral-500">
                   <span>Delivery Gateway:</span>
-                  <span className="text-black font-semibold">Lagos Luxury Express</span>
+                  <span className="text-black font-semibold">Standard Delivery</span>
                 </div>
                 <div className="flex justify-between text-[11px] text-neutral-500 border-t border-neutral-200 pt-2 font-bold text-black animate-pulse">
                   <span>Grand Total Paid:</span>
@@ -1757,7 +1757,7 @@ export default function CartDrawer({
                 className="px-8 py-4 bg-black text-white font-bold text-xs tracking-widest font-mono uppercase hover:bg-neutral-900 transition-colors cursor-pointer w-full text-center shadow-md"
                 id="cart-reset-action-btn"
               >
-                Return to Sanctuary Lobby
+                Return to Main Page
               </button>
             </div>
           )}

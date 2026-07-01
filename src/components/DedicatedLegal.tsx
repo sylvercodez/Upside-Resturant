@@ -116,7 +116,7 @@ export default function DedicatedLegal({ onBackToLobby, initialTab = "terms" }: 
                   Have a compliance query or reservation concern? Connect with the legal team at:
                 </p>
                 <p className="font-mono font-bold text-neutral-900">
-                  legal@upsidelagos.com
+                  hello@mophethonline.com
                 </p>
               </div>
             </div>
@@ -162,7 +162,7 @@ export default function DedicatedLegal({ onBackToLobby, initialTab = "terms" }: 
                       3. Digital Billing & Non-Refundable Deposit Guarantees
                     </h3>
                     <p>
-                      All electronic transactions are processed securely through certified integrations with <strong>OPay Nigeria</strong> and <strong>Paystack</strong>. Table reservation deposits:
+                      All electronic transactions are processed securely through certified integrations with <strong>OPay Nigeria</strong>. Table reservation deposits:
                     </p>
                     <ul className="list-disc pl-5 space-y-1.5 font-mono text-neutral-500 text-xs">
                       <li>Standard Table Bookings require a commitment charge of ₦10,000, 100% redeemable against food and beverages.</li>
@@ -239,7 +239,7 @@ export default function DedicatedLegal({ onBackToLobby, initialTab = "terms" }: 
                       <li>Transaction logs: Order contents, bills paid, transaction dates, and custom dining preferences.</li>
                     </ul>
                     <p>
-                      We do not store complete raw credit cards, pins, or banking keys on our host machines. All payment operations are proxied via compliant external gateways (OPay and Paystack), protecting your credentials.
+                      We do not store complete raw credit cards, pins, or banking keys on our host machines. All payment operations are proxied via compliant external gateways (OPay), protecting your credentials.
                     </p>
                   </section>
 
@@ -272,7 +272,7 @@ export default function DedicatedLegal({ onBackToLobby, initialTab = "terms" }: 
                       5. Your Rights & Erasure Policies
                     </h3>
                     <p>
-                      You have full sovereignty over your metrics registered in our database. You can request a digital ledger export or initiate a request to purge your personal information from our database completely. Direct all erase queries to <strong className="text-neutral-900">privacy@upsidelagos.com</strong>.
+                      You have full sovereignty over your metrics registered in our database. You can request a digital ledger export or initiate a request to purge your personal information from our database completely. Direct all erase queries to <strong className="text-neutral-900">hello@mophethonline.com</strong>.
                     </p>
                   </section>
 

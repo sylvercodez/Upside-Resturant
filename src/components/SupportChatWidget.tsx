@@ -115,6 +115,17 @@ export default function SupportChatWidget({ currentUser }: SupportChatWidgetProp
     }
   }, [messages, isOpen]);
 
+  const handleResetSession = () => {
+    localStorage.removeItem("upside_support_chat_id");
+    localStorage.removeItem("upside_support_chat_started");
+    setHasStarted(false);
+    setMessages([]);
+    setError(null);
+    const newChatId = "support_" + Date.now() + "_" + Math.random().toString(36).substring(2, 9);
+    localStorage.setItem("upside_support_chat_id", newChatId);
+    setChatId(newChatId);
+  };
+
   const handleStartChat = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim() || !email.trim()) return;
@@ -148,9 +159,9 @@ export default function SupportChatWidget({ currentUser }: SupportChatWidgetProp
       // 3. Mark session as started
       localStorage.setItem("upside_support_chat_started", "true");
       setHasStarted(true);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Error launching support chat:", err);
-      setError("Unable to initialize chat session. Connection blocked.");
+      setError(`Unable to initialize chat session: ${err?.message || err}`);
     } finally {
       setIsSending(false);
     }
@@ -193,9 +204,9 @@ export default function SupportChatWidget({ currentUser }: SupportChatWidgetProp
 
       // Provide automated intelligent simulation responses for enhanced interactivity
       triggerSimulatedSupportReply(cleanText);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Error dispatching support message:", err);
-      setError("Message transmission failed.");
+      setError(`Message transmission failed: ${err?.message || err}`);
     } finally {
       setIsSending(false);
     }
@@ -331,9 +342,18 @@ export default function SupportChatWidget({ currentUser }: SupportChatWidgetProp
                   </div>
 
                   {error && (
-                    <div className="p-3 bg-red-950/20 border border-red-900/30 text-red-500 text-[10px] font-mono flex items-center gap-1.5">
-                      <ShieldAlert className="w-4 h-4 flex-shrink-0" />
-                      <span>{error}</span>
+                    <div className="p-3 bg-red-950/20 border border-red-900/30 text-red-500 text-[10px] font-mono flex flex-col gap-1.5">
+                      <div className="flex items-center gap-1.5">
+                        <ShieldAlert className="w-4 h-4 flex-shrink-0" />
+                        <span className="break-all">{error}</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleResetSession}
+                        className="text-left text-[9px] underline text-amber-500 hover:text-amber-400 mt-1 cursor-pointer"
+                      >
+                        Reset Connection & Try Again
+                      </button>
                     </div>
                   )}
 
@@ -405,6 +425,21 @@ export default function SupportChatWidget({ currentUser }: SupportChatWidgetProp
 
               {/* Input section */}
               <div className="border-t border-neutral-800 bg-neutral-900 p-2.5">
+                {error && (
+                  <div className="p-2 mb-2 bg-red-950/25 border border-red-900/30 text-red-500 text-[9px] font-mono flex flex-col gap-1">
+                    <div className="flex items-center gap-1">
+                      <ShieldAlert className="w-3.5 h-3.5 shrink-0" />
+                      <span className="break-words">{error}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleResetSession}
+                      className="text-left text-[8px] underline text-amber-500 hover:text-amber-400 cursor-pointer"
+                    >
+                      Reset chat session
+                    </button>
+                  </div>
+                )}
                 <form onSubmit={handleSendMessage} className="flex gap-2">
                   <input
                     type="text"

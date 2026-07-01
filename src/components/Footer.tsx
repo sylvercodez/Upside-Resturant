@@ -59,7 +59,7 @@ export default function Footer({ onScrollToElement, onOpenReservations, branding
             </p>
             <p className="flex items-center gap-2">
               <Mail className="w-3.5 h-3.5 text-amber-500" />
-              <span className="text-neutral-600 hover:text-amber-600 hover:underline transition-all cursor-pointer">concierge@upsidelagos.com</span>
+              <span className="text-neutral-600 hover:text-amber-600 hover:underline transition-all cursor-pointer">hello@mophethonline.com</span>
             </p>
           </div>
           
@@ -393,7 +393,7 @@ export default function Footer({ onScrollToElement, onOpenReservations, branding
         <div className="flex gap-6 uppercase tracking-widest text-[9px] text-neutral-500">
           <span className="flex items-center gap-1.5">
             <Shield className="w-3.5 h-3.5 text-amber-500" />
-            <span>Paystack Secured Client</span>
+            <span>Secure Checkout</span>
           </span>
           <span className="flex items-center gap-1.5">
             <Coffee className="w-3.5 h-3.5 text-amber-500" />

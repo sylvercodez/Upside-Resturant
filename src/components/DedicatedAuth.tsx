@@ -540,9 +540,9 @@ export default function DedicatedAuth({
     let targetName = "";
     
     if (role === "admin") {
-      targetEmail = "tosinotenaike3@gmail.com";
+      targetEmail = "hello@mophethonline.com";
       targetPassword = "admin123456";
-      targetName = "Tosin Otenaike";
+      targetName = "Mopheth Admin";
     } else if (role === "chef") {
       targetEmail = "chefmonitor@gmail.com";
       targetPassword = "chef123456";
