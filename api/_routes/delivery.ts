@@ -657,7 +657,7 @@ deliveryRouter.post("/orders/start-trip", async (req, res) => {
     const orderData = rows[0];
  
     await querySql(
-      "UPDATE orders SET status = ?, riderId = ?, riderName = ?, riderPhone = ?, updatedAt = ? WHERE id = ?",
+      "UPDATE orders SET status = ?, assignedRiderId = ?, assignedRiderName = ?, assignedRiderPhone = ?, updatedAt = ? WHERE id = ?",
       ["Out for Delivery", riderId || null, riderName || null, riderPhone || null, new Date().toISOString(), orderId]
     );
  
@@ -788,5 +788,74 @@ deliveryRouter.post("/orders/start-trip", async (req, res) => {
   } catch (err: any) {
     console.error("Trip start error:", err);
     res.status(500).json({ error: "Failed to initiate delivery trip: " + err.message });
+  }
+});
+
+// 8. SEND CUSTOM EMAIL TO CUSTOMER
+deliveryRouter.post("/notify/custom-email", async (req, res) => {
+  try {
+    const { email, customerName, subject, message } = req.body;
+    if (!email || !subject || !message) {
+      return res.status(400).json({ error: "Missing email, subject, or message body." });
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+    const transporter = getMailTransporter();
+    
+    if (transporter) {
+      const computedFrom = getFromEmailAddress();
+      const mailOptions = {
+        from: computedFrom,
+        to: cleanEmail,
+        subject: subject,
+        html: `
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <meta charset="utf-8">
+            <title>${subject}</title>
+            <style>
+              body { font-family: sans-serif; background-color: #fcfbf9; color: #1c1917; margin: 0; padding: 0; }
+              .container { max-width: 560px; margin: 30px auto; background-color: #ffffff; border: 1px solid #e7e5e4; padding: 30px; border-radius: 4px; }
+              .header { text-align: center; border-bottom: 1px solid #f1f0ee; padding-bottom: 20px; }
+              .brand-title { font-size: 20px; font-weight: bold; letter-spacing: 0.1em; color: #78350f; text-transform: uppercase; }
+              .content { padding: 25px 0; font-size: 14px; line-height: 1.6; color: #1c1917; }
+              .footer { font-size: 11px; text-align: center; color: #a8a29e; border-top: 1px solid #f1f0ee; padding-top: 20px; margin-top: 20px; }
+            </style>
+          </head>
+          <body>
+            <div class="container">
+              <div class="header">
+                <div class="brand-title">UPSIDE RESTAURANT & CAFÉ</div>
+                <p style="font-size: 11px; color: #78350f; text-transform: uppercase; margin-top: 5px;">Sanctuary of Artisanal Gastronomy</p>
+              </div>
+              <div class="content">
+                <p>Dear ${customerName || "Customer"},</p>
+                <div style="white-space: pre-wrap; margin-top: 15px;">${message}</div>
+              </div>
+              <div class="footer">
+                <p>© 2026 Upside Restaurant & Café. All rights reserved.</p>
+                <p>Lagos, Nigeria</p>
+              </div>
+            </div>
+          </body>
+          </html>
+        `
+      };
+
+      await transporter.sendMail(mailOptions);
+      console.log(`[CUSTOM EMAIL] Successfully dispatched custom email to: ${cleanEmail}`);
+      return res.json({ success: true, message: "Custom email sent successfully!" });
+    } else {
+      console.warn("[CUSTOM EMAIL] RESEND_API_KEY or transporter is not available.");
+      return res.json({ 
+        success: true, 
+        simulated: true, 
+        message: "Email simulated successfully (transporter is not configured/bypassed in development)." 
+      });
+    }
+  } catch (err: any) {
+    console.error("Custom email notify fault:", err);
+    res.status(500).json({ error: "Failed to dispatch custom email: " + err.message });
   }
 });

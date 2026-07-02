@@ -33,7 +33,11 @@ import {
   Trash2,
   Upload,
   X,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Mail,
+  Send,
+  CheckSquare,
+  AlertCircle
 } from "lucide-react";
 import { collection, query, updateDoc, doc, onSnapshot, setDoc, deleteDoc } from "firebase/firestore";
 import { db, handleFirestoreError, OperationType } from "../firebase";
@@ -110,6 +114,14 @@ export default function DedicatedDashboard({
   const [isVerifyingOpayId, setIsVerifyingOpayId] = useState<string | null>(null);
   const [whatsappSearchText, setWhatsappSearchText] = useState("");
   const [whatsappStatusFilter, setWhatsappStatusFilter] = useState<string>("all");
+
+  // Custom Email to Customer Modal States
+  const [emailModalOrder, setEmailModalOrder] = useState<any | null>(null);
+  const [emailSubject, setEmailSubject] = useState("");
+  const [emailMessage, setEmailMessage] = useState("");
+  const [isSendingEmail, setIsSendingEmail] = useState(false);
+  const [emailSuccessMessage, setEmailSuccessMessage] = useState("");
+  const [emailErrorMessage, setEmailErrorMessage] = useState("");
 
   // Form states to create customized menu items
   const [newMenuData, setNewMenuData] = useState({
@@ -1481,6 +1493,44 @@ export default function DedicatedDashboard({
     }
   };
 
+  // Handler to dispatch custom email to the customer
+  const handleSendEmail = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!emailModalOrder || !emailSubject.trim() || !emailMessage.trim()) return;
+
+    setIsSendingEmail(true);
+    setEmailSuccessMessage("");
+    setEmailErrorMessage("");
+
+    try {
+      const response = await fetch(getApiUrl("/api/delivery/notify/custom-email"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: emailModalOrder.email,
+          customerName: emailModalOrder.customerName,
+          subject: emailSubject,
+          message: emailMessage,
+        }),
+      });
+
+      const data = await response.json();
+      if (response.ok && data.success) {
+        setEmailSuccessMessage(data.message || "Email dispatched successfully!");
+        setTimeout(() => {
+          setEmailModalOrder(null);
+        }, 1500);
+      } else {
+        setEmailErrorMessage(data.error || "Failed to send email. Check SMTP/Resend API configuration.");
+      }
+    } catch (err: any) {
+      console.error("Error dispatching custom email:", err);
+      setEmailErrorMessage(err.message || "Failed to communicate with notification API.");
+    } finally {
+      setIsSendingEmail(false);
+    }
+  };
+
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
 
   // Handle deleting of menu items (only allowed to admin)
@@ -2662,14 +2712,18 @@ export default function DedicatedDashboard({
                                                 </div>
                                                 
                                                 {/* Customer Chat Helper */}
-                                                <a
-                                                  href={`https://wa.me/${ord.phone?.replace(/[^0-9]/g, "") || "2349114646767"}`}
-                                                  target="_blank"
-                                                  rel="noreferrer"
-                                                  className="w-full py-1 bg-neutral-900 border border-neutral-800 text-[8.5px] text-neutral-350 font-bold uppercase tracking-wider text-center block hover:text-white"
+                                                <button
+                                                  onClick={() => {
+                                                    setEmailModalOrder(ord);
+                                                    setEmailSubject(`Regarding your Upside Restaurant order #${ord.id.substring(6) || ord.id}`);
+                                                    setEmailMessage(`Hi ${ord.customerName || "Customer"},\n\nWe are reaching out to you regarding your order #${ord.id.substring(6) || ord.id}.\n\n`);
+                                                    setEmailSuccessMessage("");
+                                                    setEmailErrorMessage("");
+                                                  }}
+                                                  className="w-full py-1 bg-neutral-900 border border-neutral-800 text-[8.5px] text-neutral-350 font-bold uppercase tracking-wider text-center block hover:text-amber-500 hover:border-amber-500 transition-colors cursor-pointer"
                                                 >
-                                                  💬 Chat with Customer
-                                                </a>
+                                                  📧 Email Customer
+                                                </button>
                                               </div>
                                             </div>
                                           )}
@@ -4800,6 +4854,135 @@ export default function DedicatedDashboard({
             <p className="text-[9px] text-neutral-600 font-sans">
               🔒 Safe identity encryption verified under standard security guidelines.
             </p>
+          </div>
+        )}
+
+        {/* 📧 CUSTOM EMAIL DESK MODAL POPUP */}
+        {emailModalOrder && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs animate-fadeIn" id="custom-email-desk-modal">
+            <div className="bg-[#121212] border border-neutral-800 w-full max-w-xl max-h-[90vh] flex flex-col shadow-2xl rounded-none text-left">
+              
+              {/* Header */}
+              <div className="p-5 border-b border-neutral-850 flex justify-between items-center bg-neutral-900">
+                <div className="space-y-1">
+                  <h3 className="text-sm font-mono font-bold tracking-widest text-amber-500 uppercase flex items-center gap-2">
+                    <Mail className="w-4 h-4 text-amber-500" />
+                    <span>Email Dispatch Desk</span>
+                  </h3>
+                  <p className="text-[10px] text-neutral-400 font-sans">
+                    Direct client messaging channel. Real-time SMTP or simulation fallback delivery.
+                  </p>
+                </div>
+                <button 
+                  type="button"
+                  onClick={() => setEmailModalOrder(null)}
+                  className="p-1.5 border border-neutral-800 hover:border-neutral-600 text-neutral-400 hover:text-white transition-all cursor-pointer font-bold text-xs"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Form */}
+              <form onSubmit={handleSendEmail} className="flex-1 overflow-y-auto p-6 space-y-4">
+                
+                {/* Recipient Details */}
+                <div className="grid grid-cols-2 gap-4 bg-neutral-950 p-4 border border-neutral-900">
+                  <div>
+                    <label className="block text-[9px] font-mono tracking-wider uppercase text-neutral-500 mb-1">
+                      Customer Name
+                    </label>
+                    <p className="text-xs font-bold text-neutral-200">
+                      {emailModalOrder.customerName || "N/A"}
+                    </p>
+                  </div>
+                  <div>
+                    <label className="block text-[9px] font-mono tracking-wider uppercase text-neutral-500 mb-1">
+                      Destination E-mail
+                    </label>
+                    <p className="text-xs font-mono font-bold text-amber-500 truncate">
+                      {emailModalOrder.email || "N/A"}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Subject */}
+                <div className="space-y-1.5">
+                  <label className="block text-[10px] font-mono tracking-wider uppercase text-neutral-400">
+                    Subject Line
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={emailSubject}
+                    onChange={(e) => setEmailSubject(e.target.value)}
+                    placeholder="e.g. Update regarding your premium gourmet menu selection"
+                    className="w-full bg-neutral-950 border border-neutral-800 font-sans text-xs p-3 focus:outline-none focus:border-amber-500 text-white"
+                    disabled={isSendingEmail}
+                  />
+                </div>
+
+                {/* Message Body */}
+                <div className="space-y-1.5">
+                  <label className="block text-[10px] font-mono tracking-wider uppercase text-neutral-400">
+                    Email Content (Markdown/HTML structure will be automatically formatted)
+                  </label>
+                  <textarea
+                    required
+                    rows={8}
+                    value={emailMessage}
+                    onChange={(e) => setEmailMessage(e.target.value)}
+                    placeholder="Type your official message details here..."
+                    className="w-full bg-neutral-950 border border-neutral-800 font-sans text-xs p-3 focus:outline-none focus:border-amber-500 text-white leading-relaxed resize-none"
+                    disabled={isSendingEmail}
+                  />
+                </div>
+
+                {/* Status Signals */}
+                {emailSuccessMessage && (
+                  <div className="p-3 bg-emerald-950/20 border border-emerald-900/30 text-emerald-400 text-xs font-mono flex items-center gap-2">
+                    <CheckSquare className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span>{emailSuccessMessage}</span>
+                  </div>
+                )}
+
+                {emailErrorMessage && (
+                  <div className="p-3 bg-red-950/20 border border-red-900/30 text-red-500 text-xs font-mono flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
+                    <span>{emailErrorMessage}</span>
+                  </div>
+                )}
+
+                {/* Actions Footer */}
+                <div className="pt-2 border-t border-neutral-850 flex items-center justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setEmailModalOrder(null)}
+                    className="px-4 py-2.5 border border-neutral-800 text-neutral-400 hover:text-white hover:border-neutral-700 font-mono text-[10px] tracking-wider uppercase transition-colors cursor-pointer"
+                    disabled={isSendingEmail}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSendingEmail || !emailSubject.trim() || !emailMessage.trim()}
+                    className="px-5 py-2.5 bg-amber-500 hover:bg-amber-600 text-black font-mono text-[10px] font-bold tracking-wider uppercase transition-colors cursor-pointer disabled:opacity-40 flex items-center gap-2"
+                  >
+                    {isSendingEmail ? (
+                      <>
+                        <Clock className="w-3.5 h-3.5 animate-spin" />
+                        <span>Sending...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Send className="w-3.5 h-3.5" />
+                        <span>Dispatch Email</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+
+              </form>
+            </div>
           </div>
         )}
       </div>

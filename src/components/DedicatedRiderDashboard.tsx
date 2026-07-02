@@ -49,8 +49,11 @@ function RiderGoogleOrderMap({
     polylinesRef.current.forEach(p => p.setMap(null));
     polylinesRef.current = [];
 
+    const originLat = (isTracking && riderLat !== null) ? riderLat : kitchenLat;
+    const originLng = (isTracking && riderLng !== null) ? riderLng : kitchenLng;
+
     routesLib.Route.computeRoutes({
-      origin: { lat: kitchenLat, lng: kitchenLng },
+      origin: { lat: originLat, lng: originLng },
       destination: { lat: orderLat, lng: orderLng },
       travelMode: "DRIVING",
       fields: ["path", "viewport"],
@@ -88,7 +91,7 @@ function RiderGoogleOrderMap({
     return () => {
       polylinesRef.current.forEach(p => p.setMap(null));
     };
-  }, [routesLib, map, orderLat, orderLng]);
+  }, [routesLib, map, orderLat, orderLng, isTracking, riderLat, riderLng]);
 
   return (
     <>
