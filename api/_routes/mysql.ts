@@ -281,6 +281,8 @@ mysqlRouter.post("/match-menu-images", async (req: any, res: any) => {
       }
     }
 
+    const matchedMenuIds = new Set<string>();
+
     for (const asset of assets) {
       const normAsset = normalize(asset.name);
 
@@ -303,6 +305,8 @@ mysqlRouter.post("/match-menu-images", async (req: any, res: any) => {
       });
 
       for (const m of matchedMenus) {
+        matchedMenuIds.add(m.id);
+
         // Skip updating if it already has the identical image URL
         if (m.image === asset.url) continue;
 
@@ -345,9 +349,47 @@ mysqlRouter.post("/match-menu-images", async (req: any, res: any) => {
       }
     }
 
+    // Now handle unmatched menus in MySQL & Firestore - set their image to 'none'
+    let unmatchedUpdateCount = 0;
+    for (const m of menus) {
+      if (!matchedMenuIds.has(m.id)) {
+        if (m.image !== "none") {
+          // 1. Update MySQL to 'none'
+          await querySql("UPDATE menus SET image = ?, updatedAt = ? WHERE id = ?", [
+            "none",
+            new Date().toISOString(),
+            m.id
+          ]);
+
+          // 2. Update Firestore to 'none' if available
+          if (fdb) {
+            try {
+              const menuRef = fdb.collection("menus").doc(m.id);
+              const docSnap = await menuRef.get();
+              if (docSnap.exists) {
+                await menuRef.update({
+                  image: "none",
+                  updatedAt: new Date().toISOString()
+                });
+              } else {
+                await menuRef.set({
+                  ...m,
+                  image: "none",
+                  updatedAt: new Date().toISOString()
+                });
+              }
+            } catch (firestoreUnmatchedErr: any) {
+              console.warn(`[MATCH ROUTE] Failed to update Firestore to none for unmatched menu ID ${m.id}:`, firestoreUnmatchedErr.message);
+            }
+          }
+          unmatchedUpdateCount++;
+        }
+      }
+    }
+
     return res.json({
       success: true,
-      message: `Successfully matched and updated ${updates.length} menu items.`,
+      message: `Successfully matched and updated ${updates.length} menu items. Set ${unmatchedUpdateCount} unmatched menu items to 'none'.`,
       updates
     });
   } catch (err: any) {
