@@ -154,7 +154,6 @@ export default function HomeReservation() {
                         <option value="18:00">06:00 PM (Golden Dinner Slot)</option>
                         <option value="19:30">07:30 PM (Vanguard Club Dining)</option>
                         <option value="21:00">09:00 PM (Late Night Grills)</option>
-                        <option value="22:30">10:30 PM (Nightcap Session)</option>
                       </select>
                     </div>
 

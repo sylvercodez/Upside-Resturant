@@ -192,7 +192,7 @@ export default function AboutAndReviews({ onReadMoreExperience, onViewMenu }: Ab
             </div>
             <div className="border border-neutral-200 p-4 bg-neutral-50 shadow-sm">
               <span className="text-xs text-neutral-500 font-mono">High Energy Fine Dining</span>
-              <p className="text-xs text-neutral-900 font-mono mt-1">Daily 05:00 PM — 02:00 AM</p>
+              <p className="text-xs text-neutral-900 font-mono mt-1">Daily 05:00 PM — 10:00 PM</p>
             </div>
           </div>
 

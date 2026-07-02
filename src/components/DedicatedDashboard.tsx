@@ -1154,7 +1154,8 @@ export default function DedicatedDashboard({
               totalPrice: order.totalPrice,
               items: order.items || [],
               address: order.address,
-              phone: order.phone || ""
+              phone: order.phone || "",
+              paymentStatus: "paid"
             })
           }).then(res => {
             if (res.ok) {

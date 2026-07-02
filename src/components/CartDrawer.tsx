@@ -238,7 +238,8 @@ export default function CartDrawer({
                   totalPrice: orderPayload?.totalPrice || 0,
                   items: orderPayload?.items || [],
                   address: orderPayload?.address || "Self-Pickup",
-                  phone: orderPayload?.phone || ""
+                  phone: orderPayload?.phone || "",
+                  paymentStatus: "PAID"
                 })
               }).catch(err => console.error("Could not trigger email:", err));
             }
@@ -828,7 +829,9 @@ export default function CartDrawer({
           totalPrice: finalTotal,
           items: cartItems.map(item => ({ name: item.name, quantity: item.quantity, price: item.price })),
           address: formData.type === "delivery" ? `${formData.address}, ${formData.area}` : "Self-Pickup",
-          phone: formData.phone || ""
+          phone: formData.phone || "",
+          paymentStatus: "unpaid",
+          paymentMethod: formData.paymentMethod || "cash"
         })
       }).catch(err => console.error("Could not trigger email:", err));
     }

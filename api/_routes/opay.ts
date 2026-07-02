@@ -470,6 +470,27 @@ async function verifyOpayPayment(reference: string) {
             });
             console.log(`[verifyOpayPayment] Successfully updated status of existing order Ref: ${reference} to paid`);
           }
+
+          // Trigger order paid notification to chefs and admins
+          const localPort = process.env.PORT || 3000;
+          fetch(`http://localhost:${localPort}/api/delivery/notify/order-placed`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              orderId: reference,
+              email: paymentData.email || "guest@example.com",
+              customerName: paymentData.customerName || "Vanguard Guest",
+              verificationCode: paymentData.verificationCode || "",
+              totalPrice: paymentData.amount || 0,
+              items: paymentData.items || [],
+              address: paymentData.address || "Boutique Self-Pickup",
+              phone: paymentData.phone || "",
+              paymentStatus: "paid"
+            })
+          }).then(async (notifRes) => {
+            const txt = await notifRes.text();
+            console.log(`[OPay Payment Verification Notification] Sent paid notification for Ref: ${reference}. Response: ${txt}`);
+          }).catch(err => console.error("[OPay Payment Verification Notification Err] Could not dispatch payment notification:", err.message));
         }
       }
     } catch (firestoreErr: any) {
@@ -832,6 +853,27 @@ const handleOpayWebhook = async (req: any, res: any) => {
               });
               console.log(`[handleOpayWebhook] Successfully updated status of existing order Ref: ${reference} to paid`);
             }
+
+            // Trigger order paid notification to chefs and admins
+            const localPort = process.env.PORT || 3000;
+            fetch(`http://localhost:${localPort}/api/delivery/notify/order-placed`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                orderId: reference,
+                email: paymentData.email || "guest@example.com",
+                customerName: paymentData.customerName || "Vanguard Guest",
+                verificationCode: paymentData.verificationCode || "",
+                totalPrice: paymentData.amount || 0,
+                items: paymentData.items || [],
+                address: paymentData.address || "Boutique Self-Pickup",
+                phone: paymentData.phone || "",
+                paymentStatus: "paid"
+              })
+            }).then(async (notifRes) => {
+              const txt = await notifRes.text();
+              console.log(`[OPay Payment Webhook Notification] Sent paid notification for Ref: ${reference}. Response: ${txt}`);
+            }).catch(err => console.error("[OPay Payment Webhook Notification Err] Could not dispatch payment notification:", err.message));
           }
         }
       } catch (firestoreErr: any) {

@@ -266,14 +266,14 @@ deliveryRouter.post("/orders/assign", async (req, res) => {
 // 6. ORDER RECENTLY PLACED EMAIL DISPATCH & ADMIN ALERTS
 deliveryRouter.post("/notify/order-placed", async (req, res) => {
   try {
-    const { orderId, email, customerName, verificationCode, totalPrice, items, address, phone } = req.body;
+    const { orderId, email, customerName, verificationCode, totalPrice, items, address, phone, paymentStatus, paymentMethod } = req.body;
     if (!orderId || !email) {
       return res.status(400).json({ error: "Missing required details to dispatch confirmation email." });
     }
- 
+
     const cleanEmail = email.trim().toLowerCase();
     const parsedItems = Array.isArray(items) ? items : (typeof items === "string" ? JSON.parse(items) : []);
- 
+
     const transporter = getMailTransporter();
     if (transporter) {
       const computedFrom = getFromEmailAddress();
@@ -283,7 +283,7 @@ deliveryRouter.post("/notify/order-placed", async (req, res) => {
           <td style="padding: 10px 0; text-align: right; font-size: 13px; font-weight: bold;">₦${(it.price * it.quantity).toLocaleString()}</td>
         </tr>
       `).join("");
- 
+
       // A. Dispatch User Confirmation (if not guest placeholder)
       if (cleanEmail !== "guest@example.com" && cleanEmail.includes("@")) {
         const mailOptions = {
@@ -358,12 +358,38 @@ deliveryRouter.post("/notify/order-placed", async (req, res) => {
         console.log(`[ORDER CONFIRMATION EMAIL] Dispatched to customer: ${cleanEmail}`);
       }
  
-      // B. Dispatch Admin Alert immediately for a complete ERP integration
-      const adminEmails = ["tosinotenaike3@gmail.com", "mophethecommerce@gmail.com"];
+      // Determine payment state dynamically
+      let isPaid = false;
+      if (paymentStatus) {
+        const pStr = String(paymentStatus).toLowerCase();
+        if (pStr === "paid" || pStr === "success" || pStr === "payment_successful") {
+          isPaid = true;
+        }
+      } else {
+        try {
+          const rows = await querySql("SELECT paymentStatus FROM orders WHERE id = ?", [orderId]);
+          if (rows && rows.length > 0) {
+            const dbPaymentStatus = (rows[0].paymentStatus || "").toLowerCase();
+            if (dbPaymentStatus === "paid" || dbPaymentStatus === "success" || dbPaymentStatus === "payment_successful") {
+              isPaid = true;
+            }
+          }
+        } catch (dbErr) {
+          console.warn("Could not query payment status during notify/order-placed:", dbErr);
+        }
+      }
+
+      const statusText = isPaid ? "🟢 PAID & CONFIRMED (READY TO COOK)" : "🟡 UNPAID (Awaiting Payment Confirmation)";
+      const subjectText = isPaid
+        ? `👨‍🍳 [PAID ORDER READY] Order #${orderId.substring(6) || orderId} - ₦${Number(totalPrice).toLocaleString()} (PAID)`
+        : `🚨 [NEW ORDER RECEIVED] Order #${orderId.substring(6) || orderId} - ₦${Number(totalPrice).toLocaleString()} (UNPAID)`;
+
+      // B. Dispatch Admin & Chef Alert immediately for a complete ERP integration
+      const adminAndChefEmails = ["tosinotenaike3@gmail.com", "mophethecommerce@gmail.com", "chefmonitor@gmail.com"];
       const adminMailOptions = {
         from: computedFrom,
-       to: adminEmails,
-        subject: `🚨 [NEW ORDER RECEIVED] Order #${orderId.substring(6) || orderId} - ₦${Number(totalPrice).toLocaleString()}`,
+        to: adminAndChefEmails,
+        subject: subjectText,
         html: `
 <!DOCTYPE html>
 <html>
@@ -403,6 +429,14 @@ deliveryRouter.post("/notify/order-placed", async (req, res) => {
     <div class="meta-line">
       <span class="meta-label">VERIFY CODE     :</span> <span class="meta-value" style="background-color: #d97706; color: #000; padding: 1px 5px; font-weight: bold; border-radius: 3px;">${verificationCode}</span>
     </div>
+    <div class="meta-line">
+      <span class="meta-label">PAYMENT STATUS  :</span> <span class="meta-value" style="font-weight: bold; color: ${isPaid ? '#10b981' : '#f59e0b'}">${statusText}</span>
+    </div>
+    ${paymentMethod ? `
+    <div class="meta-line">
+      <span class="meta-label">PAYMENT METHOD  :</span> <span class="meta-value" style="font-weight: bold; color: #ffffff">${paymentMethod.toUpperCase()}</span>
+    </div>
+    ` : ""}
  
     <div style="margin-top: 15px; border-top: 1px solid #44403c; padding-top: 10px;">
       <span class="meta-label">ORDERED SELECTION:</span>
@@ -429,10 +463,10 @@ deliveryRouter.post("/notify/order-placed", async (req, res) => {
         `
       };
       await transporter.sendMail(adminMailOptions);
-      console.log(`[ERP ADMIN ALERT] Dispatched new order warning to admins.`);
+      console.log(`[ERP ADMIN & CHEF ALERT] Dispatched new order warning to admins & chef. Paid: ${isPaid}`);
     }
  
-    res.json({ success: true, message: "Order placed notification email sent both to user and admin." });
+    res.json({ success: true, message: "Order placed notification email sent to user, admins, and chef." });
   } catch (err: any) {
     console.error("Order placed e-mail notify fault:", err);
     res.status(500).json({ error: "Failed to dispatch order placement notification email: " + err.message });

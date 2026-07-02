@@ -15,12 +15,21 @@ interface SupportChatWidgetProps {
   currentUser?: any;
 }
 
+const QUICK_TEST_QUESTIONS = [
+  { label: "🍔 Test Menu", text: "What is on the menu today?" },
+  { label: "💳 Test OPay", text: "How do I pay with OPay?" },
+  { label: "🚗 Test Delivery", text: "Tell me about shipping and delivery times" },
+  { label: "📍 Test Location", text: "Where are you located in Lagos?" },
+  { label: "👋 Hello", text: "Hello support desk!" },
+];
+
 export default function SupportChatWidget({ currentUser }: SupportChatWidgetProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [chatId, setChatId] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [hasStarted, setHasStarted] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [messages, setMessages] = useState<SupportMessage[]>([]);
   const [inputText, setInputText] = useState("");
   const [isSending, setIsSending] = useState(false);
@@ -51,11 +60,14 @@ export default function SupportChatWidget({ currentUser }: SupportChatWidgetProp
       setChatId(savedChatId);
       if (savedHasStarted === "true") {
         setHasStarted(true);
+      } else {
+        setIsLoading(false);
       }
     } else {
       const newChatId = "support_" + Date.now() + "_" + Math.random().toString(36).substring(2, 9);
       localStorage.setItem("upside_support_chat_id", newChatId);
       setChatId(newChatId);
+      setIsLoading(false);
     }
   }, []);
 
@@ -87,6 +99,7 @@ export default function SupportChatWidget({ currentUser }: SupportChatWidgetProp
         });
         
         setMessages(fetchedMsgs);
+        setIsLoading(false);
         setError(null);
 
         // Update unread count if the chat window is closed
@@ -100,6 +113,7 @@ export default function SupportChatWidget({ currentUser }: SupportChatWidgetProp
       (err) => {
         console.error("Support Chat Subscription error: ", err);
         setError("Database link offline. Please try again.");
+        setIsLoading(false);
       }
     );
 
@@ -184,6 +198,24 @@ export default function SupportChatWidget({ currentUser }: SupportChatWidgetProp
     setIsSending(true);
     setError(null);
 
+    // Self-healing parent document write to ensure the session document always exists
+    try {
+      const chatDocRef = doc(db, "support_chats", chatId);
+      await setDoc(
+        chatDocRef,
+        {
+          chatId: chatId,
+          customerName: name.trim() || "Vanguard Guest",
+          email: email.trim() || "guest@example.com",
+          status: "active",
+          updatedAt: new Date().toISOString(),
+        },
+        { merge: true }
+      );
+    } catch (err) {
+      console.warn("Could not self-heal parent chat metadata:", err);
+    }
+
     const messageId = "msg_" + Date.now() + "_" + Math.random().toString(36).substring(2, 7);
     const messageDocRef = doc(db, "support_chats", chatId, "messages", messageId);
 
@@ -215,6 +247,64 @@ export default function SupportChatWidget({ currentUser }: SupportChatWidgetProp
       triggerSimulatedSupportReply(cleanText);
     } catch (err: any) {
       console.error("Error dispatching support message:", err);
+      setError(`Message transmission failed: ${err?.message || err}`);
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  const handleSendQuickQuestion = async (text: string) => {
+    if (isSending || !chatId) return;
+
+    setIsSending(true);
+    setError(null);
+
+    // Self-healing parent document write
+    try {
+      const chatDocRef = doc(db, "support_chats", chatId);
+      await setDoc(
+        chatDocRef,
+        {
+          chatId: chatId,
+          customerName: name.trim() || "Vanguard Guest",
+          email: email.trim() || "guest@example.com",
+          status: "active",
+          updatedAt: new Date().toISOString(),
+        },
+        { merge: true }
+      );
+    } catch (err) {
+      console.warn("Could not self-heal parent chat metadata for quick question:", err);
+    }
+
+    const messageId = "msg_" + Date.now() + "_" + Math.random().toString(36).substring(2, 7);
+    const messageDocRef = doc(db, "support_chats", chatId, "messages", messageId);
+
+    const payload = {
+      senderId: "customer",
+      senderName: name || "Customer Guest",
+      text: text,
+      timestamp: new Date().toISOString(),
+    };
+
+    try {
+      await setDoc(messageDocRef, payload);
+      
+      const chatDocRef = doc(db, "support_chats", chatId);
+      await setDoc(
+        chatDocRef,
+        {
+          updatedAt: new Date().toISOString(),
+          lastMessageText: text,
+          status: "active",
+        },
+        { merge: true }
+      );
+
+      // Provide automated intelligent simulation responses for enhanced interactivity
+      triggerSimulatedSupportReply(text);
+    } catch (err: any) {
+      console.error("Error dispatching support quick question:", err);
       setError(`Message transmission failed: ${err?.message || err}`);
     } finally {
       setIsSending(false);
@@ -399,23 +489,30 @@ export default function SupportChatWidget({ currentUser }: SupportChatWidgetProp
             <div className="flex-1 flex flex-col justify-between overflow-hidden">
               {/* Messages Grid */}
               <div className="flex-1 p-4 overflow-y-auto space-y-4 scrollbar-thin scrollbar-thumb-neutral-850 bg-[#161616]">
-                {messages.length === 0 ? (
+                {isLoading ? (
+                  <div className="h-full flex flex-col items-center justify-center text-center p-4 space-y-3">
+                    <div className="w-6 h-6 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
+                    <p className="text-[9px] font-mono tracking-wider uppercase text-neutral-500">
+                      Syncing messages...
+                    </p>
+                  </div>
+                ) : messages.length === 0 ? (
                   <div className="h-full flex flex-col items-center justify-center text-center p-4 space-y-3 opacity-90">
                     <MessageSquare className="w-8 h-8 text-neutral-600 animate-pulse" />
                     <div className="space-y-1">
                       <p className="text-[10px] font-mono tracking-wider uppercase text-amber-500 font-bold">
-                        Initializing Session...
+                        Connected to Helpdesk
                       </p>
                       <p className="text-[11px] text-neutral-400 max-w-xs leading-relaxed font-sans">
-                        If this screen does not load or you cannot send/receive messages, your chat session might have expired.
+                        Start testing by sending a message below, or tap one of the quick test options to get simulated answers instantly!
                       </p>
                     </div>
                     <button
                       type="button"
                       onClick={handleResetSession}
-                      className="px-4 py-2 mt-2 bg-amber-500 hover:bg-amber-600 text-neutral-950 font-mono text-[9px] tracking-widest uppercase font-bold transition-colors cursor-pointer"
+                      className="px-3 py-1.5 mt-2 bg-neutral-800 hover:bg-neutral-700 text-amber-500 font-mono text-[8px] tracking-widest uppercase font-bold transition-colors cursor-pointer border border-neutral-700"
                     >
-                      Start New Session
+                      Reset Session
                     </button>
                   </div>
                 ) : (
@@ -458,6 +555,21 @@ export default function SupportChatWidget({ currentUser }: SupportChatWidgetProp
 
               {/* Input section */}
               <div className="border-t border-neutral-800 bg-neutral-900 p-2.5">
+                {/* Dynamic Quick-Testing Question Chips */}
+                <div className="flex gap-1.5 overflow-x-auto pb-2 scrollbar-none max-w-full">
+                  {QUICK_TEST_QUESTIONS.map((q, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      disabled={isSending}
+                      onClick={() => handleSendQuickQuestion(q.text)}
+                      className="flex-shrink-0 px-2.5 py-1 bg-neutral-800 hover:bg-neutral-750 text-[9px] text-amber-400 hover:text-amber-300 font-mono border border-neutral-700 hover:border-amber-500/30 transition-all rounded-none cursor-pointer disabled:opacity-50"
+                    >
+                      {q.label}
+                    </button>
+                  ))}
+                </div>
+
                 {error && (
                   <div className="p-2 mb-2 bg-red-950/25 border border-red-900/30 text-red-500 text-[9px] font-mono flex flex-col gap-1">
                     <div className="flex items-center gap-1">

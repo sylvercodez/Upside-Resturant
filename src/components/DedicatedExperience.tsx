@@ -104,7 +104,7 @@ export default function DedicatedExperience({
                 <Utensils className="w-6 h-6" />
               </div>
               <div>
-                <span className="text-[10px] font-mono tracking-widest text-rose-600 uppercase">05:00 PM — 02:00 AM</span>
+                <span className="text-[10px] font-mono tracking-widest text-rose-600 uppercase">05:00 PM — 10:00 PM</span>
                 <h3 className="text-xl font-sans text-neutral-900 uppercase font-bold mt-0.5">High Energy Fine Dining Sunset</h3>
               </div>
             </div>

@@ -116,7 +116,7 @@ export default function Footer({ onScrollToElement, onOpenReservations, branding
                 <span>PM: Fine Lounge & Grill</span>
                 <span className="text-amber-600">OPEN</span>
               </p>
-              <p className="text-[10px] text-neutral-400 mt-0.5">Monday &mdash; Sunday: 05:00 PM &ndash; 02:00 AM</p>
+              <p className="text-[10px] text-neutral-400 mt-0.5">Monday &mdash; Sunday: 05:00 PM &ndash; 10:00 PM</p>
             </div>
             <div>
               <p className="text-amber-700 font-bold">Curated Ambient Soundscape</p>
