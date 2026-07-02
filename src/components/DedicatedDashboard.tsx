@@ -29,7 +29,10 @@ import {
   Search,
   Check,
   Award,
-  Trash2
+  Trash2,
+  Upload,
+  X,
+  Image as ImageIcon
 } from "lucide-react";
 import { collection, query, updateDoc, doc, onSnapshot, setDoc, deleteDoc } from "firebase/firestore";
 import { db, handleFirestoreError, OperationType } from "../firebase";
@@ -128,6 +131,18 @@ export default function DedicatedDashboard({
   const [newImageUrl, setNewImageUrl] = useState("");
   const [imageFormSuccess, setImageFormSuccess] = useState("");
   const [imageFormError, setNewImageFormError] = useState("");
+
+  // BULK IMAGE LIBRARY STATES
+  const [imageUploadMode, setImageUploadMode] = useState<"single" | "bulk">("single");
+  const [bulkImagesList, setBulkImagesList] = useState<{ id: string; name: string; url: string; size?: string; source: "file" | "url" }[]>([]);
+  const [bulkUrlInput, setBulkUrlInput] = useState("");
+  const [bulkUploadProgress, setBulkUploadProgress] = useState<{ current: number; total: number; active: boolean; statusText: string }>({
+    current: 0,
+    total: 0,
+    active: false,
+    statusText: ""
+  });
+  const [isDragOver, setIsDragOver] = useState(false);
 
   // STATIC MENU DB SYNC STATES
   const [isSyncingMenu, setIsSyncingMenu] = useState(false);
@@ -833,6 +848,211 @@ export default function DedicatedDashboard({
       console.error("Delete image failed:", err);
       alert(`Failed to delete image: ${err.message}`);
       handleFirestoreError(err, OperationType.DELETE, `assets/${imgId}`);
+    }
+  };
+
+  const processFilesForBulk = (files: FileList) => {
+    setNewImageFormError("");
+    setImageFormSuccess("");
+    
+    Array.from(files).forEach((file) => {
+      if (!file.type.startsWith("image/")) {
+        setNewImageFormError("Only image files are accepted.");
+        return;
+      }
+      if (file.size > 5 * 1024 * 1024) {
+        setNewImageFormError("Some images were skipped as they exceed 5MB.");
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const img = new Image();
+        img.onload = () => {
+          const maxDim = 800;
+          let width = img.width;
+          let height = img.height;
+          
+          if (width > maxDim || height > maxDim) {
+            if (width > height) {
+              height = Math.round((height * maxDim) / width);
+              width = maxDim;
+            } else {
+              width = Math.round((width * maxDim) / height);
+              height = maxDim;
+            }
+          }
+          
+          const canvas = document.createElement("canvas");
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext("2d");
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, width, height);
+            const downscaledUrl = canvas.toDataURL("image/jpeg", 0.75);
+            
+            const cleanName = file.name
+              .replace(/\.[^/.]+$/, "")
+              .replace(/[-_]+/g, " ")
+              .replace(/\b\w/g, c => c.toUpperCase());
+
+            const uniqueId = "bulk-" + Date.now() + "-" + Math.random().toString(36).substring(2, 7);
+            const sizeInKb = Math.round(downscaledUrl.length * 0.75 / 1024);
+
+            setBulkImagesList((prev) => [
+              ...prev,
+              {
+                id: uniqueId,
+                name: cleanName,
+                url: downscaledUrl,
+                size: `${sizeInKb} KB`,
+                source: "file"
+              }
+            ]);
+          }
+        };
+        img.onerror = () => {
+          setNewImageFormError("Could not process one of the image files.");
+        };
+        img.src = reader.result as string;
+      };
+      reader.onerror = () => {
+        setNewImageFormError("Could not read local file.");
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleAddBulkUrls = () => {
+    setNewImageFormError("");
+    setImageFormSuccess("");
+    if (!bulkUrlInput.trim()) {
+      setNewImageFormError("Please enter at least one URL.");
+      return;
+    }
+
+    const urls = bulkUrlInput
+      .split(/[\n,]+/)
+      .map((u) => u.trim())
+      .filter((u) => u.startsWith("http://") || u.startsWith("https://"));
+
+    if (urls.length === 0) {
+      setNewImageFormError("No valid URLs starting with http:// or https:// were found.");
+      return;
+    }
+
+    const newEntries = urls.map((url, index) => {
+      let defaultLabel = "External Asset";
+      try {
+        const pathname = new URL(url).pathname;
+        const filename = pathname.substring(pathname.lastIndexOf('/') + 1);
+        if (filename && filename.includes('.')) {
+          defaultLabel = filename
+            .replace(/\.[^/.]+$/, "")
+            .replace(/[-_]+/g, " ")
+            .replace(/\b\w/g, c => c.toUpperCase());
+        }
+      } catch (_) {}
+
+      const uniqueId = "bulk-url-" + Date.now() + "-" + Math.random().toString(36).substring(2, 7) + "-" + index;
+      return {
+        id: uniqueId,
+        name: defaultLabel,
+        url: url,
+        size: "Remote URL",
+        source: "url" as const
+      };
+    });
+
+    setBulkImagesList((prev) => [...prev, ...newEntries]);
+    setBulkUrlInput("");
+    setImageFormSuccess(`Added ${newEntries.length} external image(s) to prepared batch.`);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(true);
+  };
+
+  const handleDragLeave = () => {
+    setIsDragOver(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      processFilesForBulk(e.dataTransfer.files);
+    }
+  };
+
+  const handleRemovePreparedImage = (id: string) => {
+    setBulkImagesList((prev) => prev.filter((item) => item.id !== id));
+  };
+
+  const handleUpdatePreparedName = (id: string, newName: string) => {
+    setBulkImagesList((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, name: newName } : item))
+    );
+  };
+
+  const handlePublishBulkImages = async () => {
+    setNewImageFormError("");
+    setImageFormSuccess("");
+    if (bulkImagesList.length === 0) {
+      setNewImageFormError("Please prepare at least one image in the batch first.");
+      return;
+    }
+
+    setBulkUploadProgress({
+      current: 0,
+      total: bulkImagesList.length,
+      active: true,
+      statusText: "Initializing bulk library write..."
+    });
+
+    let successCount = 0;
+    let failCount = 0;
+
+    for (let i = 0; i < bulkImagesList.length; i++) {
+      const item = bulkImagesList[i];
+      setBulkUploadProgress((prev) => ({
+        ...prev,
+        current: i + 1,
+        statusText: `Publishing: "${item.name}" (${i + 1}/${bulkImagesList.length})...`
+      }));
+
+      const cleanLabel = item.name.trim() || "Bulk Asset";
+      const parsedId = cleanLabel.toLowerCase().replace(/[^a-z0-9_-]/g, "-") + "-" + Date.now() + "-" + i;
+
+      try {
+        const payload = {
+          id: parsedId,
+          name: cleanLabel,
+          url: item.url,
+          createdAt: new Date().toISOString()
+        };
+        await setDoc(doc(db, "assets", parsedId), payload);
+        successCount++;
+      } catch (err) {
+        console.error("Bulk upload item failed:", err);
+        failCount++;
+      }
+    }
+
+    setBulkUploadProgress({
+      current: successCount,
+      total: bulkImagesList.length,
+      active: false,
+      statusText: ""
+    });
+
+    if (failCount === 0) {
+      setImageFormSuccess(`Successfully published all ${successCount} images to the visual library!`);
+      setBulkImagesList([]);
+    } else {
+      setNewImageFormError(`Published ${successCount} images, but ${failCount} failed. Please verify and retry.`);
+      setBulkImagesList((prev) => prev.slice(successCount));
     }
   };
 
@@ -3341,15 +3561,41 @@ export default function DedicatedDashboard({
 
                 {(userRole === "admin" || userRole === "menu_lister") && activeTab === "images_panel" && (
                   <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 text-left" id="dashboard-images-control">
-                    {/* Add Image Form */}
-                    <div className="xl:col-span-4 bg-[#121212] border border-neutral-850 p-6 space-y-4 font-mono">
+                    {/* Add Image Panel (Single & Bulk) */}
+                    <div className="xl:col-span-5 bg-[#121212] border border-neutral-850 p-6 space-y-4 font-mono">
                       <div>
                         <h2 className="text-xs font-mono font-bold tracking-widest text-amber-500 uppercase">
-                          🖼️ Add Custom Image
+                          🖼️ Visual Library Uploads
                         </h2>
                         <p className="text-[10px] text-neutral-500 font-sans mt-0.5">
-                          Optionally upload local device files (converted securely to base64) or enter any external web image URL. Adds immediate click-friendly shortcut presets to the menu item creator.
+                          Upload new high-resolution dining or ambient pictures to your digital assets collection.
                         </p>
+                      </div>
+
+                      {/* Single vs Bulk Mode Switcher */}
+                      <div className="flex border-b border-neutral-800">
+                        <button
+                          type="button"
+                          onClick={() => setImageUploadMode("single")}
+                          className={`flex-1 py-2 text-center text-[10px] font-mono uppercase tracking-wider font-bold transition-all cursor-pointer ${
+                            imageUploadMode === "single"
+                              ? "text-amber-500 border-b-2 border-amber-500 bg-neutral-950/45"
+                              : "text-neutral-500 hover:text-neutral-300"
+                          }`}
+                        >
+                          Single Image
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setImageUploadMode("bulk")}
+                          className={`flex-1 py-2 text-center text-[10px] font-mono uppercase tracking-wider font-bold transition-all cursor-pointer ${
+                            imageUploadMode === "bulk"
+                              ? "text-amber-500 border-b-2 border-amber-500 bg-neutral-950/45"
+                              : "text-neutral-500 hover:text-neutral-300"
+                          }`}
+                        >
+                          Bulk Upload ({bulkImagesList.length})
+                        </button>
                       </div>
 
                       {imageFormError && (
@@ -3364,79 +3610,229 @@ export default function DedicatedDashboard({
                         </div>
                       )}
 
-                      <form onSubmit={handleSaveCustomImage} className="space-y-4 text-xs font-mono">
-                        <div className="space-y-1 text-left">
-                          <label className="text-[9px] text-neutral-400 uppercase tracking-widest block font-bold">Image Descriptive Label *</label>
-                          <input
-                            type="text"
-                            required
-                            placeholder="e.g. Crispy Suya Ribs"
-                            value={newImageName}
-                            onChange={(e) => setNewImageName(e.target.value)}
-                            className="w-full bg-neutral-950 border border-neutral-850 p-2 text-white focus:outline-none focus:border-amber-500"
-                          />
-                        </div>
-
-                        <div className="space-y-2 bg-neutral-950/60 p-3 border border-neutral-850 text-left">
-                          <label className="text-[9px] text-neutral-400 uppercase tracking-widest block font-bold">Upload Local File</label>
-                          <input
-                            type="file"
-                            accept="image/*"
-                            onChange={handleFileChange}
-                            className="w-full text-[10px] text-neutral-400 file:bg-neutral-900 file:text-amber-500 file:px-2.5 file:py-1 file:border file:border-neutral-800 file:hover:bg-neutral-800 file:cursor-pointer"
-                          />
-                          <p className="text-[8px] text-neutral-500 mt-1">Accepts PNG, JPG, JPEG, WEBP under 1MB.</p>
-                        </div>
-
-                        <div className="space-y-1">
-                          <div className="flex justify-between items-center text-left">
-                            <label className="text-[9px] text-neutral-400 uppercase tracking-widest block font-bold">OR: Custom Image Address URL</label>
-                            {newImageUrl && (
-                              <button
-                                type="button"
-                                onClick={() => setNewImageUrl("")}
-                                className="text-[8.5px] hover:text-red-400 text-neutral-500 cursor-pointer font-mono"
-                              >
-                                Clean URL
-                              </button>
-                            )}
+                      {imageUploadMode === "single" ? (
+                        <form onSubmit={handleSaveCustomImage} className="space-y-4 text-xs font-mono">
+                          <div className="space-y-1 text-left">
+                            <label className="text-[9px] text-neutral-400 uppercase tracking-widest block font-bold">Image Descriptive Label *</label>
+                            <input
+                              type="text"
+                              required
+                              placeholder="e.g. Crispy Suya Ribs"
+                              value={newImageName}
+                              onChange={(e) => setNewImageName(e.target.value)}
+                              className="w-full bg-neutral-950 border border-neutral-850 p-2 text-white focus:outline-none focus:border-amber-500"
+                            />
                           </div>
-                          <input
-                            type="url"
-                            placeholder="https://images.unsplash.com/..."
-                            value={newImageUrl}
-                            onChange={(e) => setNewImageUrl(e.target.value)}
-                            className="w-full bg-neutral-950 border border-neutral-850 p-2 text-white focus:outline-none focus:border-amber-500 text-[9.5px]"
-                          />
-                        </div>
 
-                        {newImageUrl && (
-                          <div className="space-y-1 bg-neutral-950/80 p-2 border border-neutral-850 text-left">
-                            <span className="text-[8.5px] text-neutral-500 font-mono block uppercase">Interactive Preview:</span>
-                            <div className="w-full h-32 overflow-hidden border border-neutral-800">
-                              <img
-                                src={newImageUrl}
-                                alt="Dynamic Upload Preview"
-                                className="w-full h-full object-cover"
-                                onError={(e) => {
-                                  (e.target as any).src = classicDrinks;
-                                }}
-                              />
+                          <div className="space-y-2 bg-neutral-950/60 p-3 border border-neutral-850 text-left">
+                            <label className="text-[9px] text-neutral-400 uppercase tracking-widest block font-bold">Upload Local File</label>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={handleFileChange}
+                              className="w-full text-[10px] text-neutral-400 file:bg-neutral-900 file:text-amber-500 file:px-2.5 file:py-1 file:border file:border-neutral-800 file:hover:bg-neutral-800 file:cursor-pointer"
+                            />
+                            <p className="text-[8px] text-neutral-500 mt-1">Accepts PNG, JPG, JPEG, WEBP under 1MB.</p>
+                          </div>
+
+                          <div className="space-y-1">
+                            <div className="flex justify-between items-center text-left">
+                              <label className="text-[9px] text-neutral-400 uppercase tracking-widest block font-bold">OR: Custom Image Address URL</label>
+                              {newImageUrl && (
+                                <button
+                                  type="button"
+                                  onClick={() => setNewImageUrl("")}
+                                  className="text-[8.5px] hover:text-red-400 text-neutral-500 cursor-pointer font-mono"
+                                >
+                                  Clean URL
+                                </button>
+                              )}
                             </div>
+                            <input
+                              type="url"
+                              placeholder="https://images.unsplash.com/..."
+                              value={newImageUrl}
+                              onChange={(e) => setNewImageUrl(e.target.value)}
+                              className="w-full bg-neutral-950 border border-neutral-850 p-2 text-white focus:outline-none focus:border-amber-500 text-[9.5px]"
+                            />
                           </div>
-                        )}
 
-                        <button
-                          type="submit"
-                          className="w-full py-3 bg-amber-600 hover:bg-amber-700 text-black font-bold uppercase tracking-wider text-[10px] transition-colors cursor-pointer font-mono"
-                        >
-                          PUBLISH IMAGE TO LIBRARY ✓
-                        </button>
-                      </form>
+                          {newImageUrl && (
+                            <div className="space-y-1 bg-neutral-950/80 p-2 border border-neutral-850 text-left">
+                              <span className="text-[8.5px] text-neutral-500 font-mono block uppercase">Interactive Preview:</span>
+                              <div className="w-full h-32 overflow-hidden border border-neutral-800">
+                                <img
+                                  src={newImageUrl}
+                                  alt="Dynamic Upload Preview"
+                                  className="w-full h-full object-cover"
+                                  onError={(e) => {
+                                    (e.target as any).src = classicDrinks;
+                                  }}
+                                />
+                              </div>
+                            </div>
+                          )}
+
+                          <button
+                            type="submit"
+                            className="w-full py-3 bg-amber-600 hover:bg-amber-700 text-black font-bold uppercase tracking-wider text-[10px] transition-colors cursor-pointer font-mono"
+                          >
+                            PUBLISH IMAGE TO LIBRARY ✓
+                          </button>
+                        </form>
+                      ) : (
+                        <div className="space-y-4 text-xs font-mono">
+                          {/* Drag & Drop zone */}
+                          <div
+                            onDragOver={handleDragOver}
+                            onDragLeave={handleDragLeave}
+                            onDrop={handleDrop}
+                            className={`border-2 border-dashed p-6 text-center transition-all flex flex-col items-center justify-center space-y-2 cursor-pointer ${
+                              isDragOver
+                                ? "border-amber-500 bg-amber-950/20"
+                                : "border-neutral-800 hover:border-neutral-700 bg-neutral-950/40"
+                            }`}
+                            onClick={() => document.getElementById("bulk-file-input")?.click()}
+                          >
+                            <input
+                              id="bulk-file-input"
+                              type="file"
+                              multiple
+                              accept="image/*"
+                              onChange={(e) => {
+                                if (e.target.files) {
+                                  processFilesForBulk(e.target.files);
+                                }
+                              }}
+                              className="hidden"
+                            />
+                            <Upload className={`w-8 h-8 ${isDragOver ? "text-amber-400 animate-bounce" : "text-neutral-500"}`} />
+                            <div>
+                              <p className="text-[11px] text-white font-bold uppercase tracking-wide">
+                                Drag & Drop Multiple Images
+                              </p>
+                              <p className="text-[9px] text-neutral-400 mt-1 font-sans">
+                                or click to browse device storage
+                              </p>
+                            </div>
+                            <p className="text-[8px] text-neutral-500 font-sans">
+                              Supports PNG, JPG, JPEG, WEBP up to 5MB each
+                            </p>
+                          </div>
+
+                          {/* URL list input */}
+                          <div className="space-y-2 bg-neutral-950/60 p-3 border border-neutral-850 text-left">
+                            <label className="text-[9px] text-neutral-400 uppercase tracking-widest block font-bold">
+                              Or: Paste Multiple Image URLs
+                            </label>
+                            <textarea
+                              placeholder="Paste external image URLs here, one per line or separated by commas"
+                              value={bulkUrlInput}
+                              onChange={(e) => setBulkUrlInput(e.target.value)}
+                              rows={3}
+                              className="w-full bg-[#121212] border border-neutral-850 p-2 text-white focus:outline-none focus:border-amber-500 font-mono text-[9.5px] resize-none"
+                            />
+                            <button
+                              type="button"
+                              onClick={handleAddBulkUrls}
+                              className="w-full py-1.5 bg-neutral-800 hover:bg-neutral-700 text-amber-500 font-mono text-[9px] font-bold uppercase border border-neutral-700 transition-colors cursor-pointer"
+                            >
+                              Add URLs to Batch +
+                            </button>
+                          </div>
+
+                          {/* Prepared batch list */}
+                          {bulkImagesList.length > 0 && (
+                            <div className="space-y-2.5">
+                              <div className="flex justify-between items-center text-left">
+                                <span className="text-[10px] font-bold text-amber-500 uppercase tracking-wider">
+                                  Prepared Batch ({bulkImagesList.length})
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => setBulkImagesList([])}
+                                  className="text-[8px] hover:text-red-400 text-neutral-500 font-mono uppercase cursor-pointer"
+                                >
+                                  Clear Batch ✕
+                                </button>
+                              </div>
+
+                              <div className="max-h-60 overflow-y-auto space-y-2 pr-1 no-scrollbar border-y border-neutral-850 py-2">
+                                {bulkImagesList.map((item) => (
+                                  <div
+                                    key={item.id}
+                                    className="bg-neutral-950 border border-neutral-850 p-2 flex gap-3 items-center"
+                                  >
+                                    <div className="w-12 h-12 overflow-hidden bg-neutral-900 border border-neutral-800 shrink-0">
+                                      <img
+                                        src={item.url}
+                                        alt="Preview"
+                                        className="w-full h-full object-cover"
+                                        onError={(e) => {
+                                          (e.target as any).src = classicDrinks;
+                                        }}
+                                      />
+                                    </div>
+                                    <div className="flex-1 min-w-0 space-y-1 text-left">
+                                      <div className="flex justify-between items-center">
+                                        <span className="text-[8px] text-neutral-500 font-mono uppercase truncate">
+                                          {item.size}
+                                        </span>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleRemovePreparedImage(item.id)}
+                                          className="text-neutral-500 hover:text-red-400 font-mono text-[8.5px] uppercase cursor-pointer"
+                                        >
+                                          Remove
+                                        </button>
+                                      </div>
+                                      <input
+                                        type="text"
+                                        value={item.name}
+                                        onChange={(e) => handleUpdatePreparedName(item.id, e.target.value)}
+                                        placeholder="Enter image label"
+                                        className="w-full bg-neutral-900 border border-neutral-800 px-1.5 py-0.5 text-white text-[10px] focus:outline-none focus:border-amber-500"
+                                      />
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+
+                              {/* Progress bar or Submit */}
+                              {bulkUploadProgress.active ? (
+                                <div className="space-y-2 bg-neutral-950 border border-amber-500/30 p-3 text-center">
+                                  <div className="flex items-center justify-center gap-2">
+                                    <div className="w-3.5 h-3.5 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
+                                    <p className="text-[9px] font-bold text-amber-400 font-mono uppercase tracking-widest">
+                                      {bulkUploadProgress.statusText}
+                                    </p>
+                                  </div>
+                                  <div className="w-full bg-neutral-900 h-1.5 rounded-full overflow-hidden border border-neutral-800">
+                                    <div
+                                      className="bg-amber-500 h-full transition-all duration-300"
+                                      style={{
+                                        width: `${(bulkUploadProgress.current / bulkUploadProgress.total) * 100}%`
+                                      }}
+                                    />
+                                  </div>
+                                </div>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={handlePublishBulkImages}
+                                  className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-black font-bold uppercase tracking-wider text-[10px] transition-colors cursor-pointer font-mono"
+                                >
+                                  PUBLISH BATCH TO GALLERY ({bulkImagesList.length}) ✓
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
 
                     {/* Custom and static images display gallery */}
-                    <div className="xl:col-span-8 bg-[#121212] border border-neutral-850 p-6 space-y-4">
+                    <div className="xl:col-span-7 bg-[#121212] border border-neutral-850 p-6 space-y-4">
                       <div>
                         <h2 className="text-xs font-mono font-bold tracking-widest text-amber-500 uppercase">Available Visual Library Gallery</h2>
                         <p className="text-[10px] text-neutral-500 font-sans mt-0.5">
