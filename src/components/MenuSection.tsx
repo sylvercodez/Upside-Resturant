@@ -350,7 +350,7 @@ export default function MenuSection({ onAddToCart, favorites, onToggleFavorite, 
                   <MenuImage
                     src={item.image}
                     name={item.name}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-all duration-700 opacity-100"
+                    className="w-full h-full object-contain group-hover:scale-105 transition-all duration-700 opacity-100"
                     containerClassName="w-full h-full min-h-[160px]"
                     size="lg"
                   />
@@ -407,7 +407,7 @@ export default function MenuSection({ onAddToCart, favorites, onToggleFavorite, 
               <img
                 src={selectedItemForModal.image}
                 alt={selectedItemForModal.name}
-                className="w-full h-full object-cover"
+                className="w-full h-full object-contain"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black to-transparent" />
               <button
