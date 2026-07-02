@@ -6,6 +6,7 @@ import OrderTracker from "./OrderTracker";
 import AdminAnalyticsPanel from "./AdminAnalyticsPanel";
 import RidersManagementPanel from "./RidersManagementPanel";
 import SupportManagementPanel from "./SupportManagementPanel";
+import MenuImage from "./MenuImage";
 import { 
   ShieldCheck, 
   MapPin, 
@@ -2085,10 +2086,12 @@ export default function DedicatedDashboard({
                             className="bg-[#181818] border border-neutral-800 p-4 flex gap-4 hover:border-neutral-700 transition-all font-mono"
                           >
                             <div className="w-20 h-20 bg-neutral-900 border border-neutral-800 shrink-0 overflow-hidden relative">
-                              <img 
+                              <MenuImage 
                                 src={item.image} 
-                                alt={item.name} 
+                                name={item.name} 
                                 className="w-full h-full object-cover"
+                                containerClassName="w-full h-full"
+                                size="sm"
                               />
                             </div>
                             <div className="flex-grow flex flex-col justify-between text-left">
@@ -3331,10 +3334,12 @@ export default function DedicatedDashboard({
                               >
                                 <div className="flex items-center gap-3.5 min-w-0 flex-grow">
                                   <div className="w-12 h-12 bg-neutral-900 border border-neutral-800 overflow-hidden shrink-0">
-                                    <img 
+                                    <MenuImage 
                                       src={item.image} 
-                                      alt={item.name} 
+                                      name={item.name} 
                                       className="w-full h-full object-cover"
+                                      containerClassName="w-full h-full"
+                                      size="sm"
                                     />
                                   </div>
                                   <div className="text-left min-w-0">

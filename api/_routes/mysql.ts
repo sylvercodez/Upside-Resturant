@@ -241,6 +241,121 @@ mysqlRouter.get("/debug-sync", async (req: any, res: any) => {
   }
 });
 
+// 2a. Route: Match and sync images from gallery/assets collection to their respective menu item names
+mysqlRouter.post("/match-menu-images", async (req: any, res: any) => {
+  try {
+    // 1. Fetch assets and menus from MySQL
+    const assets = await querySql("SELECT * FROM assets");
+    const menus = await querySql("SELECT * FROM menus WHERE deleted = 0");
+
+    if (!assets || !menus) {
+      return res.status(500).json({ error: "Failed to load assets or menus from MySQL." });
+    }
+
+    const normalize = (name: string) => {
+      return name
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, "")
+        .trim();
+    };
+
+    const updates: { menuId: string; menuName: string; assetName: string; imageUrl: string }[] = [];
+
+    // Setup Firestore connection if available for dual synchronization
+    const configPath = path.join(process.cwd(), "firebase-applet-config.json");
+    let databaseId = "ai-studio-7ee29b67-2013-4587-a753-b479a6e19155";
+    let firebaseConfig: any = null;
+    let fdb: any = null;
+    
+    if (fs.existsSync(configPath)) {
+      firebaseConfig = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+      if (firebaseConfig.firestoreDatabaseId) databaseId = firebaseConfig.firestoreDatabaseId;
+    }
+    
+    if (firebaseConfig) {
+      try {
+        fdb = await getFirestoreAdmin(firebaseConfig, databaseId, "mysql-menu-image-matcher");
+        console.log("[MATCH ROUTE] Successfully connected to Firestore database:", databaseId);
+      } catch (fErr: any) {
+        console.warn("[MATCH ROUTE] Firestore admin connection failed, continuing with MySQL only:", fErr.message);
+      }
+    }
+
+    for (const asset of assets) {
+      const normAsset = normalize(asset.name);
+
+      // We support matching multiple menu items if they have the same name or are aliases
+      const matchedMenus = menus.filter((m: any) => {
+        const normMenu = normalize(m.name);
+        
+        // Manual explicit overrides first
+        if (normAsset === "gizodo" && m.id === "gizdodo") return true;
+        if (normAsset === "smokylemonchickensalad" && m.id === "chicken-lemon-salad") return true;
+        if (normAsset === "eggsalad1" && m.id === "egg-salad-sandwich") return true;
+        if (normAsset === "syrup" && m.id === "extra-syrup") return true;
+
+        // General matches
+        return normMenu === normAsset || 
+               normMenu === normAsset + "s" || 
+               normAsset === normMenu + "s" ||
+               (normMenu.includes(normAsset) && normAsset.length > 5) ||
+               (normAsset.includes(normMenu) && normMenu.length > 5);
+      });
+
+      for (const m of matchedMenus) {
+        // Skip updating if it already has the identical image URL
+        if (m.image === asset.url) continue;
+
+        // 1. Update in MySQL
+        await querySql("UPDATE menus SET image = ?, updatedAt = ? WHERE id = ?", [
+          asset.url,
+          new Date().toISOString(),
+          m.id
+        ]);
+
+        // 2. Update in Firestore if available
+        if (fdb) {
+          try {
+            const menuRef = fdb.collection("menus").doc(m.id);
+            const docSnap = await menuRef.get();
+            if (docSnap.exists) {
+              await menuRef.update({
+                image: asset.url,
+                updatedAt: new Date().toISOString()
+              });
+            } else {
+              // If it doesn't exist in Firestore, create it to keep them fully synced!
+              await menuRef.set({
+                ...m,
+                image: asset.url,
+                updatedAt: new Date().toISOString()
+              });
+            }
+          } catch (firestoreUpdateErr: any) {
+            console.warn(`[MATCH ROUTE] Failed to update Firestore doc for menu ID ${m.id}:`, firestoreUpdateErr.message);
+          }
+        }
+
+        updates.push({
+          menuId: m.id,
+          menuName: m.name,
+          assetName: asset.name,
+          imageUrl: asset.url.substring(0, 50) + "..."
+        });
+      }
+    }
+
+    return res.json({
+      success: true,
+      message: `Successfully matched and updated ${updates.length} menu items.`,
+      updates
+    });
+  } catch (err: any) {
+    console.error("[MATCH ROUTE] Error matching images to menus:", err);
+    return res.status(500).json({ error: err.message, stack: err.stack });
+  }
+});
+
 // 2b. Route: Detailed database connectivity diagnostic with shorter timeout and verbose error logging
 mysqlRouter.get("/diagnostic", async (req: any, res: any) => {
   const host = sanitizeMySQLHost(process.env.MYSQL_HOST || "");

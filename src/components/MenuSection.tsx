@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Search, Heart, ShoppingBag, Check, Plus, Minus, Settings2, ChevronLeft, ChevronRight } from "lucide-react";
 import { CATEGORIES, MENU_ITEMS, MenuItem, Category } from "../data/menu";
+import MenuImage from "./MenuImage";
 
 interface MenuSectionProps {
   onAddToCart: (item: MenuItem, variant?: string, extras?: string[], notes?: string) => void;
@@ -346,12 +347,12 @@ export default function MenuSection({ onAddToCart, favorites, onToggleFavorite, 
                     <Heart className={`w-4 h-4 ${isLiked ? "fill-rose-500 text-rose-500" : ""}`} />
                   </button>
 
-                  <img
+                  <MenuImage
                     src={item.image}
-                    alt={item.name}
+                    name={item.name}
                     className="w-full h-full object-cover group-hover:scale-105 transition-all duration-700 opacity-100"
-                    loading="lazy"
-                    referrerPolicy="no-referrer"
+                    containerClassName="w-full h-full min-h-[160px]"
+                    size="lg"
                   />
                 </div>
 

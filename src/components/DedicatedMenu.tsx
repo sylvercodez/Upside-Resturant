@@ -1,6 +1,7 @@
 import React, { useState, useRef } from "react";
 import { Search, Heart, ShoppingBag, Check, Plus, Minus, ArrowLeft, Grid, Sparkles, Filter, Ticket } from "lucide-react";
 import { CATEGORIES, MENU_ITEMS, MenuItem, Category } from "../data/menu";
+import MenuImage from "./MenuImage";
 
 interface DedicatedMenuProps {
   onBackToLobby: () => void;
@@ -357,11 +358,12 @@ export default function DedicatedMenu({
                           <Heart className={`w-4 h-4 ${isLiked ? "fill-rose-500 text-rose-500" : ""}`} />
                         </button>
 
-                        <img
+                        <MenuImage
                           src={item.image}
-                          alt={item.name}
+                          name={item.name}
                           className="w-full h-full object-cover group-hover:scale-105 transition-all duration-705 opacity-100"
-                          loading="lazy"
+                          containerClassName="w-full h-full min-h-[160px]"
+                          size="lg"
                         />
                       </div>
 
@@ -416,10 +418,12 @@ export default function DedicatedMenu({
           <div className="bg-white border border-neutral-200 w-full max-w-lg overflow-y-auto max-h-[95vh] rounded-none shadow-2xl text-black">
             {/* Header banner */}
             <div className="relative h-48 bg-black">
-              <img
+              <MenuImage
                 src={selectedItemForModal.image}
-                alt={selectedItemForModal.name}
+                name={selectedItemForModal.name}
                 className="w-full h-full object-cover"
+                containerClassName="w-full h-full"
+                size="lg"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black to-transparent" />
               <button

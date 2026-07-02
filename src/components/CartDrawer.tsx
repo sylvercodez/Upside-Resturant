@@ -7,6 +7,7 @@ import OrderTracker from "./OrderTracker";
 import { createUserWithEmailAndPassword, updateProfile, signInWithEmailAndPassword } from "firebase/auth";
 import { auth, db, handleFirestoreError, OperationType } from "../firebase";
 import { doc, setDoc, updateDoc, serverTimestamp } from "firebase/firestore";
+import MenuImage from "./MenuImage";
 
 const generateAlphanumericCode = () => {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
@@ -1042,11 +1043,12 @@ export default function CartDrawer({
                         <div className="absolute top-0 right-0 w-16 h-16 bg-gradient-to-br from-amber-500/0 to-amber-500/5 pointer-events-none duration-300 rounded-bl-full group-hover:scale-110" />
 
                         <div className="relative w-20 h-20 flex-shrink-0 overflow-hidden rounded-lg border border-neutral-200/80 shadow-sm bg-neutral-50 flex items-center justify-center">
-                          <img
+                          <MenuImage
                             src={item.image}
-                            alt={item.name}
+                            name={item.name}
                             className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                            referrerPolicy="no-referrer"
+                            containerClassName="w-full h-full"
+                            size="sm"
                           />
                         </div>
 
@@ -1220,7 +1222,7 @@ export default function CartDrawer({
                             className="bg-white border border-neutral-200 p-2.5 flex flex-col justify-between hover:border-amber-600/40 cursor-pointer transition-all duration-300 shadow-sm"
                             id={`upsell-card-${up.id}`}
                           >
-                            <img src={up.image} alt={up.name} className="w-full h-16 object-cover border border-neutral-200 mb-2" />
+                            <MenuImage src={up.image} name={up.name} className="w-full h-16 object-cover border border-neutral-200 mb-2" containerClassName="w-full h-16 mb-2" size="sm" />
                             <h5 className="text-[10px] font-mono font-semibold text-neutral-800 truncate uppercase">{up.name}</h5>
                             <div className="flex items-center justify-between mt-2">
                               <span className="text-[10px] text-amber-600 font-mono font-bold">₦{up.price.toLocaleString()}</span>
