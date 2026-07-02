@@ -826,10 +826,23 @@ export default function DedicatedDashboard({
         id: parsedId,
         name: newImageName.trim(),
         url: newImageUrl.trim(),
-        createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString(),
+        isPreset: false
       };
+      // 1. Save to Firestore
       await setDoc(doc(db, "assets", parsedId), payload);
-      setImageFormSuccess(`Image "${newImageName}" successfully registered to library.`);
+
+      // 2. Sync to MySQL
+      const mysqlRes = await fetch(getApiUrl("/api/mysql/assets"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      if (!mysqlRes.ok) {
+        console.warn("Failed to sync single asset to MySQL:", await mysqlRes.text());
+      }
+
+      setImageFormSuccess(`Image "${newImageName}" successfully registered to library and synced to MySQL.`);
       setNewImageName("");
       setNewImageUrl("");
     } catch (err: any) {
@@ -842,8 +855,18 @@ export default function DedicatedDashboard({
   const handleDeleteCustomImage = async (imgId: string, imgName: string) => {
     if (!window.confirm(`Are you absolutely sure you want to delete "${imgName}" from your library?`)) return;
     try {
+      // 1. Delete from Firestore
       await deleteDoc(doc(db, "assets", imgId));
-      setImageFormSuccess(`"${imgName}" was deleted from the dynamic library.`);
+
+      // 2. Sync deletion to MySQL
+      const mysqlRes = await fetch(getApiUrl(`/api/mysql/assets/${imgId}`), {
+        method: "DELETE"
+      });
+      if (!mysqlRes.ok) {
+        console.warn("Failed to sync deletion of asset to MySQL:", await mysqlRes.text());
+      }
+
+      setImageFormSuccess(`"${imgName}" was deleted from the library and MySQL database.`);
     } catch (err: any) {
       console.error("Delete image failed:", err);
       alert(`Failed to delete image: ${err.message}`);
@@ -1030,9 +1053,22 @@ export default function DedicatedDashboard({
           id: parsedId,
           name: cleanLabel,
           url: item.url,
-          createdAt: new Date().toISOString()
+          createdAt: new Date().toISOString(),
+          isPreset: false
         };
+        // 1. Write to Firestore
         await setDoc(doc(db, "assets", parsedId), payload);
+
+        // 2. Sync to MySQL
+        const mysqlRes = await fetch(getApiUrl("/api/mysql/assets"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        if (!mysqlRes.ok) {
+          console.warn(`Failed to sync bulk asset "${cleanLabel}" to MySQL:`, await mysqlRes.text());
+        }
+
         successCount++;
       } catch (err) {
         console.error("Bulk upload item failed:", err);
@@ -1048,7 +1084,7 @@ export default function DedicatedDashboard({
     });
 
     if (failCount === 0) {
-      setImageFormSuccess(`Successfully published all ${successCount} images to the visual library!`);
+      setImageFormSuccess(`Successfully published and synced all ${successCount} images to the visual library and MySQL database!`);
       setBulkImagesList([]);
     } else {
       setNewImageFormError(`Published ${successCount} images, but ${failCount} failed. Please verify and retry.`);
