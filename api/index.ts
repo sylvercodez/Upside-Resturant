@@ -1,6 +1,8 @@
 import express from "express";
 import path from "path";
 import fs from "fs";
+import { createServer } from "http";
+import { Server as SocketIOServer } from "socket.io";
 import { mapEnvVariables } from "./_utils/env.js";
 import { appCheckVerification } from "./_middleware/appCheck.js";
 import { otpRouter } from "./_routes/otp.js";
@@ -15,6 +17,44 @@ mapEnvVariables();
 
 const app = express(); 
 const PORT = process.env.PORT || 3000;
+
+const httpServer = createServer(app);
+const io = new SocketIOServer(httpServer, {
+  cors: {
+    origin: "*",
+    methods: ["GET", "POST"]
+  }
+});
+
+// Configure Socket.IO behavior
+io.on("connection", (socket) => {
+  console.log(`[SOCKET.IO SERVER] Client connected: ${socket.id}`);
+
+  socket.on("join-room", (roomName) => {
+    socket.join(roomName);
+    console.log(`[SOCKET.IO SERVER] Socket ${socket.id} joined room: ${roomName}`);
+  });
+
+  socket.on("order-message", (data) => {
+    const { orderId } = data;
+    if (orderId) {
+      // Broadcast to everyone in that order's room
+      io.to(`order_${orderId}`).emit("order-message", data);
+    }
+  });
+
+  socket.on("support-message", (data) => {
+    const { sessionId } = data;
+    if (sessionId) {
+      // Broadcast to everyone in that support session's room
+      io.to(`support_${sessionId}`).emit("support-message", data);
+    }
+  });
+
+  socket.on("disconnect", () => {
+    console.log(`[SOCKET.IO SERVER] Client disconnected: ${socket.id}`);
+  });
+});
 
 app.use(express.json());
 
@@ -182,13 +222,13 @@ async function serveApp() {
 
   if (typeof PORT === "string" && (PORT.startsWith("/") || PORT.startsWith("\\"))) {
     // Unix Socket pipe used by cPanel Passenger Phusion
-    app.listen(PORT, () => {
-      console.log(`Express server running on Passenger unix socket: ${PORT}`);
+    httpServer.listen(PORT, () => {
+      console.log(`Express server running on Passenger unix socket with Socket.IO: ${PORT}`);
     });
   } else {
     const bindPort = typeof PORT === "string" ? parseInt(PORT, 10) : PORT;
-    app.listen(bindPort, "0.0.0.0", () => {
-      console.log(`Express server executing on http://0.0.0.0:${bindPort}`);
+    httpServer.listen(bindPort, "0.0.0.0", () => {
+      console.log(`Express server executing on http://0.0.0.0:${bindPort} with Socket.IO`);
     });
   }
 }

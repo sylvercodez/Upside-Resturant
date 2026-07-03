@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { Headphones, MessageSquare, Clock, User, Mail, Send, CheckSquare, Search, AlertCircle } from "lucide-react";
 import { collection, query, onSnapshot, doc, setDoc, orderBy, limit } from "firebase/firestore";
 import { db } from "../firebase";
+import { socket } from "../socket";
 
 interface SupportChatSession {
   id: string;
@@ -73,12 +74,15 @@ export default function SupportManagementPanel() {
     return () => unsubscribe();
   }, [selectedSessionId]);
 
-  // 2. Subscribe to messages of selected support session
+  // 2. Subscribe to messages of selected support session and join Socket.IO room
   useEffect(() => {
     if (!selectedSessionId) {
       setMessages([]);
       return;
     }
+
+    // Join Socket.IO support room
+    socket.emit("join-room", `support_${selectedSessionId}`);
 
     const messagesQuery = query(
       collection(db, "support_chats", selectedSessionId, "messages"),
@@ -100,7 +104,16 @@ export default function SupportManagementPanel() {
             timestamp: data.timestamp,
           });
         });
-        setMessages(fetchedMsgs);
+        setMessages((prev) => {
+          // Merge to prevent duplicates and keep chronological order
+          const merged = [...prev];
+          fetchedMsgs.forEach((msg) => {
+            if (!merged.some((m) => m.id === msg.id)) {
+              merged.push(msg);
+            }
+          });
+          return merged.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+        });
         setError(null);
       },
       (err) => {
@@ -109,7 +122,29 @@ export default function SupportManagementPanel() {
       }
     );
 
-    return () => unsubscribe();
+    // Listen to real-time Socket.IO support messages
+    const handleIncomingSupportMsg = (data: any) => {
+      if (data.sessionId === selectedSessionId) {
+        setMessages((prev) => {
+          if (prev.some((m) => m.id === data.id)) return prev;
+          const updated = [...prev, {
+            id: data.id,
+            senderId: data.senderId,
+            senderName: data.senderName,
+            text: data.text,
+            timestamp: data.timestamp
+          }];
+          return updated.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+        });
+      }
+    };
+
+    socket.on("support-message", handleIncomingSupportMsg);
+
+    return () => {
+      unsubscribe();
+      socket.off("support-message", handleIncomingSupportMsg);
+    };
   }, [selectedSessionId]);
 
   // Scroll to bottom on new messages
@@ -129,14 +164,37 @@ export default function SupportManagementPanel() {
     const messageDocRef = doc(db, "support_chats", selectedSessionId, "messages", messageId);
 
     const payload = {
+      id: messageId,
+      sessionId: selectedSessionId,
       senderId: "support_agent",
       senderName: "Admin Helpdesk",
       text: cleanText,
       timestamp: new Date().toISOString(),
     };
 
+    // Optimistically update the UI instantly
+    setMessages((prev) => {
+      if (prev.some((m) => m.id === messageId)) return prev;
+      return [...prev, {
+        id: payload.id,
+        senderId: payload.senderId,
+        senderName: payload.senderName,
+        text: payload.text,
+        timestamp: payload.timestamp
+      }].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+    });
+    setInputText("");
+
+    // Dispatch via Socket.IO instantly
+    socket.emit("support-message", payload);
+
     try {
-      await setDoc(messageDocRef, payload);
+      await setDoc(messageDocRef, {
+        senderId: payload.senderId,
+        senderName: payload.senderName,
+        text: payload.text,
+        timestamp: payload.timestamp
+      });
 
       // Update parent ticket metadata
       const chatDocRef = doc(db, "support_chats", selectedSessionId);
@@ -149,8 +207,6 @@ export default function SupportManagementPanel() {
         },
         { merge: true }
       );
-
-      setInputText("");
     } catch (err) {
       console.error("Error sending helpdesk reply: ", err);
       setError("Reply failed. Security constraints block this write.");

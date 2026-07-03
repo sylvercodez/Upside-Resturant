@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { Send, MessageSquare, Clock, ShieldAlert, X } from "lucide-react";
 import { collection, doc, setDoc, onSnapshot, query, orderBy, limit } from "firebase/firestore";
 import { db, auth } from "../firebase";
+import { socket } from "../socket";
 
 enum OperationType {
   CREATE = "create",
@@ -72,9 +73,12 @@ export default function LiveChat({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
 
-  // Subscribe to real-time messages subcollection
+  // Subscribe to real-time messages subcollection and connect to Socket.IO
   useEffect(() => {
     if (!orderId) return;
+
+    // Join Socket.IO room for this order
+    socket.emit("join-room", `order_${orderId}`);
 
     const path = `orders/${orderId}/messages`;
     const messagesQuery = query(
@@ -97,7 +101,16 @@ export default function LiveChat({
             timestamp: data.timestamp,
           });
         });
-        setMessages(fetchedMsgs);
+        setMessages((prev) => {
+          // Merge logic to avoid replacing any socket messages and to ensure chronological order
+          const merged = [...prev];
+          fetchedMsgs.forEach((msg) => {
+            if (!merged.some((m) => m.id === msg.id)) {
+              merged.push(msg);
+            }
+          });
+          return merged.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+        });
         setError(null);
       },
       (err) => {
@@ -110,7 +123,29 @@ export default function LiveChat({
       }
     );
 
-    return () => unsubscribe();
+    // Listen to real-time Socket.IO messages
+    const handleIncomingOrderMsg = (data: any) => {
+      if (data.orderId === orderId) {
+        setMessages((prev) => {
+          if (prev.some((m) => m.id === data.id)) return prev;
+          const updated = [...prev, {
+            id: data.id,
+            senderId: data.senderId,
+            senderName: data.senderName,
+            text: data.text,
+            timestamp: data.timestamp
+          }];
+          return updated.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+        });
+      }
+    };
+
+    socket.on("order-message", handleIncomingOrderMsg);
+
+    return () => {
+      unsubscribe();
+      socket.off("order-message", handleIncomingOrderMsg);
+    };
   }, [orderId]);
 
   // Scroll to bottom on new messages
@@ -130,16 +165,38 @@ export default function LiveChat({
     const path = `orders/${orderId}/messages/${messageId}`;
 
     const payload = {
+      id: messageId,
+      orderId,
       senderId,
       senderName,
       text: cleanText,
       timestamp: new Date().toISOString(),
     };
 
+    // Optimistically update the UI instantly
+    setMessages((prev) => {
+      if (prev.some((m) => m.id === messageId)) return prev;
+      return [...prev, {
+        id: payload.id,
+        senderId: payload.senderId,
+        senderName: payload.senderName,
+        text: payload.text,
+        timestamp: payload.timestamp
+      }].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+    });
+    setInputText("");
+
+    // Dispatch via Socket.IO instantly
+    socket.emit("order-message", payload);
+
     try {
       const messageDocRef = doc(db, "orders", orderId, "messages", messageId);
-      await setDoc(messageDocRef, payload);
-      setInputText("");
+      await setDoc(messageDocRef, {
+        senderId: payload.senderId,
+        senderName: payload.senderName,
+        text: payload.text,
+        timestamp: payload.timestamp
+      });
     } catch (err: any) {
       setError("Failed to dispatch message. Access denied.");
       try {
