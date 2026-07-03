@@ -61,6 +61,7 @@ interface DedicatedDashboardProps {
   categories?: Category[];
   shippingLocations?: ShippingLocation[];
   isMySQLActive?: boolean;
+  onRefreshMySQLData?: () => void;
 }
 
 const PRESET_IMAGES = [
@@ -82,7 +83,8 @@ export default function DedicatedDashboard({
   onReorder,
   categories,
   shippingLocations = [],
-  isMySQLActive = false
+  isMySQLActive = false,
+  onRefreshMySQLData
 }: DedicatedDashboardProps) {
   const finalMenuItems = menuItems || MENU_ITEMS;
   const displayCategories = categories || CATEGORIES;
@@ -1137,6 +1139,7 @@ export default function DedicatedDashboard({
         if (!res.ok) {
           throw new Error("Unable to execute category write within MySQL host.");
         }
+        onRefreshMySQLData?.();
       } else {
         await setDoc(doc(db, "categories", parsedId), payload);
       }
@@ -1168,6 +1171,7 @@ export default function DedicatedDashboard({
           body: JSON.stringify({ ...cat, deleted: 0 })
         });
         if (!res.ok) throw new Error("Failed to restore category state inside MySQL.");
+        onRefreshMySQLData?.();
       } else {
         await deleteDoc(doc(db, "categories", cat.id));
       }
@@ -1186,6 +1190,7 @@ export default function DedicatedDashboard({
           method: "DELETE"
         });
         if (!res.ok) throw new Error("Failed to soft delete category on MySQL host.");
+        onRefreshMySQLData?.();
       } else {
         const isNativeStatic = CATEGORIES.some(s => s.id === cat.id);
         if (isNativeStatic) {
@@ -1224,6 +1229,7 @@ export default function DedicatedDashboard({
           body: JSON.stringify({ ...cat, disabled: !currentDisabled ? 1 : 0 })
         });
         if (!res.ok) throw new Error("Unable to save status inside MySQL database.");
+        onRefreshMySQLData?.();
       } else {
         const isNativeStatic = CATEGORIES.some(s => s.id === cat.id);
         if (isNativeStatic) {
@@ -1543,6 +1549,7 @@ export default function DedicatedDashboard({
           method: "DELETE"
         });
         if (!res.ok) throw new Error("Unable to delete menu item from MySQL database.");
+        onRefreshMySQLData?.();
       } else {
         const isNativeStatic = MENU_ITEMS.some(s => s.id === item.id);
         if (isNativeStatic) {
@@ -1680,6 +1687,7 @@ export default function DedicatedDashboard({
         if (!res.ok) {
           throw new Error("Unable to save menu item inside MySQL Database.");
         }
+        onRefreshMySQLData?.();
       } else {
         await setDoc(doc(db, "menus", parsedId), itemPayload);
       }

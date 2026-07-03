@@ -641,6 +641,10 @@ mysqlRouter.post("/setup", async (req: any, res: any) => {
       await querySql("ALTER TABLE menus ADD COLUMN available TINYINT(1) DEFAULT 1");
     } catch (_) {}
 
+    try {
+      await querySql("ALTER TABLE menus MODIFY COLUMN image LONGTEXT");
+    } catch (_) {}
+
     // Create orders table
     await querySql(`
       CREATE TABLE IF NOT EXISTS orders (

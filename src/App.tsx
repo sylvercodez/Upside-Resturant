@@ -93,25 +93,24 @@ useEffect(() => {
     return () => window.removeEventListener("mysql-login", syncUser);
   }, [isMySQLActive]);
 // 3. MySQL Background Data Synchronization — fetch once only
-useEffect(() => {
+const fetchMySQLData = async () => {
   if (!isMySQLActive) return;
+  try {
+    const [mRes, cRes, sRes] = await Promise.all([
+      fetch(getApiUrl("/api/mysql/menus")),
+      fetch(getApiUrl("/api/mysql/categories")),
+      fetch(getApiUrl("/api/mysql/shipping-areas")),
+    ]);
 
-  const fetchMySQLData = async () => {
-    try {
-      const [mRes, cRes, sRes] = await Promise.all([
-        fetch(getApiUrl("/api/mysql/menus")),
-        fetch(getApiUrl("/api/mysql/categories")),
-        fetch(getApiUrl("/api/mysql/shipping-areas")),
-      ]);
+    if (mRes.ok) setAllMenuItems(await mRes.json());
+    if (cRes.ok) setAllCategories(await cRes.json());
+    if (sRes.ok) setShippingLocations(await sRes.json());
+  } catch (err) {
+    console.warn("MySQL sync error:", err);
+  }
+};
 
-      if (mRes.ok) setAllMenuItems(await mRes.json());
-      if (cRes.ok) setAllCategories(await cRes.json());
-      if (sRes.ok) setShippingLocations(await sRes.json());
-    } catch (err) {
-      console.warn("MySQL sync error:", err);
-    }
-  };
-
+useEffect(() => {
   fetchMySQLData(); // run once, no interval
 }, [isMySQLActive]);
   // Firebase listeners (only active if MySQL is not active)
@@ -770,6 +769,7 @@ useEffect(() => {
           userRole={userRole}
           menuItems={allMenuItems}
           isMySQLActive={isMySQLActive}
+          onRefreshMySQLData={fetchMySQLData}
           onBackToLobby={() => {
             handleNavigate("/");
           }}

@@ -95,7 +95,7 @@ export async function autoInitializeSchema(activePool: mysql.Pool): Promise<void
       description TEXT,
       price DOUBLE NOT NULL DEFAULT 0.0,
       category VARCHAR(255) NOT NULL,
-      image TEXT,
+      image LONGTEXT,
       tags TEXT,
       specs TEXT,
       deleted TINYINT(1) DEFAULT 0,
@@ -106,6 +106,10 @@ export async function autoInitializeSchema(activePool: mysql.Pool): Promise<void
 
   try {
     await activePool.execute("ALTER TABLE menus ADD COLUMN available TINYINT(1) DEFAULT 1");
+  } catch (_) {}
+
+  try {
+    await activePool.execute("ALTER TABLE menus MODIFY COLUMN image LONGTEXT");
   } catch (_) {}
 
   // 3. Create orders table
