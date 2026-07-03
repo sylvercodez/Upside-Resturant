@@ -34,6 +34,27 @@ export default function SupportChatWidget({ currentUser }: SupportChatWidgetProp
   const [isConnecting, setIsConnecting] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+
+  const safeGetDate = (timestamp: any): Date => {
+    if (!timestamp) return new Date();
+    if (typeof timestamp === "object") {
+      if (typeof timestamp.toDate === "function") {
+        return timestamp.toDate();
+      }
+      if (typeof timestamp.seconds === "number") {
+        return new Date(timestamp.seconds * 1000);
+      }
+    }
+    const d = new Date(timestamp);
+    if (isNaN(d.getTime())) {
+      if (typeof timestamp === "string" && /^\d+$/.test(timestamp)) {
+        return new Date(parseInt(timestamp, 10));
+      }
+      return new Date();
+    }
+    return d;
+  };
 
   // 1. Initialize or load active session from localStorage on mount
   useEffect(() => {
@@ -87,7 +108,7 @@ export default function SupportChatWidget({ currentUser }: SupportChatWidgetProp
               merged.push(msg);
             }
           });
-          return merged.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+          return merged.sort((a, b) => safeGetDate(a.timestamp).getTime() - safeGetDate(b.timestamp).getTime());
         });
         setError(null);
       },
@@ -109,7 +130,7 @@ export default function SupportChatWidget({ currentUser }: SupportChatWidgetProp
             text: data.text,
             timestamp: data.timestamp
           }];
-          return updated.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+          return updated.sort((a, b) => safeGetDate(a.timestamp).getTime() - safeGetDate(b.timestamp).getTime());
         });
       }
     };
@@ -122,12 +143,10 @@ export default function SupportChatWidget({ currentUser }: SupportChatWidgetProp
     };
   }, [chatId]);
 
-  // Scroll to bottom on new messages
+  // Scroll to bottom on new messages (internal container scroll only - prevents screen-scrolling jumps!)
   useEffect(() => {
-    if (isOpen) {
-      setTimeout(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-      }, 80);
+    if (isOpen && messagesContainerRef.current) {
+      messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
     }
   }, [messages, isOpen]);
 
@@ -233,7 +252,7 @@ export default function SupportChatWidget({ currentUser }: SupportChatWidgetProp
         senderName: payload.senderName,
         text: payload.text,
         timestamp: payload.timestamp
-      }].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+      }].sort((a, b) => safeGetDate(a.timestamp).getTime() - safeGetDate(b.timestamp).getTime());
     });
     setInputText("");
 
@@ -389,7 +408,10 @@ export default function SupportChatWidget({ currentUser }: SupportChatWidgetProp
             ) : (
               /* REAL-TIME MSG TRANSCRIPT VIEW */
               <div className="flex-1 flex flex-col overflow-hidden">
-                <div className="flex-1 p-4 overflow-y-auto space-y-4 scrollbar-thin scrollbar-thumb-neutral-800">
+                <div
+                  ref={messagesContainerRef}
+                  className="flex-1 p-4 overflow-y-auto space-y-4 scrollbar-thin scrollbar-thumb-neutral-800"
+                >
                   {messages.length === 0 ? (
                     <div className="h-full flex flex-col items-center justify-center text-center p-4 space-y-2 text-neutral-600">
                       <Loader className="w-6 h-6 animate-spin text-amber-500" />
@@ -423,7 +445,7 @@ export default function SupportChatWidget({ currentUser }: SupportChatWidgetProp
                           <div className="flex items-center gap-1 mt-1 opacity-40">
                             <Clock className="w-2.5 h-2.5" />
                             <span className="text-[7.5px] font-mono">
-                              {new Date(msg.timestamp).toLocaleTimeString([], {
+                              {safeGetDate(msg.timestamp).toLocaleTimeString([], {
                                 hour: "2-digit",
                                 minute: "2-digit",
                               })}
