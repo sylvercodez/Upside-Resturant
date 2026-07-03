@@ -275,7 +275,7 @@ mysqlRouter.post("/match-menu-images", async (req: any, res: any) => {
       "syrup": "syrup",
       "cappuccino": "acupofcappuccino",
       "espressosingle": "expressosimple",
-      "espressodouble": "expressosimple",
+      "espressodouble": "https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?auto=format&fit=crop&w=800&q=80",
       "extraespresso": "expressosimple",
       "earlgraytea": "earlgreyorganictea",
       "helzenuticecoffe": "helzenuticecoffe",
@@ -302,57 +302,58 @@ mysqlRouter.post("/match-menu-images", async (req: any, res: any) => {
       "barbequechickenwings": "barbequechickenwings",
       "butterflyprawns": "cocktailprawns",
       "classicgrilledcheesesandwich": "peanutbutterandjellysandwich",
-      "vegclubsandwich": "chickengrilledsandwich",
-      "chickenmayosandwich": "chickengrilledsandwich",
-      "bltsandwich": "chickengrilledsandwich",
-      "tunasandwich": "chickengrilledsandwich",
+      "vegclubsandwich": "https://images.unsplash.com/photo-1540713434306-5376c41c4a14?auto=format&fit=crop&w=800&q=80",
+      "chickenmayosandwich": "https://images.unsplash.com/photo-1521390188846-e2a3a97453a0?auto=format&fit=crop&w=800&q=80",
+      "bltsandwich": "https://images.unsplash.com/photo-1540713434306-5376c41c4a14?auto=format&fit=crop&w=800&q=80",
+      "tunasandwich": "https://images.unsplash.com/photo-1509722747041-616f39b57569?auto=format&fit=crop&w=800&q=80",
       "paneertikkasandwich": "paneertikkasandwish",
       "paneertikkasandwish": "paneertikkasandwish",
-      "fettuccinealfredopasta": "spaghettiallapomodoro",
-      "spaghetticarbonara": "spaghettiallapomodoro",
-      "penneallarrabbiata": "spaghettiallapomodoro",
-      "spaghettibolognese": "spaghettiallapomodoro",
-      "seafoodpasta": "spaghettiallapomodoro",
+      "fettuccinealfredopasta": "https://images.unsplash.com/photo-1645112411341-6c4fd023714a?auto=format&fit=crop&w=800&q=80",
+      "spaghetticarbonara": "https://images.unsplash.com/photo-1612874742237-6526221588e3?auto=format&fit=crop&w=800&q=80",
+      "penneallarrabbiata": "https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8?auto=format&fit=crop&w=800&q=80",
+      "spaghettibolognese": "https://images.unsplash.com/photo-1546549032-9571cd6b27df?auto=format&fit=crop&w=800&q=80",
+      "seafoodpasta": "https://images.unsplash.com/photo-1563379971899-660589a01cd3?auto=format&fit=crop&w=800&q=80",
       "southernstylecoleslawburger": "southernstylecoleslawburger",
-      "classicmophethburger": "beefburger",
-      "crispyburger": "beefburger",
+      "classicmophethburger": "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=800&q=80",
+      "crispyburger": "https://images.unsplash.com/photo-1550547660-d9450f859349?auto=format&fit=crop&w=800&q=80",
       "lemonbuttersalmon": "garlichoneyglazedsalmon",
       "creamytuscansalmon": "garlichoneyglazedsalmon",
-      "chickensteak": "ribeyesteak",
-      "tbonesteak": "ribeyesteak",
+      "chickensteak": "https://images.unsplash.com/photo-1532550907401-a500c9a57435?auto=format&fit=crop&w=800&q=80",
+      "tbonesteak": "https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=800&q=80",
       "lambchops": "lambracksteak",
       "grilledcatfish": "catfishpeppersoup",
-      "mophethplatter": "seafoodgrilling",
-      "tacosplatter": "seafoodgrilling",
+      "mophethplatter": "https://images.unsplash.com/photo-1555939594-58d7cb561ad1?auto=format&fit=crop&w=800&q=80",
+      "tacosplatter": "https://images.unsplash.com/photo-1565299585323-38d6b0865b47?auto=format&fit=crop&w=800&q=80",
       "burgerplatter": "beefburger",
-      "seafoodplatter": "seafoodgrilling",
-      "upsidehouseplatter": "seafoodgrilling",
-      "seafoodsalad": "mayochickensalad",
-      "classicchickensalad": "mayochickensalad",
-      "coleslawsalad": "mayochickensalad",
+      "seafoodplatter": "https://images.unsplash.com/photo-1534080391025-0979e83161be?auto=format&fit=crop&w=800&q=80",
+      "upsidehouseplatter": "https://images.unsplash.com/photo-1608897013039-887f21d8c804?auto=format&fit=crop&w=800&q=80",
+      "seafoodsalad": "https://images.unsplash.com/photo-1551248429-40975aa4de74?auto=format&fit=crop&w=800&q=80",
+      "classicchickensalad": "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=800&q=80",
+      "coleslawsalad": "https://images.unsplash.com/photo-1572449043416-55f4685c9bb7?auto=format&fit=crop&w=800&q=80",
       "bamboozlesalad": "classicgreeksalad",
-      "classiccaesarsalad": "mayochickensalad",
+      "classiccaesarsalad": "https://images.unsplash.com/photo-1550304943-4f24f54ddde9?auto=format&fit=crop&w=800&q=80",
       "darkchocolatechipcookie": "twochipchocolatechipcookie",
       "darkchocolatepeanutbutterchipcookie": "twochipchocolatechipcookie",
       "oatmealraisincookie": "oatmealraisin",
       "caramelcoconutchocolatechipcookie": "coconutcaramelcookieswithchocolatechips",
-      "pepperonipizza": "meatloverpizza",
-      "vegpizza": "meatloverpizza",
-      "cheesepizza": "meatloverpizza",
-      "bbqchickenpizza": "meatloverpizza",
-      "mushroompizza": "meatloverpizza",
-      "pinacolada": "gourmetdrinkshero",
-      "espressomartini": "gourmetdrinkshero",
+      "pepperonipizza": "https://images.unsplash.com/photo-1628840042765-356cda07504e?auto=format&fit=crop&w=800&q=80",
+      "vegpizza": "https://images.unsplash.com/photo-1571066811602-71683a3f680d?auto=format&fit=crop&w=800&q=80",
+      "cheesepizza": "https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&w=800&q=80",
+      "bbqchickenpizza": "https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?auto=format&fit=crop&w=800&q=80",
+      "mushroompizza": "https://images.unsplash.com/photo-1604917621956-10dfa7cce2e7?auto=format&fit=crop&w=800&q=80",
+      "pinacolada": "https://images.unsplash.com/photo-1526318896980-cf78c088247c?auto=format&fit=crop&w=800&q=80",
+      "espressomartini": "https://images.unsplash.com/photo-1578314675249-a6910f80cc4e?auto=format&fit=crop&w=800&q=80",
+      "mimosa": "https://images.unsplash.com/photo-1595981267035-7b04ec82a890?auto=format&fit=crop&w=800&q=80",
       "pepperminttea": "minttea",
       "passionboaster": "passionfruitsmoothie",
       "passionsmoothie": "passionfruitsmoothie",
       "bananasmoothie": "peachsmoothie",
-      "caramelfrappuccino": "chocolatefrappuccino",
+      "caramelfrappuccino": "https://images.unsplash.com/photo-1572490122747-3968b75cc699?auto=format&fit=crop&w=800&q=80",
       "extrahoney": "extrahoney",
-      "vanillamilkshake": "caramelmilkshake",
-      "chocolatemilkshake": "caramelmilkshake",
-      "carrotjuice": "orangejuice",
-      "pineapplejuice": "orangejuice"
+      "vanillamilkshake": "https://images.unsplash.com/photo-1572490122820-218b40c89000?auto=format&fit=crop&w=800&q=80",
+      "chocolatemilkshake": "https://images.unsplash.com/photo-1600718374662-0483d2b9da44?auto=format&fit=crop&w=800&q=80",
+      "carrotjuice": "https://images.unsplash.com/photo-1613478223719-2ab802602423?auto=format&fit=crop&w=800&q=80",
+      "pineapplejuice": "https://images.unsplash.com/photo-1621506289937-a8e4df240d0b?auto=format&fit=crop&w=800&q=80"
     };
 
     const categoryFallbacks: Record<string, string> = {
@@ -414,18 +415,27 @@ mysqlRouter.post("/match-menu-images", async (req: any, res: any) => {
 
       let matchedAsset: any = null;
 
-      // 1. Direct matches or exact overrides
-      const directKeys = [
-        normMenu,
-        normBaseId,
-        manualMappings[normMenu],
-        manualMappings[normBaseId]
-      ].filter(Boolean);
+      // Check if there's a manual override URL
+      const manualUrl = [manualMappings[normMenu], manualMappings[normBaseId]].find(
+        (url) => url && (url.startsWith("http") || url.startsWith("data:image"))
+      );
 
-      for (const k of directKeys) {
-        if (assetsByNormName.has(k)) {
-          matchedAsset = assetsByNormName.get(k);
-          break;
+      if (manualUrl) {
+        matchedAsset = { url: manualUrl, name: m.name };
+      } else {
+        // 1. Direct matches or exact overrides
+        const directKeys = [
+          normMenu,
+          normBaseId,
+          manualMappings[normMenu],
+          manualMappings[normBaseId]
+        ].filter(Boolean);
+
+        for (const k of directKeys) {
+          if (assetsByNormName.has(k)) {
+            matchedAsset = assetsByNormName.get(k);
+            break;
+          }
         }
       }
 
@@ -618,7 +628,7 @@ mysqlRouter.post("/setup", async (req: any, res: any) => {
         description TEXT,
         price DOUBLE NOT NULL DEFAULT 0.0,
         category VARCHAR(255) NOT NULL,
-        image TEXT,
+        image LONGTEXT,
         tags TEXT,
         specs TEXT,
         deleted TINYINT(1) DEFAULT 0,
@@ -1051,7 +1061,7 @@ mysqlRouter.get("/export", async (req: any, res: any) => {
   \`description\` text DEFAULT NULL,
   \`price\` double NOT NULL DEFAULT 0,
   \`category\` varchar(255) NOT NULL,
-  \`image\` text DEFAULT NULL,
+  \`image\` longtext DEFAULT NULL,
   \`tags\` text DEFAULT NULL,
   \`specs\` text DEFAULT NULL,
   \`deleted\` tinyint(1) DEFAULT 0,

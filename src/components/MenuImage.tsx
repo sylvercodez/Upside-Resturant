@@ -92,13 +92,15 @@ export default function MenuImage({
   }
 
   return (
-    <img
-      src={src}
-      alt={alt || name}
-      className={className}
-      onError={() => setHasError(true)}
-      loading="lazy"
-      referrerPolicy="no-referrer"
-    />
+    <div className={`overflow-hidden relative ${containerClassName} flex items-center justify-center`}>
+      <img
+        src={src}
+        alt={alt || name}
+        className={`${className} w-full h-full object-cover`}
+        onError={() => setHasError(true)}
+        loading="lazy"
+        referrerPolicy="no-referrer"
+      />
+    </div>
   );
 }
