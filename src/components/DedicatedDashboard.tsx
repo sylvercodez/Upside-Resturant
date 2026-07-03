@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { User as FirebaseUser } from "firebase/auth";
 import { MenuItem, MENU_ITEMS, CATEGORIES, Category } from "../data/menu";
+import { mapTitleToImageUrl, IMAGE_FALLBACKS } from "../utils/menu";
 import OrderHistory from "./OrderHistory";
 import OrderTracker from "./OrderTracker";
 import AdminAnalyticsPanel from "./AdminAnalyticsPanel";
@@ -3172,13 +3173,41 @@ export default function DedicatedDashboard({
                         </div>
 
                         <div className="space-y-1">
-                          <label className="text-[9px] text-neutral-400 uppercase tracking-widest block font-bold">Food Name *</label>
+                          <div className="flex justify-between items-center">
+                            <label className="text-[9px] text-neutral-400 uppercase tracking-widest block font-bold">Food Name *</label>
+                            {newMenuData.name.trim() && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const url = mapTitleToImageUrl(newMenuData.name, customImages);
+                                  setNewMenuData(prev => ({ ...prev, image: url }));
+                                }}
+                                className="text-[9px] text-amber-500 hover:text-amber-400 font-mono font-bold tracking-wider flex items-center gap-1 transition-colors bg-amber-950/20 px-2 py-0.5 rounded border border-amber-900/30"
+                                title="Auto-pair consistent image from gallery or premium presets"
+                              >
+                                ✨ AUTO-PAIR IMAGE
+                              </button>
+                            )}
+                          </div>
                           <input
                             type="text"
                             required
                             placeholder="e.g. Nigerian Goat Meat Peppersoup"
                             value={newMenuData.name}
-                            onChange={(e) => setNewMenuData(prev => ({ ...prev, name: e.target.value }))}
+                            onChange={(e) => {
+                              const newName = e.target.value;
+                              setNewMenuData(prev => {
+                                const mapped = mapTitleToImageUrl(newName, customImages);
+                                const isDefaultPreset = !prev.image || prev.image === PRESET_IMAGES[0].url;
+                                const isAnyFallback = Object.values(IMAGE_FALLBACKS).some(url => prev.image.includes((url as string).split("?")[0]));
+                                const shouldUpdate = isDefaultPreset || isAnyFallback;
+                                return {
+                                  ...prev,
+                                  name: newName,
+                                  image: shouldUpdate ? mapped : prev.image
+                                };
+                              });
+                            }}
                             className="w-full bg-neutral-950 border border-neutral-850 p-2 text-white focus:outline-none focus:border-amber-500"
                           />
                         </div>
