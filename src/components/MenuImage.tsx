@@ -12,7 +12,7 @@ interface MenuImageProps {
 export default function MenuImage({
   src,
   name,
-  className = "w-full h-full object-contain",
+  className = "w-full h-full object-cover",
   containerClassName = "w-full h-full",
   alt,
   size = "lg"

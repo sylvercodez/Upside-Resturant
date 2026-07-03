@@ -361,7 +361,7 @@ export default function DedicatedMenu({
                         <MenuImage
                           src={item.image}
                           name={item.name}
-                          className="w-full h-full object-contain group-hover:scale-105 transition-all duration-705 opacity-100"
+                          className="w-full h-full object-cover group-hover:scale-105 transition-all duration-705 opacity-100"
                           containerClassName="w-full h-full min-h-[160px]"
                           size="lg"
                         />
@@ -421,7 +421,7 @@ export default function DedicatedMenu({
               <MenuImage
                 src={selectedItemForModal.image}
                 name={selectedItemForModal.name}
-                className="w-full h-full object-contain"
+                className="w-full h-full object-cover"
                 containerClassName="w-full h-full"
                 size="lg"
               />

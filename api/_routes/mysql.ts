@@ -259,6 +259,127 @@ mysqlRouter.post("/match-menu-images", async (req: any, res: any) => {
         .trim();
     };
 
+    const getBaseId = (id: string) => {
+      return id.replace(/-\d{13}(-\d+)?$/, "").replace(/-\d{13}$/, "");
+    };
+
+    const manualMappings: Record<string, string> = {
+      "gizdodo": "gizodo",
+      "gizodo": "gizodo",
+      "asundodo": "gizodo",
+      "chickenlemonsalad": "smokylemonchickensalad",
+      "smokylemonchickensalad": "smokylemonchickensalad",
+      "eggsaladsandwich": "eggsalad1",
+      "eggsalad1": "eggsalad1",
+      "extrasyrup": "syrup",
+      "syrup": "syrup",
+      "cappuccino": "acupofcappuccino",
+      "espressosingle": "expressosimple",
+      "espressodouble": "expressosimple",
+      "extraespresso": "expressosimple",
+      "earlgraytea": "earlgreyorganictea",
+      "helzenuticecoffe": "helzenuticecoffe",
+      "hazelnuticecoffee": "helzenuticecoffe",
+      "icecoffeevanilla": "icedcoffevanilla",
+      "icecoffeechocolate": "icedcoffechocolate",
+      "icecoffeecaramel": "icedcaramelcoffee",
+      "hazelnutfrappuccino": "helzenuticecoffe",
+      "strawberrybananamilkshake": "straberrybananamilkshake",
+      "packedjuicecup": "packedjiuce",
+      "packedjuice": "packedjiuce",
+      "mophethbottlewater": "classicrestaurantdrinks",
+      "upsidemornings": "gourmetdrinkshero",
+      "evelyn": "gourmetdrinkshero",
+      "whiskeysour": "whiskeysour",
+      "tequilasunrise": "tequilasunrisecocktail",
+      "strawberrytea": "strawberrytea",
+      "cranberrytea": "strawberrytea",
+      "extramilk": "whippedcream",
+      "garlicgingerwings": "garlicgingerwings1",
+      "garlicgingerwings1": "garlicgingerwings1",
+      "spicychickenwings": "barbequechickenwings",
+      "classiccrispychickenwings": "barbequechickenwings",
+      "barbequechickenwings": "barbequechickenwings",
+      "butterflyprawns": "cocktailprawns",
+      "classicgrilledcheesesandwich": "peanutbutterandjellysandwich",
+      "vegclubsandwich": "chickengrilledsandwich",
+      "chickenmayosandwich": "chickengrilledsandwich",
+      "bltsandwich": "chickengrilledsandwich",
+      "tunasandwich": "chickengrilledsandwich",
+      "paneertikkasandwich": "paneertikkasandwish",
+      "paneertikkasandwish": "paneertikkasandwish",
+      "fettuccinealfredopasta": "spaghettiallapomodoro",
+      "spaghetticarbonara": "spaghettiallapomodoro",
+      "penneallarrabbiata": "spaghettiallapomodoro",
+      "spaghettibolognese": "spaghettiallapomodoro",
+      "seafoodpasta": "spaghettiallapomodoro",
+      "southernstylecoleslawburger": "southernstylecoleslawburger",
+      "classicmophethburger": "beefburger",
+      "crispyburger": "beefburger",
+      "lemonbuttersalmon": "garlichoneyglazedsalmon",
+      "creamytuscansalmon": "garlichoneyglazedsalmon",
+      "chickensteak": "ribeyesteak",
+      "tbonesteak": "ribeyesteak",
+      "lambchops": "lambracksteak",
+      "grilledcatfish": "catfishpeppersoup",
+      "mophethplatter": "seafoodgrilling",
+      "tacosplatter": "seafoodgrilling",
+      "burgerplatter": "beefburger",
+      "seafoodplatter": "seafoodgrilling",
+      "upsidehouseplatter": "seafoodgrilling",
+      "seafoodsalad": "mayochickensalad",
+      "classicchickensalad": "mayochickensalad",
+      "coleslawsalad": "mayochickensalad",
+      "bamboozlesalad": "classicgreeksalad",
+      "classiccaesarsalad": "mayochickensalad",
+      "darkchocolatechipcookie": "twochipchocolatechipcookie",
+      "darkchocolatepeanutbutterchipcookie": "twochipchocolatechipcookie",
+      "oatmealraisincookie": "oatmealraisin",
+      "caramelcoconutchocolatechipcookie": "coconutcaramelcookieswithchocolatechips",
+      "pepperonipizza": "meatloverpizza",
+      "vegpizza": "meatloverpizza",
+      "cheesepizza": "meatloverpizza",
+      "bbqchickenpizza": "meatloverpizza",
+      "mushroompizza": "meatloverpizza",
+      "pinacolada": "gourmetdrinkshero",
+      "espressomartini": "gourmetdrinkshero",
+      "pepperminttea": "minttea",
+      "passionboaster": "passionfruitsmoothie",
+      "passionsmoothie": "passionfruitsmoothie",
+      "bananasmoothie": "peachsmoothie",
+      "caramelfrappuccino": "chocolatefrappuccino",
+      "extrahoney": "extrahoney",
+      "vanillamilkshake": "caramelmilkshake",
+      "chocolatemilkshake": "caramelmilkshake",
+      "carrotjuice": "orangejuice",
+      "pineapplejuice": "orangejuice"
+    };
+
+    const categoryFallbacks: Record<string, string> = {
+      "coffee": "acupofcappuccino",
+      "ice-coffee": "icedcoffevanilla",
+      "frappuccino": "vanillafrappuccino",
+      "smoothie": "peachsmoothie",
+      "milkshake": "strawberrymilkshake",
+      "fruit-juice": "orangejuice",
+      "signature-drinks": "zobodelight",
+      "cocktail": "classicmargarita",
+      "mocktail": "fruitpunch",
+      "teas": "earlgreyorganictea",
+      "extras": "whippedcream",
+      "starter": "cocktailprawns",
+      "sandwich": "chickengrilledsandwich",
+      "breakfast": "classicenglishbreakfast",
+      "pasta": "spaghettiallapomodoro",
+      "burger": "beefburger",
+      "grilled-steaks": "ribeyesteak",
+      "grilled-fish": "grilledtilapiafish",
+      "platters": "seafoodgrilling",
+      "cookies": "chocolatechipwalnutcookie",
+      "pizza": "meatloverpizza",
+      "salad": "classicgreeksalad"
+    };
+
     const updates: { menuId: string; menuName: string; assetName: string; imageUrl: string }[] = [];
 
     // Setup Firestore connection if available for dual synchronization
@@ -281,38 +402,72 @@ mysqlRouter.post("/match-menu-images", async (req: any, res: any) => {
       }
     }
 
-    const matchedMenuIds = new Set<string>();
+    const assetsByNormName = new Map<string, any>();
+    for (const a of assets) {
+      assetsByNormName.set(normalize(a.name), a);
+    }
 
-    for (const asset of assets) {
-      const normAsset = normalize(asset.name);
+    for (const m of menus) {
+      const normMenu = normalize(m.name);
+      const baseId = getBaseId(m.id);
+      const normBaseId = normalize(baseId);
 
-      // We support matching multiple menu items if they have the same name or are aliases
-      const matchedMenus = menus.filter((m: any) => {
-        const normMenu = normalize(m.name);
-        
-        // Manual explicit overrides first
-        if (normAsset === "gizodo" && m.id === "gizdodo") return true;
-        if (normAsset === "smokylemonchickensalad" && m.id === "chicken-lemon-salad") return true;
-        if (normAsset === "eggsalad1" && m.id === "egg-salad-sandwich") return true;
-        if (normAsset === "syrup" && m.id === "extra-syrup") return true;
+      let matchedAsset: any = null;
 
-        // General matches
-        return normMenu === normAsset || 
-               normMenu === normAsset + "s" || 
-               normAsset === normMenu + "s" ||
-               (normMenu.includes(normAsset) && normAsset.length > 5) ||
-               (normAsset.includes(normMenu) && normMenu.length > 5);
-      });
+      // 1. Direct matches or exact overrides
+      const directKeys = [
+        normMenu,
+        normBaseId,
+        manualMappings[normMenu],
+        manualMappings[normBaseId]
+      ].filter(Boolean);
 
-      for (const m of matchedMenus) {
-        matchedMenuIds.add(m.id);
+      for (const k of directKeys) {
+        if (assetsByNormName.has(k)) {
+          matchedAsset = assetsByNormName.get(k);
+          break;
+        }
+      }
 
-        // Skip updating if it already has the identical image URL
-        if (m.image === asset.url) continue;
+      // 2. Substring matching as secondary fallback
+      if (!matchedAsset) {
+        for (const a of assets) {
+          const normAsset = normalize(a.name);
+          if (
+            (normMenu.includes(normAsset) && normAsset.length > 3) ||
+            (normAsset.includes(normMenu) && normMenu.length > 3) ||
+            (normBaseId.includes(normAsset) && normAsset.length > 3) ||
+            (normAsset.includes(normBaseId) && normBaseId.length > 3)
+          ) {
+            matchedAsset = a;
+            break;
+          }
+        }
+      }
+
+      // 3. Category fallbacks as tertiary fallback
+      if (!matchedAsset) {
+        const catKey = m.category ? m.category.toLowerCase() : "";
+        const fallbackAssetName = categoryFallbacks[catKey];
+        if (fallbackAssetName && assetsByNormName.has(fallbackAssetName)) {
+          matchedAsset = assetsByNormName.get(fallbackAssetName);
+        }
+      }
+
+      // 4. Absolute fallback
+      if (!matchedAsset && assets.length > 0) {
+        matchedAsset = assets[0];
+      }
+
+      if (matchedAsset) {
+        // Skip if already up-to-date
+        if (m.image === matchedAsset.url) {
+          continue;
+        }
 
         // 1. Update in MySQL
         await querySql("UPDATE menus SET image = ?, updatedAt = ? WHERE id = ?", [
-          asset.url,
+          matchedAsset.url,
           new Date().toISOString(),
           m.id
         ]);
@@ -324,14 +479,13 @@ mysqlRouter.post("/match-menu-images", async (req: any, res: any) => {
             const docSnap = await menuRef.get();
             if (docSnap.exists) {
               await menuRef.update({
-                image: asset.url,
+                image: matchedAsset.url,
                 updatedAt: new Date().toISOString()
               });
             } else {
-              // If it doesn't exist in Firestore, create it to keep them fully synced!
               await menuRef.set({
                 ...m,
-                image: asset.url,
+                image: matchedAsset.url,
                 updatedAt: new Date().toISOString()
               });
             }
@@ -343,53 +497,15 @@ mysqlRouter.post("/match-menu-images", async (req: any, res: any) => {
         updates.push({
           menuId: m.id,
           menuName: m.name,
-          assetName: asset.name,
-          imageUrl: asset.url.substring(0, 50) + "..."
+          assetName: matchedAsset.name,
+          imageUrl: matchedAsset.url.substring(0, 50) + "..."
         });
-      }
-    }
-
-    // Now handle unmatched menus in MySQL & Firestore - set their image to 'none'
-    let unmatchedUpdateCount = 0;
-    for (const m of menus) {
-      if (!matchedMenuIds.has(m.id)) {
-        if (m.image !== "none") {
-          // 1. Update MySQL to 'none'
-          await querySql("UPDATE menus SET image = ?, updatedAt = ? WHERE id = ?", [
-            "none",
-            new Date().toISOString(),
-            m.id
-          ]);
-
-          // 2. Update Firestore to 'none' if available
-          if (fdb) {
-            try {
-              const menuRef = fdb.collection("menus").doc(m.id);
-              const docSnap = await menuRef.get();
-              if (docSnap.exists) {
-                await menuRef.update({
-                  image: "none",
-                  updatedAt: new Date().toISOString()
-                });
-              } else {
-                await menuRef.set({
-                  ...m,
-                  image: "none",
-                  updatedAt: new Date().toISOString()
-                });
-              }
-            } catch (firestoreUnmatchedErr: any) {
-              console.warn(`[MATCH ROUTE] Failed to update Firestore to none for unmatched menu ID ${m.id}:`, firestoreUnmatchedErr.message);
-            }
-          }
-          unmatchedUpdateCount++;
-        }
       }
     }
 
     return res.json({
       success: true,
-      message: `Successfully matched and updated ${updates.length} menu items. Set ${unmatchedUpdateCount} unmatched menu items to 'none'.`,
+      message: `Successfully matched and updated ${updates.length} menu items. No menu items left unattended.`,
       updates
     });
   } catch (err: any) {
