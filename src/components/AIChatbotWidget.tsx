@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Sparkles, Send, X, Bot, MessageCircle, Clock, RotateCcw } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, collection, getDocs } from "firebase/firestore";
 import { db } from "../firebase";
+import { getApiUrl } from "../types";
 
 interface Message {
   role: "user" | "assistant";
@@ -21,6 +22,81 @@ export default function AIChatbotWidget() {
   
   const chatEndRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  const [menuItems, setMenuItems] = useState<any[]>([]);
+
+  // 1. Fetch live menus for chatbot matching
+  useEffect(() => {
+    const fetchMenus = async () => {
+      try {
+        const snap = await getDocs(collection(db, "menus"));
+        const list = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        if (list.length > 0) {
+          setMenuItems(list.filter((item: any) => !item.deleted));
+        } else {
+          const { MENU_ITEMS } = await import("../data/menu");
+          setMenuItems(MENU_ITEMS);
+        }
+      } catch (err) {
+        console.warn("Failed to fetch menus for chatbot matching:", err);
+        try {
+          const { MENU_ITEMS } = await import("../data/menu");
+          setMenuItems(MENU_ITEMS);
+        } catch (_) {}
+      }
+    };
+    fetchMenus();
+  }, []);
+
+  const findMatchingItems = (text: string) => {
+    if (!text) return [];
+    const matched: any[] = [];
+    menuItems.forEach((item) => {
+      const textLower = text.toLowerCase();
+      const itemNameLower = item.name.toLowerCase();
+      if (textLower.includes(itemNameLower)) {
+        if (!matched.some(m => m.id === item.id)) {
+          matched.push(item);
+        }
+      } else {
+        const cleanName = itemNameLower.replace(/[^a-z0-9]/g, " ");
+        const words = cleanName.split(/\s+/).filter((w: string) => w.length > 3);
+        if (words.length >= 2 && words.every((word: string) => textLower.includes(word))) {
+          if (!matched.some(m => m.id === item.id)) {
+            matched.push(item);
+          }
+        }
+      }
+    });
+    return matched;
+  };
+
+  const handleAddMenuToCart = (item: any) => {
+    if (typeof (window as any).addToCartDirect === "function") {
+      (window as any).addToCartDirect(item);
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content: `🛒 Added **${item.name}** to your Cart and directed you to your checkout page!`,
+          timestamp: new Date()
+        }
+      ]);
+    } else {
+      alert("Cart service is temporarily unavailable.");
+    }
+  };
+
+  const handleConnectSupport = () => {
+    const tawk = (window as any).Tawk_API;
+    if (tawk && typeof tawk.maximize === "function") {
+      tawk.maximize();
+      setIsOpen(false);
+    } else {
+      window.dispatchEvent(new CustomEvent("open-upside-live-support"));
+      setIsOpen(false);
+    }
+  };
 
   // 1. Fetch Chatbot Settings on Mount
   useEffect(() => {
@@ -76,6 +152,83 @@ export default function AIChatbotWidget() {
     setInputText("");
     setIsLoading(true);
 
+    const lowerText = messageText.toLowerCase();
+
+    // 1. Live Support interceptor
+    if (
+      lowerText.includes("support") || 
+      lowerText.includes("live agent") || 
+      lowerText.includes("live chat") || 
+      lowerText.includes("human") || 
+      lowerText.includes("speak to") || 
+      lowerText.includes("tawk")
+    ) {
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content: "Connecting you directly to our live support concierge team... Just a second!",
+          timestamp: new Date()
+        }
+      ]);
+      setTimeout(() => {
+        handleConnectSupport();
+      }, 1500);
+      setIsLoading(false);
+      return;
+    }
+
+    // 2. Menu Redirect interceptor
+    if (
+      lowerText.includes("view menu") || 
+      lowerText.includes("show menu") || 
+      lowerText.includes("route to menu") || 
+      lowerText.includes("go to menu")
+    ) {
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content: "Redirecting you to our gourmet menu section...",
+          timestamp: new Date()
+        }
+      ]);
+      setTimeout(() => {
+        if (typeof (window as any).navigateUpside === "function") {
+          (window as any).navigateUpside("/menu");
+          setIsOpen(false);
+        }
+      }, 1200);
+      setIsLoading(false);
+      return;
+    }
+
+    // 3. Reservations / Booking FAQ Redirect interceptor
+    if (
+      lowerText.includes("booking faq") || 
+      lowerText.includes("reservation faq") || 
+      lowerText.includes("how to book") || 
+      lowerText.includes("how to reserve") || 
+      lowerText.includes("table faq")
+    ) {
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content: "Opening our detailed bookings & reservation FAQ portal...",
+          timestamp: new Date()
+        }
+      ]);
+      setTimeout(() => {
+        if (typeof (window as any).navigateUpside === "function") {
+          (window as any).navigateUpside("/faq");
+          setIsOpen(false);
+        }
+      }, 1200);
+      setIsLoading(false);
+      return;
+    }
+
     try {
       // Format chat history for Gemini API API endpoint
       const history = messages.slice(1).map((msg) => ({
@@ -83,7 +236,7 @@ export default function AIChatbotWidget() {
         text: msg.content
       }));
 
-      const response = await fetch("/api/chatbot", {
+      const response = await fetch(getApiUrl("/api/chatbot"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
@@ -186,32 +339,53 @@ export default function AIChatbotWidget() {
             >
               {messages.map((msg, index) => {
                 const isBot = msg.role === "assistant";
+                const matchedDishes = isBot ? findMatchingItems(msg.content) : [];
                 return (
                   <div
                     key={index}
-                    className={`flex gap-3 max-w-[85%] ${
-                      isBot ? "mr-auto" : "ml-auto flex-row-reverse"
+                    className={`flex flex-col gap-2 max-w-[85%] ${
+                      isBot ? "mr-auto text-left" : "ml-auto text-right"
                     }`}
                   >
-                    {isBot && (
-                      <div className="w-7 h-7 bg-amber-600/10 border border-amber-500/20 rounded-md flex items-center justify-center shrink-0 self-start">
-                        <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                    <div className={`flex gap-3 ${isBot ? "" : "flex-row-reverse"}`}>
+                      {isBot && (
+                        <div className="w-7 h-7 bg-amber-600/10 border border-amber-500/20 rounded-md flex items-center justify-center shrink-0 self-start">
+                          <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                        </div>
+                      )}
+                      <div className="flex flex-col">
+                        <div
+                          className={`p-3 text-xs leading-relaxed rounded-xl ${
+                            isBot
+                              ? "bg-neutral-800/80 text-neutral-200 rounded-tl-none border border-neutral-800/40"
+                              : "bg-amber-600 text-black font-semibold rounded-tr-none"
+                          }`}
+                        >
+                          <p className="whitespace-pre-wrap break-words">{msg.content}</p>
+                        </div>
+                        <span className="text-[8px] font-mono text-neutral-500 mt-1 self-end px-1">
+                          {msg.timestamp.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Matched Menu Items list */}
+                    {isBot && matchedDishes.length > 0 && (
+                      <div className="pl-10 pr-2 py-1 space-y-1.5 animate-fadeIn">
+                        <p className="text-[9px] font-mono text-neutral-500 uppercase tracking-wider">Matched Gourmet Dishes:</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {matchedDishes.map((dish) => (
+                            <button
+                              key={dish.id}
+                              onClick={() => handleAddMenuToCart(dish)}
+                              className="px-2.5 py-1.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-neutral-950 font-mono font-bold text-[9px] uppercase rounded-md transition-all shadow-md hover:shadow-lg flex items-center gap-1.5 cursor-pointer"
+                            >
+                              🛒 Add {dish.name} (₦{dish.price.toLocaleString()})
+                            </button>
+                          ))}
+                        </div>
                       </div>
                     )}
-                    <div className="flex flex-col">
-                      <div
-                        className={`p-3 text-xs leading-relaxed rounded-xl ${
-                          isBot
-                            ? "bg-neutral-800/80 text-neutral-200 rounded-tl-none border border-neutral-800/40"
-                            : "bg-amber-600 text-black font-semibold rounded-tr-none"
-                        }`}
-                      >
-                        <p className="whitespace-pre-wrap break-words">{msg.content}</p>
-                      </div>
-                      <span className="text-[8px] font-mono text-neutral-500 mt-1 self-end px-1">
-                        {msg.timestamp.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                      </span>
-                    </div>
                   </div>
                 );
               })}
@@ -230,6 +404,52 @@ export default function AIChatbotWidget() {
               )}
               <div ref={chatEndRef} />
             </div>
+
+            {/* Suggested Quick Chips Panel */}
+            {!isLoading && (
+              <div className="px-3 py-2 bg-[#121212] border-t border-neutral-800 flex gap-1.5 overflow-x-auto scrollbar-none shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (typeof (window as any).navigateUpside === "function") {
+                      (window as any).navigateUpside("/menu");
+                      setIsOpen(false);
+                    }
+                  }}
+                  className="px-2.5 py-1.5 bg-neutral-900 border border-neutral-800 hover:border-amber-500/40 text-[10px] text-neutral-300 rounded-full transition-all shrink-0 cursor-pointer hover:text-white"
+                >
+                  🍛 Explore Menu
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (typeof (window as any).navigateUpside === "function") {
+                      (window as any).navigateUpside("/faq");
+                      setIsOpen(false);
+                    }
+                  }}
+                  className="px-2.5 py-1.5 bg-neutral-900 border border-neutral-800 hover:border-amber-500/40 text-[10px] text-neutral-300 rounded-full transition-all shrink-0 cursor-pointer hover:text-white"
+                >
+                  📅 Table Booking FAQ
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConnectSupport}
+                  className="px-2.5 py-1.5 bg-[#1a1410] border border-amber-500/20 hover:border-amber-500/50 text-[10px] text-amber-400 rounded-full transition-all shrink-0 cursor-pointer"
+                >
+                  💬 Speak to Support
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setInputText("How do I order Smoky Party Jollof Rice?");
+                  }}
+                  className="px-2.5 py-1.5 bg-neutral-900 border border-neutral-800 hover:border-amber-500/40 text-[10px] text-neutral-300 rounded-full transition-all shrink-0 cursor-pointer hover:text-white"
+                >
+                  🛒 How to Order
+                </button>
+              </div>
+            )}
 
             {/* Input area */}
             <form onSubmit={handleSendMessage} className="p-3 bg-neutral-900 border-t border-neutral-800 flex gap-2">

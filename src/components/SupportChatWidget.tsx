@@ -34,6 +34,17 @@ export default function SupportChatWidget({ currentUser }: SupportChatWidgetProp
     });
     return () => unsubscribe();
   }, []);
+
+  // Listen for global toggle events from chatbot/FAQ components
+  useEffect(() => {
+    const handleOpenLiveSupport = () => {
+      setIsOpen(true);
+    };
+    window.addEventListener("open-upside-live-support", handleOpenLiveSupport);
+    return () => {
+      window.removeEventListener("open-upside-live-support", handleOpenLiveSupport);
+    };
+  }, []);
   
   // Form fields for starting a new session
   const [customerName, setCustomerName] = useState("");

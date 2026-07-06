@@ -20,6 +20,7 @@ import DedicatedRiderDashboard from "./components/DedicatedRiderDashboard";
 import SupportChatWidget from "./components/SupportChatWidget";
 import TawkSupportWidget from "./components/TawkSupportWidget";
 import AIChatbotWidget from "./components/AIChatbotWidget";
+import FAQView from "./components/FAQView";
 import { CartItem, ShippingLocation, LAGOS_AREAS, getApiUrl } from "./types";
 import { MenuItem, MENU_ITEMS, Category, CATEGORIES } from "./data/menu";
 import { getBranding, auth, db } from "./firebase";
@@ -297,12 +298,13 @@ useEffect(() => {
     if (hash === "#/cart" || path === "/cart") return "/cart";
     if (hash === "#/track" || path === "/track") return "/track";
     if (hash === "#/rider" || path === "/rider") return "/rider";
+    if (hash === "#/faq" || path === "/faq") return "/faq";
     if (hash === "#/terms" || path === "/terms") return "/terms";
     if (hash === "#/privacy" || path === "/privacy") return "/privacy";
     return "/";
   });
 
-  const activeView = currentPath === "/menu" ? "menu" : (currentPath === "/experience" ? "experience" : (currentPath === "/dashboard" ? "dashboard" : (currentPath === "/auth" ? "auth" : (currentPath === "/cart" ? "cart" : (currentPath === "/track" ? "track" : (currentPath === "/rider" ? "rider" : (currentPath === "/terms" || currentPath === "/privacy" ? "legal" : "landing")))))));
+  const activeView = currentPath === "/menu" ? "menu" : (currentPath === "/experience" ? "experience" : (currentPath === "/dashboard" ? "dashboard" : (currentPath === "/auth" ? "auth" : (currentPath === "/cart" ? "cart" : (currentPath === "/track" ? "track" : (currentPath === "/rider" ? "rider" : (currentPath === "/faq" ? "faq" : (currentPath === "/terms" || currentPath === "/privacy" ? "legal" : "landing"))))))));
 
   const handleNavigate = (path: string) => {
     window.history.pushState(null, "", path);
@@ -318,6 +320,12 @@ useEffect(() => {
   }, [currentPath, activeView]);
 
   useEffect(() => {
+    (window as any).navigateUpside = handleNavigate;
+    (window as any).openReservationModal = () => setIsReservationOpen(true);
+    (window as any).addToCartDirect = (item: any) => {
+      handleAddToCart(item);
+    };
+
     const handlePopState = () => {
       const path = window.location.pathname;
       const hash = window.location.hash;
@@ -335,6 +343,8 @@ useEffect(() => {
         setCurrentPath("/track");
       } else if (hash === "#/rider" || path === "/rider") {
         setCurrentPath("/rider");
+      } else if (hash === "#/faq" || path === "/faq") {
+        setCurrentPath("/faq");
       } else if (hash === "#/terms" || path === "/terms") {
         setCurrentPath("/terms");
       } else if (hash === "#/privacy" || path === "/privacy") {
@@ -348,6 +358,9 @@ useEffect(() => {
     return () => {
       window.removeEventListener("popstate", handlePopState);
       window.removeEventListener("hashchange", handlePopState);
+      delete (window as any).navigateUpside;
+      delete (window as any).openReservationModal;
+      delete (window as any).addToCartDirect;
     };
   }, []);
 
@@ -818,6 +831,13 @@ useEffect(() => {
       {activeView === "track" && (
         <DedicatedTrack
           onBackToLobby={() => handleNavigate("/")}
+        />
+      )}
+
+      {activeView === "faq" && (
+        <FAQView
+          onBackToLobby={() => handleNavigate("/")}
+          onOpenReservations={() => setIsReservationOpen(true)}
         />
       )}
 
