@@ -131,9 +131,9 @@ export default function AIChatbotWidget() {
 
   if (!enabled) return null;
 
-  const handleSendMessage = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const messageText = inputText.trim();
+  const handleSendMessage = async (e?: React.FormEvent, overrideText?: string) => {
+    if (e) e.preventDefault();
+    const messageText = (overrideText || inputText).trim();
     if (!messageText || isLoading) return;
 
     const userMsg: Message = {
@@ -143,7 +143,9 @@ export default function AIChatbotWidget() {
     };
 
     setMessages((prev) => [...prev, userMsg]);
-    setInputText("");
+    if (!overrideText) {
+      setInputText("");
+    }
     setIsLoading(true);
 
     const lowerText = messageText.toLowerCase();
@@ -299,7 +301,7 @@ export default function AIChatbotWidget() {
   };
 
   return (
-    <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end font-sans">
+    <div className="fixed bottom-28 right-4 sm:bottom-6 sm:right-6 z-50 flex flex-col items-end font-sans">
       <AnimatePresence>
         {isOpen && (
           <motion.div
@@ -307,7 +309,7 @@ export default function AIChatbotWidget() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 30, scale: 0.95 }}
             transition={{ duration: 0.2, ease: "easeOut" }}
-            className="w-[360px] h-[500px] sm:w-[400px] sm:h-[550px] bg-[#141414] border border-neutral-800 shadow-2xl flex flex-col overflow-hidden mb-4 rounded-xl text-left"
+            className="w-[calc(100vw-2rem)] max-w-[350px] xs:max-w-[360px] h-[460px] sm:max-w-[400px] sm:h-[550px] bg-[#141414] border border-neutral-800 shadow-2xl flex flex-col overflow-hidden mb-4 rounded-xl text-left"
           >
             {/* Header */}
             <div className="bg-gradient-to-r from-neutral-900 to-neutral-950 p-4 border-b border-neutral-800 flex items-center justify-between">
@@ -419,6 +421,13 @@ export default function AIChatbotWidget() {
               <div className="px-3 py-2 bg-[#121212] border-t border-neutral-800 flex gap-1.5 overflow-x-auto scrollbar-none shrink-0">
                 <button
                   type="button"
+                  onClick={() => handleSendMessage(undefined, "How can I order a burger?")}
+                  className="px-2.5 py-1.5 bg-[#1a1410] border border-amber-500/30 hover:border-amber-500/50 text-[10px] text-amber-400 font-semibold rounded-full transition-all shrink-0 cursor-pointer flex items-center gap-1"
+                >
+                  🍔 How can I order a burger?
+                </button>
+                <button
+                  type="button"
                   onClick={() => {
                     if (typeof (window as any).navigateUpside === "function") {
                       (window as any).navigateUpside("/menu");
@@ -444,18 +453,9 @@ export default function AIChatbotWidget() {
                 <button
                   type="button"
                   onClick={handleConnectSupport}
-                  className="px-2.5 py-1.5 bg-[#1a1410] border border-amber-500/20 hover:border-amber-500/50 text-[10px] text-amber-400 rounded-full transition-all shrink-0 cursor-pointer"
-                >
-                  💬 Speak to Support
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setInputText("How do I order Smoky Party Jollof Rice?");
-                  }}
                   className="px-2.5 py-1.5 bg-neutral-900 border border-neutral-800 hover:border-amber-500/40 text-[10px] text-neutral-300 rounded-full transition-all shrink-0 cursor-pointer hover:text-white"
                 >
-                  🛒 How to Order
+                  💬 Speak to Support
                 </button>
               </div>
             )}

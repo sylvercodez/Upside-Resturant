@@ -1,7 +1,62 @@
 import React, { useState, useRef } from "react";
-import { Search, Heart, ShoppingBag, Check, Plus, Minus, ArrowLeft, Grid, Sparkles, Filter, Ticket } from "lucide-react";
+import {
+  Search,
+  Heart,
+  ShoppingBag,
+  Check,
+  Plus,
+  Minus,
+  ArrowLeft,
+  Grid,
+  Sparkles,
+  Filter,
+  Ticket,
+  Egg,
+  Coffee,
+  Sandwich,
+  Soup,
+  Flame,
+  Citrus,
+  Salad,
+  GlassWater,
+  Beef,
+  CupSoda,
+  Pizza,
+  IceCream,
+  UtensilsCrossed,
+  Fish,
+  Wine,
+  PlusCircle,
+  Cookie,
+  X
+} from "lucide-react";
 import { CATEGORIES, MENU_ITEMS, MenuItem, Category } from "../data/menu";
 import MenuImage from "./MenuImage";
+
+const categoryIconMap: Record<string, React.ComponentType<any>> = {
+  breakfast: Egg,
+  coffee: Coffee,
+  sandwich: Sandwich,
+  teas: Soup,
+  starter: Flame,
+  "fruit-juice": Citrus,
+  salad: Salad,
+  "ice-coffee": GlassWater,
+  burger: Beef,
+  smoothie: CupSoda,
+  pizza: Pizza,
+  frappuccino: IceCream,
+  pasta: UtensilsCrossed,
+  milkshake: IceCream,
+  "grilled-steaks": Flame,
+  "signature-drinks": Sparkles,
+  "grilled-fish": Fish,
+  cocktail: Wine,
+  platters: UtensilsCrossed,
+  mocktail: GlassWater,
+  cookies: Cookie,
+  extras: PlusCircle
+};
 
 interface DedicatedMenuProps {
   onBackToLobby: () => void;
@@ -249,50 +304,131 @@ export default function DedicatedMenu({
           </p>
         </div>
 
+        {/* Elegant Search & Filter Control Deck */}
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center bg-neutral-50 border border-neutral-200 p-4" id="menu-search-and-dropdown-deck">
+          {/* Main Search Input */}
+          <div className="md:col-span-8 relative flex items-center w-full" id="menu-search-wrapper">
+            <Search className="absolute left-4 w-4 h-4 text-neutral-400 pointer-events-none" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search our luxury catalog (e.g., burger, pizza, latte, steak...)"
+              className="w-full bg-white border border-neutral-200 focus:border-amber-500 text-neutral-900 pl-11 pr-10 py-3 text-xs md:text-sm font-mono tracking-wide placeholder-neutral-400 focus:outline-none transition-all"
+              id="menu-search-input"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery("")}
+                className="absolute right-4 p-1 text-neutral-400 hover:text-black hover:bg-neutral-150 rounded-full transition-colors cursor-pointer flex items-center justify-center"
+                title="Clear Search"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+
+          {/* Quick Category Mobile Jump Dropdown */}
+          <div className="md:col-span-4 block lg:hidden w-full relative" id="mobile-category-dropdown-container">
+            <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[10px] font-mono uppercase tracking-widest text-neutral-500 pointer-events-none">
+              Jump To:
+            </span>
+            <select
+              value={selectedCategory}
+              onChange={(e) => setSelectedCategory(e.target.value)}
+              className="w-full bg-white border border-neutral-200 text-neutral-800 py-3.5 pl-20 pr-10 text-xs font-mono uppercase tracking-wider focus:outline-none focus:border-amber-500 appearance-none rounded-none"
+              id="mobile-category-dropdown-select"
+            >
+              <option value="all">All Entries ({finalMenuItems.length})</option>
+              {displayCategories.filter(c => c.id !== "best-sellers").map((cat) => {
+                const count = finalMenuItems.filter(it => it.category === cat.id).length;
+                return (
+                  <option key={cat.id} value={cat.id}>
+                    {cat.name} ({count})
+                  </option>
+                );
+              })}
+            </select>
+            <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-neutral-500 text-[10px]">
+              ▼
+            </div>
+          </div>
+
+          {/* Desktop Search Recommendation tags */}
+          <div className="hidden lg:block md:col-span-4 text-right text-[10px] font-mono text-neutral-400">
+            <span>Popular: </span>
+            {["burger", "pizza", "coffee", "steak"].map((kw, idx) => (
+              <button
+                key={kw}
+                onClick={() => setSearchQuery(kw)}
+                className="hover:text-amber-600 underline cursor-pointer ml-1.5 transition-colors uppercase font-bold text-[9px]"
+              >
+                {kw}
+                {idx < 3 ? "," : ""}
+              </button>
+            ))}
+          </div>
+        </div>
+
         {/* Category Selection Sidebar + Ultimate Items Showcase Grid Layout */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
           
           {/* LEFT COLUMN: Categories Navigation Tab Deck */}
-          <div className="lg:col-span-3 bg-neutral-50 p-3 lg:p-4 border border-neutral-200 flex flex-row lg:flex-col overflow-x-auto lg:overflow-x-visible lg:space-y-2 gap-2 scrollbar-none w-full lg:sticky lg:top-24" id="menu-categories-track">
-            <h4 className="hidden lg:flex text-xs uppercase font-mono tracking-wider text-amber-600 font-semibold mb-4 items-center gap-2 border-b border-neutral-200 pb-2">
-              <Filter className="w-3.5 h-3.5" />
-              <span>Categories</span>
-            </h4>
+          <div className="lg:col-span-3 relative w-full" id="menu-categories-wrapper">
+            {/* Soft right-fade mask overlay on mobile screen to signal scrollability */}
+            <div className="absolute right-0 top-0 bottom-0 w-12 bg-gradient-to-l from-white to-transparent pointer-events-none z-10 lg:hidden" />
             
-            <button
-              onClick={() => { setSelectedCategory("all"); }}
-              className={`text-left px-3.5 py-2.5 lg:px-4 lg:py-3 text-[10px] lg:text-xs font-mono uppercase tracking-wider transition-all flex items-center justify-between gap-2.5 border shrink-0 whitespace-nowrap ${
-                selectedCategory === "all"
-                  ? "bg-black text-white font-bold border-transparent"
-                  : "bg-white text-neutral-700 border-neutral-200 hover:border-neutral-300 hover:text-black"
-              }`}
+            <div 
+              className="bg-neutral-50 p-3 lg:p-4 border border-neutral-200 flex flex-row lg:flex-col overflow-x-auto lg:overflow-x-visible lg:space-y-2 gap-2 scrollbar-none w-full lg:sticky lg:top-24 pb-4 lg:pb-4" 
+              id="menu-categories-track"
             >
-              <span>[ ] All Entries</span>
-              <span className="text-[9px] lg:text-[10px] font-bold bg-neutral-100 text-black px-1.5 py-0.5 leading-none">{finalMenuItems.length}</span>
-            </button>
+              <h4 className="hidden lg:flex text-xs uppercase font-mono tracking-wider text-amber-600 font-semibold mb-4 items-center gap-2 border-b border-neutral-200 pb-2">
+                <Filter className="w-3.5 h-3.5" />
+                <span>Categories</span>
+              </h4>
+              
+              <button
+                onClick={() => { setSelectedCategory("all"); }}
+                className={`text-left px-4 py-2.5 lg:px-4 lg:py-3 text-[10px] lg:text-xs font-mono uppercase tracking-wider transition-all flex items-center justify-between gap-2.5 border rounded-full lg:rounded-none shrink-0 whitespace-nowrap cursor-pointer ${
+                  selectedCategory === "all"
+                    ? "bg-black text-white font-bold border-transparent shadow-md"
+                    : "bg-white text-neutral-700 border-neutral-200 hover:border-neutral-300 hover:text-black"
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <Grid className="w-4 h-4 shrink-0" />
+                  <span>[ ] All Entries</span>
+                </div>
+                <span className="text-[9px] lg:text-[10px] font-bold bg-neutral-100 text-black px-1.5 py-0.5 leading-none rounded-full lg:rounded-none">{finalMenuItems.length}</span>
+              </button>
 
-            {displayCategories.filter(c => c.id !== "best-sellers").map((cat) => {
-              const isActive = selectedCategory === cat.id;
-              const categoryItemsCount = finalMenuItems.filter(it => it.category === cat.id).length;
-              return (
-                <button
-                  key={cat.id}
-                  onClick={() => {
-                    setSelectedCategory(cat.id);
-                  }}
-                  className={`text-left px-3.5 py-2.5 lg:px-4 lg:py-3 text-[10px] lg:text-xs font-mono uppercase tracking-wider transition-all flex items-center justify-between gap-2.5 border shrink-0 whitespace-nowrap ${
-                    isActive
-                      ? "bg-black text-white font-bold border-transparent shadow-md"
-                      : "bg-white text-neutral-700 border-neutral-200 hover:border-neutral-300 hover:text-black"
-                  }`}
-                >
-                  <span>{cat.name}</span>
-                  <span className={`text-[9px] lg:text-[10px] font-bold px-1.5 py-0.5 leading-none ${isActive ? "bg-amber-500 text-black" : "bg-neutral-105 text-neutral-500"}`}>
-                    {categoryItemsCount}
-                  </span>
-                </button>
-              );
-            })}
+              {displayCategories.filter(c => c.id !== "best-sellers").map((cat) => {
+                const isActive = selectedCategory === cat.id;
+                const categoryItemsCount = finalMenuItems.filter(it => it.category === cat.id).length;
+                const IconComponent = categoryIconMap[cat.id] || UtensilsCrossed;
+                return (
+                  <button
+                    key={cat.id}
+                    onClick={() => {
+                      setSelectedCategory(cat.id);
+                    }}
+                    className={`text-left px-4 py-2.5 lg:px-4 lg:py-3 text-[10px] lg:text-xs font-mono uppercase tracking-wider transition-all flex items-center justify-between gap-2.5 border rounded-full lg:rounded-none shrink-0 whitespace-nowrap cursor-pointer ${
+                      isActive
+                        ? "bg-black text-white font-bold border-transparent shadow-md"
+                        : "bg-white text-neutral-700 border-neutral-200 hover:border-neutral-300 hover:text-black"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <IconComponent className="w-4 h-4 shrink-0" />
+                      <span>{cat.name}</span>
+                    </div>
+                    <span className={`text-[9px] lg:text-[10px] font-bold px-1.5 py-0.5 leading-none rounded-full lg:rounded-none ${isActive ? "bg-amber-500 text-black" : "bg-neutral-100 text-neutral-500"}`}>
+                      {categoryItemsCount}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           {/* RIGHT COLUMN: Results Header & Gorgeous Matrix Grid of Culinary Treats */}
@@ -305,13 +441,16 @@ export default function DedicatedMenu({
                 <strong className="text-amber-600">
                   {selectedCategory === "all" ? "All Products" : displayCategories.find(c => c.id === selectedCategory)?.name}
                 </strong>
+                {searchQuery && (
+                  <span> matching "<strong className="text-amber-600">{searchQuery}</strong>"</span>
+                )}
               </div>
               
               <button
-                onClick={() => { setSelectedCategory("all"); }}
-                className="text-[10px] underline text-neutral-500 hover:text-neutral-900 uppercase font-bold"
+                onClick={() => { setSelectedCategory("all"); setSearchQuery(""); }}
+                className="text-[10px] underline text-neutral-500 hover:text-neutral-900 uppercase font-bold cursor-pointer"
               >
-                Reset Category
+                Reset Filters
               </button>
             </div>
 

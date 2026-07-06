@@ -44,6 +44,24 @@ function getGemini(): GoogleGenAI {
   return aiClient;
 }
 
+// Helper to race a promise with a timeout
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error("Timeout"));
+    }, ms);
+    promise
+      .then((res) => {
+        clearTimeout(timer);
+        resolve(res);
+      })
+      .catch((err) => {
+        clearTimeout(timer);
+        reject(err);
+      });
+  });
+}
+
 chatbotRouter.post("/", async (req: any, res: any) => {
   try {
     const { message, history } = req.body;
@@ -51,36 +69,29 @@ chatbotRouter.post("/", async (req: any, res: any) => {
       return res.status(400).json({ error: "Missing required 'message' parameter." });
     }
 
-    // 1. Fetch live restaurant data if database is connected
+    // 1. Fetch live restaurant data if database is connected (parallelized with tight timeout)
     let categories = STATIC_CATEGORIES;
     let menuItems = STATIC_MENU_ITEMS;
     let shippingAreas = STATIC_SHIPPING_AREAS;
 
     try {
-      const dbCategories = await querySql("SELECT * FROM categories WHERE deleted = 0 OR deleted IS NULL");
-      if (dbCategories && dbCategories.length > 0) {
-        categories = dbCategories;
-      }
-    } catch (_) {
-      // Graceful fallback to static categories
-    }
+      const [dbCategoriesRes, dbMenusRes, dbShippingRes] = await Promise.allSettled([
+        withTimeout(querySql("SELECT * FROM categories WHERE deleted = 0 OR deleted IS NULL"), 1200),
+        withTimeout(querySql("SELECT id, name, description, price, category, available FROM menus WHERE deleted = 0 OR deleted IS NULL"), 1200),
+        withTimeout(querySql("SELECT * FROM shipping_areas"), 1200)
+      ]);
 
-    try {
-      const dbMenus = await querySql("SELECT id, name, description, price, category, available FROM menus WHERE deleted = 0 OR deleted IS NULL");
-      if (dbMenus && dbMenus.length > 0) {
-        menuItems = dbMenus;
+      if (dbCategoriesRes.status === "fulfilled" && dbCategoriesRes.value && dbCategoriesRes.value.length > 0) {
+        categories = dbCategoriesRes.value;
       }
-    } catch (_) {
-      // Graceful fallback to static menus
-    }
-
-    try {
-      const dbShipping = await querySql("SELECT * FROM shipping_areas");
-      if (dbShipping && dbShipping.length > 0) {
-        shippingAreas = dbShipping;
+      if (dbMenusRes.status === "fulfilled" && dbMenusRes.value && dbMenusRes.value.length > 0) {
+        menuItems = dbMenusRes.value;
       }
-    } catch (_) {
-      // Graceful fallback to static shipping areas
+      if (dbShippingRes.status === "fulfilled" && dbShippingRes.value && dbShippingRes.value.length > 0) {
+        shippingAreas = dbShippingRes.value;
+      }
+    } catch (err) {
+      console.warn("[CHATBOT DB TIMEOUT/ERROR] Proceeding with static menu data:", err);
     }
 
     // 2. Prepare System Instructions with real-time context
@@ -107,7 +118,12 @@ ${JSON.stringify(shippingAreas, null, 2)}
 - If a user inquires about an item or area that is not listed, suggest checking our menu page or contacting live staff.
 - Keep answers formatted in clean, highly readable Markdown (using bold, lists, and spacing) but keep explanations compact and easy to scan.
 - Our physical address: "Upside Restaurant & Café, Victoria Island, Lagos, Nigeria".
-- Opening hours: 8:00 AM - 11:00 PM daily.`;
+- Opening hours: 8:00 AM - 11:00 PM daily.
+
+=== DIRECT ADD-TO-CART ORDERING RULE ===
+Our chatbot interface contains an automatic item matching system. When you recommend, mention, or describe menu items, you MUST write the EXACT name of the item from our MENU ITEMS database in **bold** (for example: "**Beef Burger**", "**Classic Mopheth Burger**", "**Southern-Style Coleslaw Burger**", "**Smoky Party Jollof Rice**", etc.). 
+Doing this will automatically generate a native, clickable "🛒 Add [Item Name] to Cart" button directly below your reply inside the user's chat panel! 
+Always encourage users to order directly by stating they can click the custom Add-to-Cart button that appears right below your response to place their order instantly!`;
 
     // 3. Setup Gemini Chat with History
     const ai = getGemini();

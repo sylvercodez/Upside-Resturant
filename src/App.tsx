@@ -37,7 +37,7 @@ export default function App() {
   const [allCategories, setAllCategories] = useState<Category[]>(CATEGORIES);
   const [shippingLocations, setShippingLocations] = useState<ShippingLocation[]>(LAGOS_AREAS);
 
-  const [toast, setToast] = useState<{ message: string; type: "error" | "success" | "info" } | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: "error" | "success" | "info"; title?: string } | null>(null);
 
   useEffect(() => {
     if (toast) {
@@ -499,8 +499,12 @@ useEffect(() => {
       }
     });
 
-    // Automatically navigate to standalone cart page on add to simulate modern app feedback
-    handleNavigate("/cart");
+    // Provide premium success toast confirmation without auto-redirecting
+    setToast({
+      title: "Gourmet Selection Added",
+      message: `"${item.name}" has been placed in your active bag.`,
+      type: "success"
+    });
   };
 
   // Direct upsell click adder helper
@@ -687,8 +691,8 @@ useEffect(() => {
     });
   };
 
-  // Calculate distinct counts
-  const cartTotalQuantity = cartItems.reduce((acc, curr) => acc + curr.quantity, 0);
+  // Calculate distinct counts: treat a menu item as 1 even if added multiple times
+  const cartTotalQuantity = new Set(cartItems.map((item) => item.itemId)).size;
 
   return (
     <div className="bg-black min-h-screen text-white select-none selection:bg-amber-500 selection:text-black antialiased ">
@@ -948,7 +952,7 @@ useEffect(() => {
               
               <div className="flex-1 space-y-1">
                 <h4 className="text-xs font-mono font-bold tracking-widest uppercase text-neutral-200">
-                  {toast.type === "error" ? "OPay / OTP Gateway Notice" : "System Notification"}
+                  {toast.title || (toast.type === "error" ? "OPay / OTP Gateway Notice" : "System Notification")}
                 </h4>
                 <p className="text-xs text-neutral-400 leading-relaxed font-sans">
                   {toast.message}
