@@ -724,6 +724,7 @@ useEffect(() => {
             }}
             onBookTable={() => handleScrollToElement("home-reservation-section")}
             onAddToCart={handleAddToCart}
+            menuItems={allMenuItems}
           />
 
           {/* FAST INSTANT MENU & CULINARY PLATFORM */}
