@@ -3,9 +3,9 @@ import { doc, getDoc, onSnapshot } from "firebase/firestore";
 import { db } from "../firebase";
 
 export default function TawkSupportWidget() {
-  const [enabled, setEnabled] = useState(false);
-  const [propertyId, setPropertyId] = useState("");
-  const [widgetId, setWidgetId] = useState("");
+  const [enabled, setEnabled] = useState(true);
+  const [propertyId, setPropertyId] = useState("6a466b60c5bc5d1d491794f3");
+  const [widgetId, setWidgetId] = useState("1jshh6ssq");
 
   // Listen to live support config settings
   useEffect(() => {
@@ -14,9 +14,9 @@ export default function TawkSupportWidget() {
     const unsubscribe = onSnapshot(docRef, (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
-        setEnabled(data.tawkEnabled ?? false);
-        setPropertyId(data.tawkPropertyId ?? "");
-        setWidgetId(data.tawkWidgetId ?? "");
+        setEnabled(data.tawkEnabled ?? true);
+        setPropertyId(data.tawkPropertyId || "6a466b60c5bc5d1d491794f3");
+        setWidgetId(data.tawkWidgetId || "1jshh6ssq");
       }
     }, (err) => {
       console.warn("Failed to subscribe to Tawk config, trying single fetch:", err);
@@ -24,9 +24,9 @@ export default function TawkSupportWidget() {
       getDoc(docRef).then((docSnap) => {
         if (docSnap.exists()) {
           const data = docSnap.data();
-          setEnabled(data.tawkEnabled ?? false);
-          setPropertyId(data.tawkPropertyId ?? "");
-          setWidgetId(data.tawkWidgetId ?? "");
+          setEnabled(data.tawkEnabled ?? true);
+          setPropertyId(data.tawkPropertyId || "6a466b60c5bc5d1d491794f3");
+          setWidgetId(data.tawkWidgetId || "1jshh6ssq");
         }
       }).catch(e => console.error("Tawk config fetch failed completely:", e));
     });

@@ -33,9 +33,9 @@ export default function SupportManagementPanel() {
 
   // Support Integration settings states
   const [showConfig, setShowConfig] = useState(false);
-  const [tawkEnabled, setTawkEnabled] = useState(false);
-  const [tawkPropertyId, setTawkPropertyId] = useState("");
-  const [tawkWidgetId, setTawkWidgetId] = useState("");
+  const [tawkEnabled, setTawkEnabled] = useState(true);
+  const [tawkPropertyId, setTawkPropertyId] = useState("6a466b60c5bc5d1d491794f3");
+  const [tawkWidgetId, setTawkWidgetId] = useState("1jshh6ssq");
   const [chatbotEnabled, setChatbotEnabled] = useState(true);
   const [chatbotName, setChatbotName] = useState("Upside Smart Assistant");
   const [chatbotWelcome, setChatbotWelcome] = useState("Hello! Welcome to Upside Restaurant & Café. Ask me anything about our menu, delivery fees, or helpdesk requests!");
@@ -53,9 +53,9 @@ export default function SupportManagementPanel() {
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
           const data = docSnap.data();
-          setTawkEnabled(data.tawkEnabled ?? false);
-          setTawkPropertyId(data.tawkPropertyId ?? "");
-          setTawkWidgetId(data.tawkWidgetId ?? "");
+          setTawkEnabled(data.tawkEnabled ?? true);
+          setTawkPropertyId(data.tawkPropertyId || "6a466b60c5bc5d1d491794f3");
+          setTawkWidgetId(data.tawkWidgetId || "1jshh6ssq");
           setChatbotEnabled(data.chatbotEnabled ?? true);
           setChatbotName(data.chatbotName ?? "Upside Smart Assistant");
           setChatbotWelcome(data.chatbotWelcome ?? "Hello! Welcome to Upside Restaurant & Café. Ask me anything about our menu, delivery fees, or helpdesk requests!");
