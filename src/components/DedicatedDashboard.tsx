@@ -209,6 +209,38 @@ export default function DedicatedDashboard({
   const [instagramActionSuccess, setInstagramActionSuccess] = useState("");
   const [syncedInstagramPosts, setSyncedInstagramPosts] = useState<any[]>([]);
 
+  // Google Gemini AI Auto-pairing & tracing states
+  const [isAiPairing, setIsAiPairing] = useState(false);
+  const [aiPairingResult, setAiPairingResult] = useState<any>(null);
+  const [aiPairingError, setAiPairingError] = useState<string | null>(null);
+
+  const handleRunAiPairing = async () => {
+    setIsAiPairing(true);
+    setAiPairingResult(null);
+    setAiPairingError(null);
+
+    try {
+      const res = await fetch("/api/mysql/ai-pair-and-trace-menus", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        }
+      });
+      
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to execute Google Gemini AI auto-pairing.");
+      }
+      
+      setAiPairingResult(data);
+    } catch (err: any) {
+      console.error("AI Pairing Error:", err);
+      setAiPairingError(err.message || "An unexpected error occurred during AI pairing.");
+    } finally {
+      setIsAiPairing(false);
+    }
+  };
+
   // Load Instagram configuration
   useEffect(() => {
     if (currentUser && (userRole === "admin" || userRole === "developer")) {
@@ -3963,13 +3995,92 @@ export default function DedicatedDashboard({
                       )}
                     </div>
 
-                    {/* Custom and static images display gallery */}
-                    <div className="xl:col-span-7 bg-[#121212] border border-neutral-850 p-6 space-y-4">
-                      <div>
-                        <h2 className="text-xs font-mono font-bold tracking-widest text-amber-500 uppercase">Available Visual Library Gallery</h2>
-                        <p className="text-[10px] text-neutral-500 font-sans mt-0.5">
-                          Visual shortcuts container. Shows combination of global static presets and dynamic admin uploads.
-                        </p>
+                     {/* Custom and static images display gallery */}
+                    <div className="xl:col-span-7 bg-[#121212] border border-neutral-850 p-6 space-y-5">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h2 className="text-xs font-mono font-bold tracking-widest text-amber-500 uppercase">Available Visual Library Gallery</h2>
+                          <p className="text-[10px] text-neutral-500 font-sans mt-0.5">
+                            Visual shortcuts container. Shows combination of global static presets and dynamic admin uploads.
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Google Gemini AI Auto-Pairing Card */}
+                      <div className="bg-neutral-950 border border-amber-500/20 p-4 space-y-3 rounded-md text-left">
+                        <div className="flex items-start gap-2.5">
+                          <div className="p-1.5 bg-amber-500/10 border border-amber-500/20 rounded mt-0.5 shrink-0">
+                            <span className="text-sm">🤖</span>
+                          </div>
+                          <div>
+                            <h3 className="text-xs font-mono font-bold uppercase text-neutral-100 tracking-wider">
+                              Google Gemini AI Auto-Pair & Menu Tracing
+                            </h3>
+                            <p className="text-[9.5px] text-neutral-400 font-sans mt-0.5 leading-relaxed">
+                              Run deep semantic matching on all your image labels and menu items. Pairs items to unique images automatically (no repeats) and "auto-traces" unused image titles to instantly create delicious new menu items!
+                            </p>
+                          </div>
+                        </div>
+
+                        {aiPairingError && (
+                          <div className="p-2.5 bg-red-950/20 border border-red-900/30 text-red-400 text-[10px] font-mono rounded">
+                            ⚠️ {aiPairingError}
+                          </div>
+                        )}
+
+                        {aiPairingResult && (
+                          <div className="bg-[#141414] border border-emerald-800/30 p-3 space-y-2 rounded text-xs font-mono">
+                            <div className="text-emerald-400 text-[10px] font-bold uppercase tracking-wider">
+                              ✓ {aiPairingResult.message}
+                            </div>
+                            
+                            {aiPairingResult.pairings && aiPairingResult.pairings.length > 0 && (
+                              <div className="space-y-1">
+                                <span className="text-[9px] text-neutral-500 font-bold uppercase">Newly Paired Images:</span>
+                                <div className="max-h-24 overflow-y-auto space-y-1 pl-2 text-[9.5px] scrollbar-thin scrollbar-thumb-neutral-800">
+                                  {aiPairingResult.pairings.map((p: any, idx: number) => (
+                                    <div key={idx} className="text-neutral-300">
+                                      🍛 <span className="text-amber-500">{p.menuName}</span> ➔ {p.assetName}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {aiPairingResult.newItems && aiPairingResult.newItems.length > 0 && (
+                              <div className="space-y-1 border-t border-neutral-850 pt-2 mt-2">
+                                <span className="text-[9px] text-neutral-500 font-bold uppercase">Auto-Created Delicacies:</span>
+                                <div className="max-h-24 overflow-y-auto space-y-1 pl-2 text-[9.5px] scrollbar-thin scrollbar-thumb-neutral-800">
+                                  {aiPairingResult.newItems.map((n: any, idx: number) => (
+                                    <div key={idx} className="text-neutral-300">
+                                      ✨ <span className="text-emerald-400 font-bold">{n.name}</span> ({n.category}) - ₦{n.price}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        <div className="flex justify-end pt-1">
+                          <button
+                            type="button"
+                            onClick={handleRunAiPairing}
+                            disabled={isAiPairing}
+                            className="px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-neutral-950 font-mono font-bold uppercase text-[9.5px] tracking-wider flex items-center gap-1.5 transition-all rounded shadow cursor-pointer disabled:opacity-50"
+                          >
+                            {isAiPairing ? (
+                              <>
+                                <span className="w-3 h-3 border-2 border-neutral-950 border-t-transparent rounded-full animate-spin" />
+                                <span>Google AI Pairing Active...</span>
+                              </>
+                            ) : (
+                              <>
+                                <span>🤖 RUN GOOGLE AI AUTO-PAIR & TRACE</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
                       </div>
 
                       <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 overflow-y-auto max-h-[500px] no-scrollbar pr-1">

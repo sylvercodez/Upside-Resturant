@@ -20,6 +20,20 @@ export default function SupportChatWidget({ currentUser }: SupportChatWidgetProp
   const [isOpen, setIsOpen] = useState(false);
   const [hasSession, setHasSession] = useState(false);
   const [chatId, setChatId] = useState<string | null>(null);
+  const [tawkEnabled, setTawkEnabled] = useState(false);
+
+  // Subscribe to live tawk support state to prevent widget collision
+  useEffect(() => {
+    const docRef = doc(db, "settings", "support_config");
+    const unsubscribe = onSnapshot(docRef, (docSnap) => {
+      if (docSnap.exists()) {
+        setTawkEnabled(docSnap.data().tawkEnabled ?? false);
+      }
+    }, (err) => {
+      console.warn("Failed to subscribe to support_config inside support widget:", err);
+    });
+    return () => unsubscribe();
+  }, []);
   
   // Form fields for starting a new session
   const [customerName, setCustomerName] = useState("");
@@ -295,6 +309,10 @@ export default function SupportChatWidget({ currentUser }: SupportChatWidgetProp
       setError(null);
     }
   };
+
+  if (tawkEnabled) {
+    return null;
+  }
 
   return (
     <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end" id="upside-live-support-widget">

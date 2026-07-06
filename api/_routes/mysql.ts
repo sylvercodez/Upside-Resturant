@@ -524,6 +524,238 @@ mysqlRouter.post("/match-menu-images", async (req: any, res: any) => {
   }
 });
 
+// New AI Auto-pairing & Auto-tracing route
+mysqlRouter.post("/ai-pair-and-trace-menus", async (req: any, res: any) => {
+  try {
+    // 1. Fetch assets, menus, and categories from MySQL
+    const assets = await querySql("SELECT * FROM assets");
+    const menus = await querySql("SELECT * FROM menus WHERE deleted = 0");
+    const categories = await querySql("SELECT * FROM categories");
+
+    if (!assets || assets.length === 0) {
+      return res.status(400).json({ error: "No images found in your Image Library. Please seed or upload images first." });
+    }
+
+    // 2. Initialize Google Gen AI
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      return res.status(500).json({ error: "GEMINI_API_KEY environment variable is not configured." });
+    }
+
+    const { GoogleGenAI, Type } = await import("@google/genai");
+    const ai = new GoogleGenAI({
+      apiKey,
+      httpOptions: {
+        headers: {
+          'User-Agent': 'aistudio-build',
+        }
+      }
+    });
+
+    // 3. Setup prompt
+    const categoriesList = categories.map((c: any) => ({ id: c.id, name: c.name }));
+    const menuListForAi = menus.map((m: any) => ({ id: m.id, name: m.name, category: m.category, description: m.description, price: m.price }));
+    const assetListForAi = assets.map((a: any) => ({ id: a.id, name: a.name, url: a.url }));
+
+    const systemPrompt = `
+You are an expert culinary AI database architect for Upside Restaurant & Café.
+Your job is to:
+1. Pair menu items with high-quality images from the available assets list.
+2. Crucially, ENSURE IMAGES ARE NOT REPEATED. Each image must map to at most ONE menu item. Avoid reusing the same image URL across different menus.
+3. "Auto-trace" the available images list. If an image's title represents a food item or beverage that DOES NOT exist in the current menus list, create/recommend a brand new delicious menu item for it! Provide its name (based on the image title), description (extremely tasty and appealing), price (realistic integer in Naira, e.g. 3500 to 12000 based on standard pricing), and choose the best matching category ID from the available category list.
+
+Available Categories:
+${JSON.stringify(categoriesList, null, 2)}
+
+Active Menus:
+${JSON.stringify(menuListForAi, null, 2)}
+
+Available Asset Images:
+${JSON.stringify(assetListForAi, null, 2)}
+
+Produce a clean JSON response containing:
+- "pairings": An array of objects: { "menuId": string, "imageUrl": string, "assetName": string }
+- "newMenuItems": An array of objects representing brand new dishes traced from unmatched image names:
+  {
+    "name": string,
+    "description": string,
+    "price": number,
+    "category": string, // must be one of the category IDs: ${categoriesList.map((c: any) => c.id).join(", ")}
+    "imageUrl": string
+  }
+`;
+
+    const aiResponse = await ai.models.generateContent({
+      model: "gemini-3.5-flash",
+      contents: "Intelligently pair and trace the menus using the provided assets. Ensure images do not repeat.",
+      config: {
+        systemInstruction: systemPrompt,
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            pairings: {
+              type: Type.ARRAY,
+              description: "Optimal image pairings for existing menus without repetitions.",
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  menuId: { type: Type.STRING },
+                  imageUrl: { type: Type.STRING },
+                  assetName: { type: Type.STRING }
+                },
+                required: ["menuId", "imageUrl", "assetName"]
+              }
+            },
+            newMenuItems: {
+              type: Type.ARRAY,
+              description: "New menu items automatically created/traced from unused images.",
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  name: { type: Type.STRING },
+                  description: { type: Type.STRING },
+                  price: { type: Type.INTEGER },
+                  category: { type: Type.STRING },
+                  imageUrl: { type: Type.STRING }
+                },
+                required: ["name", "description", "price", "category", "imageUrl"]
+              }
+            }
+          },
+          required: ["pairings", "newMenuItems"]
+        }
+      }
+    });
+
+    const result = JSON.parse(aiResponse.text || "{}");
+    const pairings = result.pairings || [];
+    const newMenuItems = result.newMenuItems || [];
+
+    const updatedPairingsLog: any[] = [];
+    const createdMenuItemsLog: any[] = [];
+
+    // Setup Firestore for dual sync if available
+    const configPath = path.join(process.cwd(), "firebase-applet-config.json");
+    let databaseId = "ai-studio-7ee29b67-2013-4587-a753-b479a6e19155";
+    let firebaseConfig: any = null;
+    let fdb: any = null;
+    
+    if (fs.existsSync(configPath)) {
+      firebaseConfig = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+      if (firebaseConfig.firestoreDatabaseId) databaseId = firebaseConfig.firestoreDatabaseId;
+    }
+    
+    if (firebaseConfig) {
+      try {
+        fdb = await getFirestoreAdmin(firebaseConfig, databaseId, "mysql-menu-ai-pairer");
+      } catch (fErr: any) {
+        console.warn("[AI PAIR ROUTE] Firestore admin connection failed, continuing with MySQL only:", fErr.message);
+      }
+    }
+
+    // 4. Update pairings in database
+    for (const p of pairings) {
+      const menuId = p.menuId;
+      const imageUrl = p.imageUrl;
+      const existingMenu = menus.find((m: any) => m.id === menuId);
+      if (existingMenu) {
+        await querySql("UPDATE menus SET image = ?, updatedAt = ? WHERE id = ?", [
+          imageUrl,
+          new Date().toISOString(),
+          menuId
+        ]);
+
+        if (fdb) {
+          try {
+            await fdb.collection("menus").doc(menuId).set({
+              image: imageUrl,
+              updatedAt: new Date().toISOString()
+            }, { merge: true });
+          } catch (e) {
+            console.warn("Firestore sync failed for pairing:", e);
+          }
+        }
+
+        updatedPairingsLog.push({
+          menuName: existingMenu.name,
+          assetName: p.assetName,
+          imageUrl: imageUrl
+        });
+      }
+    }
+
+    // 5. Create new traced menu items
+    for (const newItem of newMenuItems) {
+      const itemId = "item_" + Date.now() + "_" + Math.floor(Math.random() * 1000);
+      const categoryId = newItem.category || (categoriesList[0] ? categoriesList[0].id : "main-dishes");
+      const name = newItem.name;
+      const description = newItem.description;
+      const price = newItem.price || 4000;
+      const image = newItem.imageUrl;
+      const tags = JSON.stringify(["Fresh", "AI-Created"]);
+      const specs = JSON.stringify(["Chef Special"]);
+
+      // Insert in MySQL
+      await querySql(
+        `INSERT INTO menus (id, name, description, price, category, image, tags, specs, deleted, createdAt, updatedAt)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`,
+        [
+          itemId,
+          name,
+          description,
+          price,
+          categoryId,
+          image,
+          tags,
+          specs,
+          new Date().toISOString(),
+          new Date().toISOString()
+        ]
+      );
+
+      // Insert in Firestore
+      if (fdb) {
+        try {
+          await fdb.collection("menus").doc(itemId).set({
+            id: itemId,
+            name,
+            description,
+            price,
+            category: categoryId,
+            image,
+            tags: ["Fresh", "AI-Created"],
+            specs: ["Chef Special"],
+            deleted: 0,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          });
+        } catch (e) {
+          console.warn("Firestore sync failed for new item:", e);
+        }
+      }
+
+      createdMenuItemsLog.push({
+        name,
+        category: categoryId,
+        price,
+        imageUrl: image
+      });
+    }
+
+    return res.json({
+      success: true,
+      message: `Google Gemini AI successfully processed menu library. Automatically paired ${updatedPairingsLog.length} menus and created ${createdMenuItemsLog.length} new items from unmatched images without duplication.`,
+      pairings: updatedPairingsLog,
+      newItems: createdMenuItemsLog
+    });
+
+  } catch (err: any) {
+    console.error("[AI PAIR ROUTE] Fatal error during AI pairing:", err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 // 2b. Route: Detailed database connectivity diagnostic with shorter timeout and verbose error logging
 mysqlRouter.get("/diagnostic", async (req: any, res: any) => {
   const host = sanitizeMySQLHost(process.env.MYSQL_HOST || "");

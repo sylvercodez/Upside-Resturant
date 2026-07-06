@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Headphones, MessageSquare, Clock, User, Mail, Send, CheckSquare, Search, AlertCircle } from "lucide-react";
-import { collection, query, onSnapshot, doc, setDoc, orderBy, limit } from "firebase/firestore";
+import { Headphones, MessageSquare, Clock, User, Mail, Send, CheckSquare, Search, AlertCircle, Settings, Bot, Sparkles, Check, Save } from "lucide-react";
+import { collection, query, onSnapshot, doc, setDoc, getDoc, orderBy, limit } from "firebase/firestore";
 import { db } from "../firebase";
 import { socket } from "../socket";
 
@@ -31,8 +31,69 @@ export default function SupportManagementPanel() {
   const [searchQuery, setSearchQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
 
+  // Support Integration settings states
+  const [showConfig, setShowConfig] = useState(false);
+  const [tawkEnabled, setTawkEnabled] = useState(false);
+  const [tawkPropertyId, setTawkPropertyId] = useState("");
+  const [tawkWidgetId, setTawkWidgetId] = useState("");
+  const [chatbotEnabled, setChatbotEnabled] = useState(true);
+  const [chatbotName, setChatbotName] = useState("Upside Smart Assistant");
+  const [chatbotWelcome, setChatbotWelcome] = useState("Hello! Welcome to Upside Restaurant & Café. Ask me anything about our menu, delivery fees, or helpdesk requests!");
+  const [isConfigSaving, setIsConfigSaving] = useState(false);
+  const [configSuccess, setConfigSuccess] = useState("");
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
+
+  // Fetch initial support integration config on mount
+  useEffect(() => {
+    const loadSupportConfig = async () => {
+      try {
+        const docRef = doc(db, "settings", "support_config");
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          setTawkEnabled(data.tawkEnabled ?? false);
+          setTawkPropertyId(data.tawkPropertyId ?? "");
+          setTawkWidgetId(data.tawkWidgetId ?? "");
+          setChatbotEnabled(data.chatbotEnabled ?? true);
+          setChatbotName(data.chatbotName ?? "Upside Smart Assistant");
+          setChatbotWelcome(data.chatbotWelcome ?? "Hello! Welcome to Upside Restaurant & Café. Ask me anything about our menu, delivery fees, or helpdesk requests!");
+        }
+      } catch (err) {
+        console.error("Error loading support config inside admin desk:", err);
+      }
+    };
+    loadSupportConfig();
+  }, []);
+
+  const handleSaveSupportConfig = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsConfigSaving(true);
+    setConfigSuccess("");
+    setError(null);
+
+    try {
+      const docRef = doc(db, "settings", "support_config");
+      await setDoc(docRef, {
+        tawkEnabled,
+        tawkPropertyId: tawkPropertyId.trim(),
+        tawkWidgetId: tawkWidgetId.trim(),
+        chatbotEnabled,
+        chatbotName: chatbotName.trim(),
+        chatbotWelcome: chatbotWelcome.trim(),
+        updatedAt: new Date().toISOString()
+      });
+      
+      setConfigSuccess("Support integration settings saved successfully!");
+      setTimeout(() => setConfigSuccess(""), 4000);
+    } catch (err: any) {
+      console.error("Error saving support config:", err);
+      setError("Failed to save support integration settings: " + err.message);
+    } finally {
+      setIsConfigSaving(false);
+    }
+  };
 
   const safeGetDate = (timestamp: any): Date => {
     if (!timestamp) return new Date();
@@ -275,18 +336,182 @@ export default function SupportManagementPanel() {
           </p>
         </div>
         
-        {/* Search bar */}
-        <div className="relative">
-          <input
-            type="text"
-            placeholder="Filter sessions..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="bg-neutral-950 border border-neutral-800 font-sans text-xs p-2.5 pl-9 w-full md:w-64 text-white focus:outline-none focus:border-amber-500"
-          />
-          <Search className="w-4 h-4 text-neutral-500 absolute left-3 top-3" />
+        {/* Search bar & Settings toggle button */}
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            onClick={() => setShowConfig(!showConfig)}
+            className="flex items-center gap-1.5 px-3 py-2.5 border border-neutral-800 hover:border-neutral-700 bg-neutral-900 hover:bg-neutral-850 text-neutral-300 hover:text-white font-mono text-[10px] uppercase font-bold tracking-wider rounded transition-all cursor-pointer"
+          >
+            <Settings className="w-3.5 h-3.5 text-amber-500" />
+            <span>Integrations Config</span>
+          </button>
+
+          <div className="relative">
+            <input
+              type="text"
+              placeholder="Filter sessions..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="bg-neutral-950 border border-neutral-800 font-sans text-xs p-2.5 pl-9 w-full md:w-56 text-white focus:outline-none focus:border-amber-500"
+            />
+            <Search className="w-4 h-4 text-neutral-500 absolute left-3 top-3" />
+          </div>
         </div>
       </div>
+
+      {showConfig && (
+        <div className="bg-black/40 border border-neutral-800 p-5 space-y-5 animate-fadeIn rounded-lg text-left">
+          <div className="flex items-center justify-between border-b border-neutral-800 pb-3">
+            <div className="flex items-center gap-2">
+              <Settings className="w-4 h-4 text-amber-500" />
+              <h3 className="text-xs font-mono font-black uppercase text-white tracking-widest">
+                Support Channels & AI Automation Configuration
+              </h3>
+            </div>
+            <button
+              onClick={() => setShowConfig(false)}
+              className="text-[10px] font-mono text-neutral-500 hover:text-neutral-300 font-bold uppercase transition-all cursor-pointer"
+            >
+              Close
+            </button>
+          </div>
+
+          {configSuccess && (
+            <div className="p-3 bg-emerald-950/20 border border-emerald-900/30 text-emerald-400 text-xs font-mono rounded">
+              ✓ {configSuccess}
+            </div>
+          )}
+
+          <form onSubmit={handleSaveSupportConfig} className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Left: Tawk.to configuration */}
+            <div className="space-y-4 p-4 bg-[#141414] border border-neutral-850 rounded">
+              <div className="flex items-center justify-between border-b border-neutral-800 pb-2">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-sm">💬</span>
+                  <label className="text-neutral-200 font-bold uppercase text-[10px] tracking-wider font-mono">
+                    Tawk.to Live Chat Integration
+                  </label>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setTawkEnabled(!tawkEnabled)}
+                  className={`px-2 py-1 font-mono text-[9px] uppercase font-bold rounded cursor-pointer ${
+                    tawkEnabled
+                      ? "bg-emerald-950 text-emerald-400 border border-emerald-800"
+                      : "bg-neutral-900 text-neutral-500 border border-neutral-800"
+                  }`}
+                >
+                  {tawkEnabled ? "Enabled" : "Disabled"}
+                </button>
+              </div>
+
+              <p className="text-[9.5px] text-neutral-400 leading-normal font-sans">
+                Tawk.to provides live human support. When enabled, it replaces our default web helpdesk socket chat widget.
+              </p>
+
+              <div className="space-y-3 font-mono text-xs">
+                <div className="space-y-1">
+                  <span className="text-neutral-500 uppercase text-[9px] font-bold block">Tawk.to Property ID</span>
+                  <input
+                    type="text"
+                    value={tawkPropertyId}
+                    onChange={(e) => setTawkPropertyId(e.target.value)}
+                    disabled={!tawkEnabled}
+                    placeholder="e.g. 6422f99a31ebfa0fe7f551b9"
+                    className="w-full bg-neutral-950 border border-neutral-800 text-white text-[11px] p-2.5 focus:border-amber-500 outline-none rounded disabled:opacity-40"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <span className="text-neutral-500 uppercase text-[9px] font-bold block">Tawk.to Widget ID</span>
+                  <input
+                    type="text"
+                    value={tawkWidgetId}
+                    onChange={(e) => setTawkWidgetId(e.target.value)}
+                    disabled={!tawkEnabled}
+                    placeholder="e.g. 1gshn1o4s or 'default'"
+                    className="w-full bg-neutral-950 border border-neutral-800 text-white text-[11px] p-2.5 focus:border-amber-500 outline-none rounded disabled:opacity-40"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Right: AI Chatbot configuration */}
+            <div className="space-y-4 p-4 bg-[#141414] border border-neutral-850 rounded">
+              <div className="flex items-center justify-between border-b border-neutral-800 pb-2">
+                <div className="flex items-center gap-1.5">
+                  <Bot className="w-4 h-4 text-amber-500 animate-pulse" />
+                  <label className="text-neutral-200 font-bold uppercase text-[10px] tracking-wider font-mono">
+                    AI Smart Chatbot (Gemini-Powered)
+                  </label>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setChatbotEnabled(!chatbotEnabled)}
+                  className={`px-2 py-1 font-mono text-[9px] uppercase font-bold rounded cursor-pointer ${
+                    chatbotEnabled
+                      ? "bg-emerald-950 text-emerald-400 border border-emerald-800"
+                      : "bg-neutral-900 text-neutral-500 border border-neutral-800"
+                  }`}
+                >
+                  {chatbotEnabled ? "Enabled" : "Disabled"}
+                </button>
+              </div>
+
+              <p className="text-[9.5px] text-neutral-400 leading-normal font-sans">
+                Runs a highly capable AI assistant that immediately answers queries using Gemini 3.5 Flash and real-time database menus.
+              </p>
+
+              <div className="space-y-3 font-mono text-xs">
+                <div className="space-y-1">
+                  <span className="text-neutral-500 uppercase text-[9px] font-bold block">Chatbot Display Name</span>
+                  <input
+                    type="text"
+                    value={chatbotName}
+                    onChange={(e) => setChatbotName(e.target.value)}
+                    disabled={!chatbotEnabled}
+                    placeholder="e.g. Upside Smart Assistant"
+                    className="w-full bg-neutral-950 border border-neutral-800 text-white text-[11px] p-2.5 focus:border-amber-500 outline-none rounded disabled:opacity-40"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <span className="text-neutral-500 uppercase text-[9px] font-bold block">Custom Welcome Message</span>
+                  <textarea
+                    value={chatbotWelcome}
+                    onChange={(e) => setChatbotWelcome(e.target.value)}
+                    disabled={!chatbotEnabled}
+                    rows={2}
+                    placeholder="Provide a welcoming text greeting..."
+                    className="w-full bg-neutral-950 border border-neutral-800 text-white text-[11px] p-2.5 focus:border-amber-500 outline-none rounded disabled:opacity-40 font-sans"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Bottom Form Action */}
+            <div className="md:col-span-2 border-t border-neutral-850 pt-4 flex justify-end">
+              <button
+                type="submit"
+                disabled={isConfigSaving}
+                className="px-6 py-2.5 bg-amber-500 hover:bg-amber-600 disabled:bg-neutral-800 disabled:text-neutral-500 text-neutral-950 font-bold uppercase tracking-wider text-[10px] flex items-center gap-1.5 rounded transition-all cursor-pointer shadow-md"
+              >
+                {isConfigSaving ? (
+                  <>
+                    <span className="w-3.5 h-3.5 border-2 border-neutral-950 border-t-transparent rounded-full animate-spin" />
+                    <span>SAVING CHANNELS CONFIG...</span>
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-3.5 h-3.5" />
+                    <span>✓ SAVE SUPPORT CONFIG</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
 
       {error && (
         <div className="p-3 bg-red-950/20 border border-red-900/30 text-red-500 text-xs font-mono flex items-center gap-2">

@@ -11,6 +11,7 @@ import { instagramRouter } from "./_routes/instagram.js";
 import { menuRouter } from "./_routes/menu.js";
 import { mysqlRouter } from "./_routes/mysql.js";
 import { deliveryRouter } from "./_routes/delivery.js";
+import { chatbotRouter } from "./_routes/chatbot.js";
 
 // Ensure standard and VITE_ prefixed environment variables are correctly mapped
 mapEnvVariables();
@@ -127,6 +128,7 @@ app.use("/api/instagram", instagramRouter);
 app.use("/api/seed-menu", menuRouter);
 app.use("/api/mysql", mysqlRouter);
 app.use("/api/delivery", deliveryRouter);
+app.use("/api/chatbot", chatbotRouter);
 
 app.use("/otp", otpRouter);
 app.use("/opay", opayRouter);
@@ -134,6 +136,7 @@ app.use("/instagram", instagramRouter);
 app.use("/seed-menu", menuRouter);
 app.use("/mysql", mysqlRouter);
 app.use("/delivery", deliveryRouter);
+app.use("/chatbot", chatbotRouter);
 
 // Serve frontend assets
 async function serveApp() {

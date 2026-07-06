@@ -18,6 +18,8 @@ import DedicatedTrack from "./components/DedicatedTrack";
 import DedicatedLegal from "./components/DedicatedLegal";
 import DedicatedRiderDashboard from "./components/DedicatedRiderDashboard";
 import SupportChatWidget from "./components/SupportChatWidget";
+import TawkSupportWidget from "./components/TawkSupportWidget";
+import AIChatbotWidget from "./components/AIChatbotWidget";
 import { CartItem, ShippingLocation, LAGOS_AREAS, getApiUrl } from "./types";
 import { MenuItem, MENU_ITEMS, Category, CATEGORIES } from "./data/menu";
 import { getBranding, auth, db } from "./firebase";
@@ -950,7 +952,11 @@ useEffect(() => {
 
       {/* Global Live Helpdesk Support Chat widget */}
       {activeView !== "rider" && (
-        <SupportChatWidget currentUser={currentUser} />
+        <>
+          <SupportChatWidget currentUser={currentUser} />
+          <TawkSupportWidget />
+          <AIChatbotWidget />
+        </>
       )}
 
     </div>
