@@ -64,6 +64,34 @@ export default function TawkSupportWidget() {
 
     console.log(`[TAWK.TO WIDGET] Loading active Property ID: ${propertyId}, Widget ID: ${widgetId}`);
 
+    // Pre-configure Tawk_API to ensure callbacks are bound immediately upon script load
+    const tawkApi = (window as any).Tawk_API || {};
+    
+    // Auto-hide the widget as soon as it loads to prevent floating bubble overlap
+    tawkApi.onLoad = function () {
+      try {
+        if (typeof tawkApi.hideWidget === "function") {
+          tawkApi.hideWidget();
+        }
+      } catch (e) {
+        console.warn("Tawk onLoad hideWidget failed:", e);
+      }
+    };
+
+    // Auto-hide the widget again if the user minimizes or closes it
+    tawkApi.onChatMinimized = function () {
+      try {
+        if (typeof tawkApi.hideWidget === "function") {
+          tawkApi.hideWidget();
+        }
+      } catch (e) {
+        console.warn("Tawk onChatMinimized hideWidget failed:", e);
+      }
+    };
+
+    (window as any).Tawk_API = tawkApi;
+    (window as any).Tawk_LoadStart = new Date();
+
     // Create script
     const s1 = document.createElement("script");
     s1.id = "tawk-script-element";
@@ -80,8 +108,28 @@ export default function TawkSupportWidget() {
       document.head.appendChild(s1);
     }
 
+    // Listen to custom show/maximize trigger event
+    const handleOpenLiveSupport = () => {
+      const tawk = (window as any).Tawk_API;
+      if (tawk) {
+        try {
+          if (typeof tawk.showWidget === "function") {
+            tawk.showWidget();
+          }
+          if (typeof tawk.maximize === "function") {
+            tawk.maximize();
+          }
+        } catch (err) {
+          console.warn("Failed to show or maximize Tawk widget:", err);
+        }
+      }
+    };
+
+    window.addEventListener("open-upside-live-support", handleOpenLiveSupport);
+
     return () => {
       // Cleanup on unmount/re-run
+      window.removeEventListener("open-upside-live-support", handleOpenLiveSupport);
       try {
         const existingScript = document.getElementById("tawk-script-element");
         if (existingScript) {

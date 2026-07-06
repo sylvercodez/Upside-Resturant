@@ -88,14 +88,8 @@ export default function AIChatbotWidget() {
   };
 
   const handleConnectSupport = () => {
-    const tawk = (window as any).Tawk_API;
-    if (tawk && typeof tawk.maximize === "function") {
-      tawk.maximize();
-      setIsOpen(false);
-    } else {
-      window.dispatchEvent(new CustomEvent("open-upside-live-support"));
-      setIsOpen(false);
-    }
+    window.dispatchEvent(new CustomEvent("open-upside-live-support"));
+    setIsOpen(false);
   };
 
   // 1. Fetch Chatbot Settings on Mount
@@ -248,7 +242,12 @@ export default function AIChatbotWidget() {
       });
 
       if (!response.ok) {
-        throw new Error("Chatbot endpoint failed");
+        let errorMsg = "Chatbot endpoint failed";
+        try {
+          const errData = await response.json();
+          errorMsg = errData.error || errData.details || errorMsg;
+        } catch (_) {}
+        throw new Error(errorMsg);
       }
 
       const data = await response.json();
@@ -264,11 +263,21 @@ export default function AIChatbotWidget() {
       ]);
     } catch (err: any) {
       console.error("Failed to fetch AI reply:", err);
+      const isConfigError = err.message && (
+        err.message.includes("GEMINI_API_KEY") || 
+        err.message.includes("offline") || 
+        err.message.includes("unconfigured") ||
+        err.message.includes("key") ||
+        err.message.includes("Secret")
+      );
+
       setMessages((prev) => [
         ...prev,
         {
           role: "assistant",
-          content: "I'm sorry, I'm currently experiencing connectivity issues. Please check your internet connection or ask our live support team.",
+          content: isConfigError 
+            ? `⚠️ **Service Configuration Issue**: ${err.message}`
+            : "I'm sorry, I'm currently experiencing connectivity issues. Please check your internet connection or ask our live support team.",
           timestamp: new Date()
         }
       ]);
