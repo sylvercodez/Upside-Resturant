@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Calendar, Clock, Users, CheckCircle, Shield, Award, Sparkles } from "lucide-react";
-import { Reservation } from "../types";
+import { Reservation, getApiUrl } from "../types";
 import { logCustomEvent } from "../utils/analytics";
 
 interface ReservationSectionProps {
@@ -44,7 +44,7 @@ export default function ReservationSection({ isOpen, onClose }: ReservationSecti
     });
 
     try {
-      const response = await fetch("/api/booking/create", {
+      const response = await fetch(getApiUrl("/api/booking/create"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json"

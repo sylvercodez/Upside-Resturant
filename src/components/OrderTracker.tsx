@@ -1077,10 +1077,15 @@ export default function OrderTracker({ onBackToCart, orderId, userRole = "user" 
                 </div>
                 <div className="flex-grow">
                   <p className="text-[10px] text-neutral-500 font-bold uppercase">
-                    {activeOrder.riderName ? `Rider: ${activeOrder.riderName}` : "Assigned Rider Line"}
+                    {(activeOrder.riderName || activeOrder.assignedRiderName) 
+                      ? `Rider: ${activeOrder.riderName || activeOrder.assignedRiderName}` 
+                      : "Assigned Rider Line"}
                   </p>
                   <p className="text-[11px] font-mono text-amber-500 font-bold">
-                    {activeOrder.riderPhone || activeOrder.rider_phone || "+234 (91) 464-6767"}
+                    {(activeOrder.riderPhone || activeOrder.rider_phone || activeOrder.assignedRiderPhone) && 
+                     (activeOrder.riderPhone || activeOrder.rider_phone || activeOrder.assignedRiderPhone) !== "N/A"
+                      ? (activeOrder.riderPhone || activeOrder.rider_phone || activeOrder.assignedRiderPhone)
+                      : "+234 (91) 464-6767"}
                   </p>
                 </div>
                 <div className="flex gap-1.5">
@@ -1096,7 +1101,10 @@ export default function OrderTracker({ onBackToCart, orderId, userRole = "user" 
                     <span>Chat</span>
                   </button>
                   <a
-                    href={`tel:${(activeOrder.riderPhone || activeOrder.rider_phone || "+2349114646767").replace(/\s+/g, "").replace(/[()]/g, "")}`}
+                    href={`tel:${((activeOrder.riderPhone || activeOrder.rider_phone || activeOrder.assignedRiderPhone) && 
+                     (activeOrder.riderPhone || activeOrder.rider_phone || activeOrder.assignedRiderPhone) !== "N/A"
+                      ? (activeOrder.riderPhone || activeOrder.rider_phone || activeOrder.assignedRiderPhone)
+                      : "+2349114646767").replace(/\s+/g, "").replace(/[()]/g, "")}`}
                     className="px-2.5 py-1.5 border border-neutral-800 hover:border-neutral-700 text-[10px] bg-neutral-950 text-neutral-300 font-mono uppercase font-bold transition-all"
                   >
                     Call Rider
@@ -1110,7 +1118,7 @@ export default function OrderTracker({ onBackToCart, orderId, userRole = "user" 
                     orderId={activeOrder.id}
                     senderId={activeOrder.userId || "anonymous_customer"}
                     senderName={activeOrder.customerName || "Customer"}
-                    recipientName={activeOrder.riderName || "Courier Rider"}
+                    recipientName={activeOrder.riderName || activeOrder.assignedRiderName || "Courier Rider"}
                     onClose={() => setShowChat(false)}
                     theme="dark"
                   />
