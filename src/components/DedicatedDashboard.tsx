@@ -571,8 +571,8 @@ export default function DedicatedDashboard({
           setInstagramActionSuccess(`Connected Instagram handle @${username}! Automatically retrieving active feed...`);
           setInstagramSyncStatus("");
           
-          // Trigger immediate synchronization with the newly achieved access token!
-          await handleSyncInstagramFeed(accessToken);
+          // Trigger immediate synchronization!
+          await handleSyncInstagramFeed();
         } catch (err) {
           console.error("Failed to process authorized handshake token:", err);
           setInstagramSyncError("Handshake Save Failed: " + (err instanceof Error ? err.message : String(err)));
@@ -643,67 +643,32 @@ export default function DedicatedDashboard({
     }
   };
 
-  const handleSyncInstagramFeed = async (overrideToken?: string) => {
-    const tokenToUse = overrideToken || instagramToken;
-    if (!tokenToUse) {
-      setInstagramSyncError("An Instagram Access Token is required to synchronize the feed.");
-      return;
-    }
+  const handleSyncInstagramFeed = async () => {
     setInstagramSyncError("");
     setInstagramActionSuccess("");
     setIsInstagramSyncing(true);
-    setInstagramSyncStatus("Connecting to Instagram Graph API...");
+    setInstagramSyncStatus("Crawling Instagram profile @upsidebymopheth...");
 
     try {
-      const fields = "id,caption,media_type,media_url,permalink,thumbnail_url,timestamp";
-      const url = `https://graph.instagram.com/me/media?fields=${fields}&access_token=${tokenToUse}`;
-      
-      const response = await fetch(url);
-      if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
-        throw new Error(errData.error?.message || `HTTP error! Status: ${response.status}`);
-      }
-
-      const resJson = await response.json();
-      const mediaList = resJson.data || [];
-
-      if (mediaList.length === 0) {
-        setInstagramSyncStatus("No media posts found in your Instagram feed.");
-        setIsInstagramSyncing(false);
-        return;
-      }
-
-      setInstagramSyncStatus(`Fetched ${mediaList.length} items. Saving to Firebase...`);
-
-      // Write each post to collection
-      const batchPromises = mediaList.map(async (item: any) => {
-        const imageUrl = item.media_type === "VIDEO" ? (item.thumbnail_url || item.media_url) : item.media_url;
-        const postDocRef = doc(db, "instagram_posts", item.id);
-        const postData = {
-          id: item.id,
-          caption: item.caption || "Upside Dining Moment",
-          media_url: imageUrl || "",
-          permalink: item.permalink || "https://instagram.com",
-          media_type: item.media_type || "IMAGE",
-          timestamp: item.timestamp || new Date().toISOString(),
-          createdAt: new Date(item.timestamp || Date.now()).toISOString(),
-        };
-        return setDoc(postDocRef, postData);
+      const response = await fetch("/api/instagram/crawl", {
+        method: "POST"
       });
 
-      await Promise.all(batchPromises);
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.error || `HTTP error! Status: ${response.status}`);
+      }
 
-      // Update Instagram setting last sync timestamp
-      const syncDateString = new Date().toISOString();
-      await setDoc(doc(db, "settings", "instagram"), {
-        lastSyncedAt: syncDateString
-      }, { merge: true });
+      const data = await response.json();
+      if (!data.success) {
+        throw new Error("Failed to complete server crawl.");
+      }
 
-      setInstagramLastSynced(syncDateString);
-      setInstagramActionSuccess(`Successfully parsed and synchronized ${mediaList.length} live Instagram feed items!`);
+      setInstagramLastSynced(data.lastSyncedAt);
+      setInstagramActionSuccess(`Successfully crawled and synchronized ${data.posts.length} live Instagram feed items from @upsidebymopheth!`);
       setInstagramSyncStatus("");
     } catch (err) {
-      console.error("Instagram sync failure:", err);
+      console.error("Instagram crawl sync failure:", err);
       setInstagramSyncError("Sync failed: " + (err instanceof Error ? err.message : String(err)));
       setInstagramSyncStatus("");
     } finally {

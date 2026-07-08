@@ -7,7 +7,7 @@ import { mapEnvVariables } from "./_utils/env.js";
 import { appCheckVerification } from "./_middleware/appCheck.js";
 import { otpRouter } from "./_routes/otp.js";
 import { opayRouter } from "./_routes/opay.js";
-import { instagramRouter } from "./_routes/instagram.js";
+import { instagramRouter, startInstagramCrawlerCron, getFirestoreInstance } from "./_routes/instagram.js";
 import { menuRouter } from "./_routes/menu.js";
 import { mysqlRouter } from "./_routes/mysql.js";
 import { deliveryRouter } from "./_routes/delivery.js";
@@ -233,6 +233,17 @@ async function serveApp() {
     httpServer.listen(bindPort, "0.0.0.0", () => {
       console.log(`Express server executing on http://0.0.0.0:${bindPort} with Socket.IO`);
     });
+  }
+
+  // Start the background Instagram crawl check
+  try {
+    getFirestoreInstance().then(db => {
+      startInstagramCrawlerCron(db);
+    }).catch(err => {
+      console.error("[SERVER] Failed to auto-start Instagram background crawler Firestore connection:", err.message);
+    });
+  } catch (err: any) {
+    console.error("[SERVER] Failed to auto-start Instagram background crawler:", err.message);
   }
 }
 

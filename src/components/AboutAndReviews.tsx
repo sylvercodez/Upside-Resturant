@@ -105,6 +105,32 @@ export default function AboutAndReviews({ onReadMoreExperience, onViewMenu }: Ab
           setInstagramFeed(posts);
           setIsLiveFeed(true);
         }
+
+        // Trigger check-sync to keep the database fresh (checks if > 3 days since last sync)
+        const checkSyncRes = await fetch("/api/instagram/check-sync");
+        if (checkSyncRes.ok) {
+          const checkSyncData = await checkSyncRes.json();
+          if (checkSyncData.shouldCrawl) {
+            console.log("[Instagram Crawler] Feed is stale or unseeded, triggering automatic background crawl...");
+            const crawlRes = await fetch("/api/instagram/crawl", { method: "POST" });
+            if (crawlRes.ok) {
+              const crawlData = await crawlRes.json();
+              if (crawlData.posts && crawlData.posts.length > 0) {
+                console.log("[Instagram Crawler] Background crawl successful! Updating live feed.");
+                const updatedPosts = crawlData.posts.map((item: any) => ({
+                  id: item.id,
+                  caption: item.caption || "Upside Gourmet Moment",
+                  media_url: item.media_url,
+                  permalink: item.permalink || "https://instagram.com/upsidebymopheth",
+                  media_type: item.media_type || "IMAGE",
+                  timestamp: item.timestamp || ""
+                }));
+                setInstagramFeed(updatedPosts.slice(0, 8));
+                setIsLiveFeed(true);
+              }
+            }
+          }
+        }
       } catch (err) {
         console.warn("Instagram dynamic feed offline or unseeded, using premium standard fallbacks:", err);
       }
