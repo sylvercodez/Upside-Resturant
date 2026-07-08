@@ -1333,8 +1333,8 @@ export default function DedicatedRiderDashboard() {
                               <span className="text-[8px] font-mono tracking-widest text-neutral-400 uppercase block font-bold">
                                 Expected Securing OTP Code
                               </span>
-                              <span className="text-base font-black font-mono tracking-widest text-[#d97706] uppercase mt-0.5 block select-all">
-                                {finalCode}
+                              <span className="text-xs font-black font-mono tracking-widest text-neutral-400 uppercase mt-0.5 block">
+                                •••••• (SECURELY HIDDEN)
                               </span>
                             </div>
                             <p className="text-[10px] text-neutral-600 max-w-xs leading-relaxed font-sans">
