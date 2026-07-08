@@ -692,7 +692,7 @@ export default function DedicatedDashboard({
         id: postId,
         caption: manualPostCaption || "Admin Curated Moment",
         media_url: manualPostUrl,
-        permalink: manualPostPermalink || "https://instagram.com",
+        permalink: manualPostPermalink || "https://www.instagram.com/upsidebymopheth/",
         media_type: "IMAGE",
         timestamp: new Date().toISOString(),
         createdAt: new Date().toISOString()
@@ -4231,7 +4231,7 @@ export default function DedicatedDashboard({
                             <label className="text-[9px] text-neutral-400 uppercase tracking-widest block font-bold">Instagram Permalink URL</label>
                             <input
                               type="url"
-                              placeholder="https://instagram.com/p/..."
+                              placeholder="https://www.instagram.com/upsidebymopheth/p/..."
                               value={manualPostPermalink}
                               onChange={(e) => setManualPostPermalink(e.target.value)}
                               className="w-full bg-neutral-950 border border-neutral-850 p-2 text-white focus:outline-none focus:border-amber-500 text-[10px]"

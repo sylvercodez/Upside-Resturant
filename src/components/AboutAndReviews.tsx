@@ -96,7 +96,7 @@ export default function AboutAndReviews({ onReadMoreExperience, onViewMenu }: Ab
             id: doc.id,
             caption: data.caption || "",
             media_url: data.media_url,
-            permalink: data.permalink || "https://instagram.com",
+            permalink: data.permalink || "https://www.instagram.com/upsidebymopheth/",
             media_type: data.media_type || "IMAGE",
             timestamp: data.timestamp || ""
           });
@@ -121,7 +121,7 @@ export default function AboutAndReviews({ onReadMoreExperience, onViewMenu }: Ab
                   id: item.id,
                   caption: item.caption || "Upside Gourmet Moment",
                   media_url: item.media_url,
-                  permalink: item.permalink || "https://instagram.com/upsidebymopheth",
+                  permalink: item.permalink || "https://www.instagram.com/upsidebymopheth/",
                   media_type: item.media_type || "IMAGE",
                   timestamp: item.timestamp || ""
                 }));
@@ -501,7 +501,7 @@ export default function AboutAndReviews({ onReadMoreExperience, onViewMenu }: Ab
             </h3>
           </div>
           <button
-            onClick={() => window.open("https://instagram.com", "_blank")}
+            onClick={() => window.open("https://www.instagram.com/upsidebymopheth/", "_blank")}
             className="text-xs font-mono text-neutral-800 hover:text-black hover:bg-neutral-50 transition-colors flex items-center gap-2 cursor-pointer border border-neutral-200 px-4 py-2 uppercase"
           >
             <Instagram className="w-4 h-4 text-amber-600" />
@@ -512,10 +512,10 @@ export default function AboutAndReviews({ onReadMoreExperience, onViewMenu }: Ab
         {/* Instashow Grid of Dynamic Culinary Art */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {(instagramFeed.length > 0 ? instagramFeed : [
-            { id: "p1", caption: "Artisanal Brew", media_url: "https://images.unsplash.com/photo-1541167760496-1628856ab772?auto=format&fit=crop&q=80&w=650", permalink: "https://instagram.com" },
-            { id: "p2", caption: "Late Mixology", media_url: "https://images.unsplash.com/photo-1545438102-799c3991ffb2?auto=format&fit=crop&q=80&w=650", permalink: "https://instagram.com" },
-            { id: "p3", caption: "Fine Searing", media_url: "https://images.unsplash.com/photo-1600891964599-f61ba0e24092?auto=format&fit=crop&q=80&w=650", permalink: "https://instagram.com" },
-            { id: "p4", caption: "Ambient Lounge", media_url: "https://images.unsplash.com/photo-1511192336575-5a79af67a629?auto=format&fit=crop&q=80&w=650", permalink: "https://instagram.com" }
+            { id: "p1", caption: "Artisanal Brew", media_url: "https://images.unsplash.com/photo-1541167760496-1628856ab772?auto=format&fit=crop&q=80&w=650", permalink: "https://www.instagram.com/upsidebymopheth/" },
+            { id: "p2", caption: "Late Mixology", media_url: "https://images.unsplash.com/photo-1545438102-799c3991ffb2?auto=format&fit=crop&q=80&w=650", permalink: "https://www.instagram.com/upsidebymopheth/" },
+            { id: "p3", caption: "Fine Searing", media_url: "https://images.unsplash.com/photo-1600891964599-f61ba0e24092?auto=format&fit=crop&q=80&w=650", permalink: "https://www.instagram.com/upsidebymopheth/" },
+            { id: "p4", caption: "Ambient Lounge", media_url: "https://images.unsplash.com/photo-1511192336575-5a79af67a629?auto=format&fit=crop&q=80&w=650", permalink: "https://www.instagram.com/upsidebymopheth/" }
           ]).map((inst) => (
             <div
               key={inst.id}

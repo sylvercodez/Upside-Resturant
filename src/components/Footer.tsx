@@ -76,7 +76,7 @@ export default function Footer({ onScrollToElement, onOpenReservations, branding
               <Facebook className="w-4 h-4" />
             </a>
             <a
-              href="https://instagram.com/upside_lagos"
+              href="https://www.instagram.com/upsidebymopheth/"
               target="_blank"
               rel="noopener noreferrer"
               className="w-8 h-8 rounded-full border border-neutral-200 flex items-center justify-center text-neutral-500 hover:text-white hover:bg-neutral-900 hover:border-neutral-900 transition-all cursor-pointer shadow-sm hover:scale-105 duration-200"
