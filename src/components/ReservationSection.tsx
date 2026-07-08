@@ -11,6 +11,7 @@ interface ReservationSectionProps {
 export default function ReservationSection({ isOpen, onClose }: ReservationSectionProps) {
   const [success, setSuccess] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
 
   const [formData, setFormData] = useState({
     name: "",
@@ -31,9 +32,10 @@ export default function ReservationSection({ isOpen, onClose }: ReservationSecti
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
+    setErrorMsg("");
 
     logCustomEvent("reservation_attempt", {
       guests: formData.guests,
@@ -41,16 +43,37 @@ export default function ReservationSection({ isOpen, onClose }: ReservationSecti
       seating: formData.seatingArea
     });
 
-    // Simulate high-end digital table routing and SMS verification dispatch
-    setTimeout(() => {
-      setSubmitting(false);
-      setSuccess(true);
-      logCustomEvent("reservation_success", {
-        guests: formData.guests,
-        occasion: formData.specialOccasion || "None",
-        seating: formData.seatingArea
+    try {
+      const response = await fetch("/api/booking/create", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(formData)
       });
-    }, 1800);
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.error || `HTTP error! Status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      if (result.success) {
+        setSuccess(true);
+        logCustomEvent("reservation_success", {
+          guests: formData.guests,
+          occasion: formData.specialOccasion || "None",
+          seating: formData.seatingArea
+        });
+      } else {
+        throw new Error(result.error || "Failed to secure table allocation.");
+      }
+    } catch (err: any) {
+      console.error("Booking error:", err);
+      setErrorMsg(err.message || "Something went wrong. Please check your inputs and try again.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -221,6 +244,12 @@ export default function ReservationSection({ isOpen, onClose }: ReservationSecti
                   />
                 </div>
               </div>
+
+              {errorMsg && (
+                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 text-xs font-mono">
+                  <strong>Error:</strong> {errorMsg}
+                </div>
+              )}
 
               {/* Terms Checkbox */}
               <div className="flex items-start gap-2 text-neutral-500 font-mono text-[9px] leading-relaxed">
