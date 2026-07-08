@@ -48,11 +48,35 @@ export default function TawkSupportWidget() {
     document.body.appendChild(s1);
 
     // Initial Tawk_API settings
-    (window as any).Tawk_API = (window as any).Tawk_API || {};
+    const tawkApi = (window as any).Tawk_API || {};
+    tawkApi.onLoad = function() {
+      if ((window as any).Tawk_API && typeof (window as any).Tawk_API.hideWidget === "function") {
+        console.log("[TawkSupportWidget] onLoad: Hiding standard Tawk.to bubble...");
+        (window as any).Tawk_API.hideWidget();
+      }
+    };
+    tawkApi.onChatMinimized = function() {
+      if ((window as any).Tawk_API && typeof (window as any).Tawk_API.hideWidget === "function") {
+        console.log("[TawkSupportWidget] onChatMinimized: Hiding standard Tawk.to bubble...");
+        (window as any).Tawk_API.hideWidget();
+      }
+    };
+    (window as any).Tawk_API = tawkApi;
+
+    // If Tawk_API is already initialized/cached, hide it immediately
+    if ((window as any).Tawk_API && typeof (window as any).Tawk_API.hideWidget === "function") {
+      console.log("[TawkSupportWidget] Tawk already loaded: Hiding standard Tawk.to bubble...");
+      (window as any).Tawk_API.hideWidget();
+    }
 
     const handleOpenLiveSupport = () => {
-      if ((window as any).Tawk_API && typeof (window as any).Tawk_API.maximize === "function") {
-        console.log("[TawkSupportWidget] Maximizing standard inline live support widget...");
+      if (
+        (window as any).Tawk_API &&
+        typeof (window as any).Tawk_API.showWidget === "function" &&
+        typeof (window as any).Tawk_API.maximize === "function"
+      ) {
+        console.log("[TawkSupportWidget] Showing and maximizing standard inline live support widget...");
+        (window as any).Tawk_API.showWidget();
         (window as any).Tawk_API.maximize();
       } else {
         console.warn("[TawkSupportWidget] Tawk_API not loaded yet, falling back to direct link...");
