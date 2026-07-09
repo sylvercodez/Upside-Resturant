@@ -62,6 +62,51 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   });
 }
 
+// Thread-safe in-memory cache for database queries to prevent adding 1.2s roundtrip latency on every message
+interface DbCache {
+  categories: any[];
+  menuItems: any[];
+  shippingAreas: any[];
+  lastFetched: number;
+}
+
+const dbCache: DbCache = {
+  categories: STATIC_CATEGORIES,
+  menuItems: STATIC_MENU_ITEMS,
+  shippingAreas: STATIC_SHIPPING_AREAS,
+  lastFetched: 0
+};
+
+let isFetching = false;
+
+async function refreshDbCache(): Promise<void> {
+  if (isFetching) return;
+  isFetching = true;
+  try {
+    const [dbCategoriesRes, dbMenusRes, dbShippingRes] = await Promise.allSettled([
+      withTimeout(querySql("SELECT id, name, description FROM categories WHERE deleted = 0 OR deleted IS NULL"), 2000),
+      withTimeout(querySql("SELECT id, name, description, price, category, available FROM menus WHERE deleted = 0 OR deleted IS NULL"), 2000),
+      withTimeout(querySql("SELECT id, name, fee FROM shipping_areas WHERE deleted = 0 OR deleted IS NULL"), 2000)
+    ]);
+
+    if (dbCategoriesRes.status === "fulfilled" && dbCategoriesRes.value && dbCategoriesRes.value.length > 0) {
+      dbCache.categories = dbCategoriesRes.value;
+    }
+    if (dbMenusRes.status === "fulfilled" && dbMenusRes.value && dbMenusRes.value.length > 0) {
+      dbCache.menuItems = dbMenusRes.value;
+    }
+    if (dbShippingRes.status === "fulfilled" && dbShippingRes.value && dbShippingRes.value.length > 0) {
+      dbCache.shippingAreas = dbShippingRes.value;
+    }
+    dbCache.lastFetched = Date.now();
+    console.log("[CHATBOT CACHE] Successfully updated database cache. Items:", dbCache.menuItems.length);
+  } catch (err) {
+    console.warn("[CHATBOT CACHE] Error updating cache:", err);
+  } finally {
+    isFetching = false;
+  }
+}
+
 chatbotRouter.post("/", async (req: any, res: any) => {
   try {
     const { message, history } = req.body;
@@ -69,30 +114,32 @@ chatbotRouter.post("/", async (req: any, res: any) => {
       return res.status(400).json({ error: "Missing required 'message' parameter." });
     }
 
-    // 1. Fetch live restaurant data if database is connected (parallelized with tight timeout)
-    let categories = STATIC_CATEGORIES;
-    let menuItems = STATIC_MENU_ITEMS;
-    let shippingAreas = STATIC_SHIPPING_AREAS;
+    // Determine cache status and fetch if needed
+    const now = Date.now();
+    const cacheAge = now - dbCache.lastFetched;
 
-    try {
-      const [dbCategoriesRes, dbMenusRes, dbShippingRes] = await Promise.allSettled([
-        withTimeout(querySql("SELECT * FROM categories WHERE deleted = 0 OR deleted IS NULL"), 1200),
-        withTimeout(querySql("SELECT id, name, description, price, category, available FROM menus WHERE deleted = 0 OR deleted IS NULL"), 1200),
-        withTimeout(querySql("SELECT * FROM shipping_areas"), 1200)
-      ]);
-
-      if (dbCategoriesRes.status === "fulfilled" && dbCategoriesRes.value && dbCategoriesRes.value.length > 0) {
-        categories = dbCategoriesRes.value;
-      }
-      if (dbMenusRes.status === "fulfilled" && dbMenusRes.value && dbMenusRes.value.length > 0) {
-        menuItems = dbMenusRes.value;
-      }
-      if (dbShippingRes.status === "fulfilled" && dbShippingRes.value && dbShippingRes.value.length > 0) {
-        shippingAreas = dbShippingRes.value;
-      }
-    } catch (err) {
-      console.warn("[CHATBOT DB TIMEOUT/ERROR] Proceeding with static menu data:", err);
+    if (dbCache.lastFetched === 0) {
+      // Blocking fetch on first-time boot with tight timeout to avoid waiting too long
+      console.log("[CHATBOT] Initializing database cache on first request...");
+      await refreshDbCache();
+    } else if (cacheAge > 120000) { // 2 minutes cache TTL
+      // Background non-blocking refresh if cache is stale
+      console.log("[CHATBOT] Database cache is stale. Triggering background refresh...");
+      refreshDbCache().catch((err) => console.error("Error in background cache refresh:", err));
     }
+
+    // Format database arrays into compact, token-minimized lists to save prompt size & speed up Gemini processing
+    const formattedCategories = dbCache.categories
+      .map((c: any) => `- ${c.name} (id: ${c.id})`)
+      .join("\n");
+
+    const formattedMenuItems = dbCache.menuItems
+      .map((item: any) => `- ${item.name} | Price: ₦${item.price} | Category: ${item.category} | Available: ${item.available ? "Yes" : "No"} | Description: ${item.description || "N/A"}`)
+      .join("\n");
+
+    const formattedShipping = dbCache.shippingAreas
+      .map((a: any) => `- ${a.name} | Delivery Fee: ₦${a.fee}`)
+      .join("\n");
 
     // 2. Prepare System Instructions with real-time context
     const systemInstruction = `You are "Upside Smart Assistant" — a highly intelligent, warm, polite, and fully automated AI chatbot for Upside Restaurant & Café.
@@ -104,13 +151,13 @@ Your job is to assist users with:
 
 === RESTAURANT DATABASE ===
 CATEGORIES:
-${JSON.stringify(categories, null, 2)}
+${formattedCategories}
 
 MENU ITEMS:
-${JSON.stringify(menuItems, null, 2)}
+${formattedMenuItems}
 
 DELIVERY COVERAGE AREAS & FEES:
-${JSON.stringify(shippingAreas, null, 2)}
+${formattedShipping}
 
 === KEY RULES ===
 - ALWAYS check item prices and availability in Lagos Naira (₦) from the database above before answering.
