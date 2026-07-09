@@ -18,7 +18,7 @@ export default function AIChatbotWidget() {
   const [isLoading, setIsLoading] = useState(false);
   const [enabled, setEnabled] = useState(true);
   const [botName, setBotName] = useState("Upside Smart Assistant");
-  const [welcomeMessage, setWelcomeMessage] = useState("Hello! Welcome to Upside Restaurant & Café. Ask me anything about our menu, delivery fees, or helpdesk requests!");
+  const [welcomeMessage, setWelcomeMessage] = useState("Hello! Welcome to Upside Restaurant & Café. Ask me anything about our menu, delivery, or reservations! You can click the 'Agent' button above or ask to 'speak to an agent' at any time to connect directly to our live support.");
   
   const chatEndRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -152,12 +152,17 @@ export default function AIChatbotWidget() {
 
     // 1. Live Support interceptor
     if (
+      lowerText.includes("agent") || 
       lowerText.includes("support") || 
-      lowerText.includes("live agent") || 
       lowerText.includes("live chat") || 
       lowerText.includes("human") || 
       lowerText.includes("speak to") || 
-      lowerText.includes("tawk")
+      lowerText.includes("talk to") || 
+      lowerText.includes("chat to") || 
+      lowerText.includes("tawk") ||
+      lowerText.includes("representative") ||
+      lowerText.includes("customer service") ||
+      lowerText.includes("customer care")
     ) {
       setMessages((prev) => [
         ...prev,
@@ -309,34 +314,42 @@ export default function AIChatbotWidget() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 30, scale: 0.95 }}
             transition={{ duration: 0.2, ease: "easeOut" }}
-            className="w-[calc(100vw-2rem)] max-w-[350px] xs:max-w-[360px] h-[460px] sm:max-w-[400px] sm:h-[550px] bg-[#141414] border border-neutral-800 shadow-2xl flex flex-col overflow-hidden mb-4 rounded-xl text-left"
+            className="w-[calc(100vw-2rem)] max-w-[350px] xs:max-w-[360px] h-[460px] sm:max-w-[400px] sm:h-[550px] bg-[#040e09] border border-emerald-950 shadow-2xl flex flex-col overflow-hidden mb-4 rounded-xl text-left"
           >
             {/* Header */}
-            <div className="bg-gradient-to-r from-neutral-900 to-neutral-950 p-4 border-b border-neutral-800 flex items-center justify-between">
+            <div className="bg-gradient-to-r from-[#061e12] to-[#030e09] p-4 border-b border-emerald-950/40 flex items-center justify-between">
               <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 bg-amber-600/10 border border-amber-500/20 rounded-lg flex items-center justify-center">
-                  <Bot className="w-5 h-5 text-amber-500" />
+                <div className="w-9 h-9 bg-emerald-600/15 border border-emerald-500/30 rounded-lg flex items-center justify-center">
+                  <Bot className="w-5 h-5 text-emerald-400" />
                 </div>
                 <div>
                   <h3 className="text-sm font-bold text-white leading-tight flex items-center gap-1.5">
                     {botName}
                     <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
                   </h3>
-                  <p className="text-[10px] text-neutral-400 font-medium">Instant AI Concierge</p>
+                  <p className="text-[10px] text-emerald-400 font-medium">Instant AI Concierge</p>
                 </div>
               </div>
 
               <div className="flex items-center gap-2">
                 <button
+                  onClick={handleConnectSupport}
+                  title="Speak to live agent"
+                  className="mr-1 flex items-center gap-1.5 px-2.5 py-1 bg-emerald-600 text-white hover:bg-emerald-500 text-[10px] font-mono uppercase font-bold rounded transition-all cursor-pointer shadow-sm"
+                >
+                  <MessageCircle className="w-3 h-3" />
+                  Agent
+                </button>
+                <button
                   onClick={handleResetChat}
                   title="Reset conversation"
-                  className="p-1.5 hover:bg-neutral-800 rounded-lg text-neutral-400 hover:text-white transition-colors cursor-pointer"
+                  className="p-1.5 hover:bg-emerald-900/30 rounded-lg text-neutral-400 hover:text-white transition-colors cursor-pointer"
                 >
                   <RotateCcw className="w-4 h-4" />
                 </button>
                 <button
                   onClick={() => setIsOpen(false)}
-                  className="p-1.5 hover:bg-neutral-800 rounded-lg text-neutral-400 hover:text-white transition-colors cursor-pointer"
+                  className="p-1.5 hover:bg-emerald-900/30 rounded-lg text-neutral-400 hover:text-white transition-colors cursor-pointer"
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -346,7 +359,7 @@ export default function AIChatbotWidget() {
             {/* Message Area */}
             <div
               ref={containerRef}
-              className="flex-1 overflow-y-auto p-4 space-y-4 bg-[#181818]"
+              className="flex-1 overflow-y-auto p-4 space-y-4 bg-[#06140c]"
             >
               {messages.map((msg, index) => {
                 const isBot = msg.role === "assistant";
@@ -360,16 +373,16 @@ export default function AIChatbotWidget() {
                   >
                     <div className={`flex gap-3 ${isBot ? "" : "flex-row-reverse"}`}>
                       {isBot && (
-                        <div className="w-7 h-7 bg-amber-600/10 border border-amber-500/20 rounded-md flex items-center justify-center shrink-0 self-start">
-                          <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                        <div className="w-7 h-7 bg-emerald-600/15 border border-emerald-500/30 rounded-md flex items-center justify-center shrink-0 self-start">
+                          <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
                         </div>
                       )}
                       <div className="flex flex-col">
                         <div
                           className={`p-3 text-xs leading-relaxed rounded-xl ${
                             isBot
-                              ? "bg-neutral-800/80 text-neutral-200 rounded-tl-none border border-neutral-800/40"
-                              : "bg-amber-600 text-black font-semibold rounded-tr-none"
+                              ? "bg-[#0e2417]/90 text-neutral-200 rounded-tl-none border border-emerald-950/40"
+                              : "bg-emerald-600 text-white font-semibold rounded-tr-none"
                           }`}
                         >
                           <p className="whitespace-pre-wrap break-words">{msg.content}</p>
@@ -389,7 +402,7 @@ export default function AIChatbotWidget() {
                             <button
                               key={dish.id}
                               onClick={() => handleAddMenuToCart(dish)}
-                              className="px-2.5 py-1.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-neutral-950 font-mono font-bold text-[9px] uppercase rounded-md transition-all shadow-md hover:shadow-lg flex items-center gap-1.5 cursor-pointer"
+                              className="px-2.5 py-1.5 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 text-white font-mono font-bold text-[9px] uppercase rounded-md transition-all shadow-md hover:shadow-lg flex items-center gap-1.5 cursor-pointer"
                             >
                               🛒 Add {dish.name} (₦{dish.price.toLocaleString()})
                             </button>
@@ -403,13 +416,13 @@ export default function AIChatbotWidget() {
 
               {isLoading && (
                 <div className="flex gap-3 max-w-[85%] mr-auto">
-                  <div className="w-7 h-7 bg-amber-600/10 border border-amber-500/20 rounded-md flex items-center justify-center shrink-0 self-start">
-                    <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                  <div className="w-7 h-7 bg-emerald-600/15 border border-emerald-500/30 rounded-md flex items-center justify-center shrink-0 self-start">
+                    <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
                   </div>
-                  <div className="p-3 bg-neutral-800/80 rounded-xl rounded-tl-none border border-neutral-800/40 flex items-center gap-1.5 py-4 px-5">
-                    <div className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
-                    <div className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
-                    <div className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+                  <div className="p-3 bg-[#0e2417]/90 rounded-xl rounded-tl-none border border-emerald-950/40 flex items-center gap-1.5 py-4 px-5">
+                    <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
+                    <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
+                    <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
                   </div>
                 </div>
               )}
@@ -418,11 +431,11 @@ export default function AIChatbotWidget() {
 
             {/* Suggested Quick Chips Panel */}
             {!isLoading && (
-              <div className="px-3 py-2 bg-[#121212] border-t border-neutral-800 flex gap-1.5 overflow-x-auto scrollbar-none shrink-0">
+              <div className="px-3 py-2 bg-[#030906] border-t border-emerald-950/40 flex gap-1.5 overflow-x-auto scrollbar-none shrink-0">
                 <button
                   type="button"
                   onClick={() => handleSendMessage(undefined, "How can I order a burger?")}
-                  className="px-2.5 py-1.5 bg-[#1a1410] border border-amber-500/30 hover:border-amber-500/50 text-[10px] text-amber-400 font-semibold rounded-full transition-all shrink-0 cursor-pointer flex items-center gap-1"
+                  className="px-2.5 py-1.5 bg-[#081e11] border border-emerald-500/30 hover:border-emerald-500/50 text-[10px] text-emerald-400 font-semibold rounded-full transition-all shrink-0 cursor-pointer flex items-center gap-1"
                 >
                   🍔 How can I order a burger?
                 </button>
@@ -434,7 +447,7 @@ export default function AIChatbotWidget() {
                       setIsOpen(false);
                     }
                   }}
-                  className="px-2.5 py-1.5 bg-neutral-900 border border-neutral-800 hover:border-amber-500/40 text-[10px] text-neutral-300 rounded-full transition-all shrink-0 cursor-pointer hover:text-white"
+                  className="px-2.5 py-1.5 bg-neutral-900 border border-neutral-800 hover:border-emerald-500/40 text-[10px] text-neutral-300 rounded-full transition-all shrink-0 cursor-pointer hover:text-white"
                 >
                   🍛 Explore Menu
                 </button>
@@ -446,34 +459,34 @@ export default function AIChatbotWidget() {
                       setIsOpen(false);
                     }
                   }}
-                  className="px-2.5 py-1.5 bg-neutral-900 border border-neutral-800 hover:border-amber-500/40 text-[10px] text-neutral-300 rounded-full transition-all shrink-0 cursor-pointer hover:text-white"
+                  className="px-2.5 py-1.5 bg-neutral-900 border border-neutral-800 hover:border-emerald-500/40 text-[10px] text-neutral-300 rounded-full transition-all shrink-0 cursor-pointer hover:text-white"
                 >
                   📅 Table Booking FAQ
                 </button>
                 <button
                   type="button"
                   onClick={handleConnectSupport}
-                  className="px-2.5 py-1.5 bg-neutral-900 border border-neutral-800 hover:border-amber-500/40 text-[10px] text-neutral-300 rounded-full transition-all shrink-0 cursor-pointer hover:text-white"
+                  className="px-2.5 py-1.5 bg-neutral-900 border border-neutral-800 hover:border-emerald-500/40 text-[10px] text-neutral-300 rounded-full transition-all shrink-0 cursor-pointer hover:text-white"
                 >
-                  💬 Speak to Support
+                  💬 Speak to an Agent
                 </button>
               </div>
             )}
 
             {/* Input area */}
-            <form onSubmit={handleSendMessage} className="p-3 bg-neutral-900 border-t border-neutral-800 flex gap-2">
+            <form onSubmit={handleSendMessage} className="p-3 bg-[#050e09] border-t border-emerald-950/40 flex gap-2">
               <input
                 type="text"
                 value={inputText}
                 onChange={(e) => setInputText(e.target.value)}
                 placeholder="Ask about items, locations, hours..."
-                className="flex-grow bg-[#141414] border border-neutral-800 text-xs p-3 rounded-lg focus:outline-none focus:border-amber-500 text-white placeholder-neutral-500 font-medium"
+                className="flex-grow bg-[#081a10] border border-emerald-950/60 text-xs p-3 rounded-lg focus:outline-none focus:border-emerald-500 text-white placeholder-neutral-500 font-medium"
                 disabled={isLoading}
               />
               <button
                 type="submit"
                 disabled={!inputText.trim() || isLoading}
-                className="w-10 h-10 bg-amber-500 hover:bg-amber-600 text-black font-bold flex items-center justify-center transition-all disabled:opacity-40 shrink-0 cursor-pointer rounded-lg shadow-md hover:shadow-lg"
+                className="w-10 h-10 bg-emerald-600 hover:bg-emerald-500 text-white font-bold flex items-center justify-center transition-all disabled:opacity-40 shrink-0 cursor-pointer rounded-lg shadow-md hover:shadow-lg"
               >
                 <Send className="w-4 h-4" />
               </button>
@@ -487,7 +500,7 @@ export default function AIChatbotWidget() {
         whileHover={{ scale: 1.05 }}
         whileTap={{ scale: 0.95 }}
         onClick={() => setIsOpen(!isOpen)}
-        className="w-14 h-14 bg-amber-500 hover:bg-amber-600 text-black flex items-center justify-center shadow-xl transition-all cursor-pointer rounded-full relative border border-amber-400/20"
+        className="w-14 h-14 bg-emerald-600 hover:bg-emerald-500 text-white flex items-center justify-center shadow-xl transition-all cursor-pointer rounded-full relative border border-emerald-500/20"
       >
         {isOpen ? <X className="w-6 h-6" /> : <Bot className="w-6 h-6" />}
       </motion.button>
