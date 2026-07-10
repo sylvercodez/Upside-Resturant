@@ -54,9 +54,28 @@ export default function CartDrawer({
   const [activePromo, setActivePromo] = useState<PromoCode | null>(null);
   const [promoError, setPromoError] = useState("");
   const [promoSuccess, setPromoSuccess] = useState("");
+  const [couponsList, setCouponsList] = useState<PromoCode[]>(AVAILABLE_PROMOS);
 
   const [checkoutPassword, setCheckoutPassword] = useState("");
   const [registrationMessage, setRegistrationMessage] = useState("");
+
+  // Load dynamic coupons
+  React.useEffect(() => {
+    async function fetchDynamicCoupons() {
+      try {
+        const res = await fetch(getApiUrl("/api/mysql/settings/coupons"));
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data) && data.length > 0) {
+            setCouponsList(data);
+          }
+        }
+      } catch (err) {
+        console.warn("Failed to load dynamic coupons from db, using presets:", err);
+      }
+    }
+    fetchDynamicCoupons();
+  }, []);
 
   // Prepopulate form billing details if a user session is active
   React.useEffect(() => {
@@ -406,13 +425,13 @@ export default function CartDrawer({
     setPromoSuccess("");
     const codeSearched = promoInput.trim().toUpperCase();
 
-    const promoFound = AVAILABLE_PROMOS.find((p) => p.code === codeSearched);
+    const promoFound = couponsList.find((p) => p.code === codeSearched);
     if (promoFound) {
       setActivePromo(promoFound);
       setPromoSuccess(`"${promoFound.code}" coupon applied!`);
       setPromoInput("");
     } else {
-      setPromoError("Invalid coupon code. Try 'UPSIDELUXE', 'LAGOSNIGHTS', or 'KAFE2026'.");
+      setPromoError("Invalid coupon code. Please enter a valid active promo coupon.");
     }
   };
 
@@ -1139,55 +1158,6 @@ export default function CartDrawer({
                       >
                         Apply
                       </button>
-                    </div>
-
-                    {/* Highly Interactive Recommended Available Promos */}
-                    <div className="pt-2">
-                      <p className="text-[10px] uppercase font-mono tracking-wider text-neutral-400 mb-2 font-bold">Recommended Coupons (Tap to Apply):</p>
-                      <div className="grid grid-cols-1 gap-2">
-                        {AVAILABLE_PROMOS.map((promo) => {
-                          const isCurrentlyApplied = activePromo?.code === promo.code;
-                          return (
-                            <button
-                              key={promo.code}
-                              onClick={() => {
-                                if (isCurrentlyApplied) {
-                                  handleRemovePromo();
-                                } else {
-                                  setPromoInput(promo.code);
-                                  // Directly apply
-                                  setActivePromo(promo);
-                                  setPromoSuccess(`"${promo.code}" coupon applied successfully!`);
-                                  setPromoError("");
-                                  logCustomEvent("promo_applied", { code: promo.code });
-                                }
-                              }}
-                              className={`text-left p-3 border transition-all duration-300 rounded-lg text-xs flex justify-between items-center cursor-pointer ${
-                                isCurrentlyApplied 
-                                  ? "bg-amber-500/10 border-amber-500 text-amber-950 shadow-sm font-extrabold" 
-                                  : "bg-white border-neutral-200 text-neutral-700 hover:border-neutral-300 hover:bg-neutral-50/50"
-                              }`}
-                            >
-                              <div className="font-mono">
-                                <div className="flex items-center gap-2">
-                                  <span className="font-extrabold tracking-wider text-neutral-900">{promo.code}</span>
-                                  <span className="bg-emerald-100 text-emerald-800 text-[9px] font-bold px-1.5 py-0.5 rounded-full font-sans">
-                                    {promo.discountPercentage}% OFF
-                                  </span>
-                                </div>
-                                <span className="block text-[10px] text-neutral-500 font-sans mt-0.5 font-semibold">{promo.description}</span>
-                              </div>
-                              {isCurrentlyApplied ? (
-                                <span className="bg-amber-600 text-white rounded-full p-0.5 shadow-sm">
-                                  <Check className="w-3.5 h-3.5" />
-                                </span>
-                              ) : (
-                                <span className="text-[10px] font-mono text-neutral-400 hover:text-neutral-900 font-extrabold uppercase">Apply</span>
-                              )}
-                            </button>
-                          );
-                        })}
-                      </div>
                     </div>
 
                     {/* Promotion validations notifications */}

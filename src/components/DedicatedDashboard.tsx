@@ -7,6 +7,7 @@ import OrderTracker from "./OrderTracker";
 import AdminAnalyticsPanel from "./AdminAnalyticsPanel";
 import RidersManagementPanel from "./RidersManagementPanel";
 import SupportManagementPanel from "./SupportManagementPanel";
+import { CouponManagementPanel } from "./CouponManagementPanel";
 import MenuImage from "./MenuImage";
 import { 
   ShieldCheck, 
@@ -2078,6 +2079,17 @@ export default function DedicatedDashboard({
                         }`}
                       >
                         🎧 Support Desk Chats
+                      </button>
+                      <button
+                        onClick={() => setActiveTab("coupons_panel")}
+                        className={`px-6 py-3 text-xs tracking-wider uppercase font-bold text-center transition-all cursor-pointer flex items-center gap-1.5 ${
+                          activeTab === "coupons_panel"
+                            ? "bg-amber-600 text-white"
+                            : "text-neutral-600 hover:text-neutral-900 hover:bg-neutral-200"
+                        }`}
+                        id="tab-btn-coupon-manager"
+                      >
+                        🎟️ Coupons & Discounts
                       </button>
                     </>
                   )}
@@ -4657,6 +4669,10 @@ export default function DedicatedDashboard({
 
                 {(userRole === "admin" || userRole === "sales") && activeTab === "support_panel" && (
                   <SupportManagementPanel />
+                )}
+
+                {(userRole === "admin" || userRole === "sales") && activeTab === "coupons_panel" && (
+                  <CouponManagementPanel />
                 )}
 
                 {(userRole === "admin" || userRole === "developer") && activeTab === "mysql_panel" && (
