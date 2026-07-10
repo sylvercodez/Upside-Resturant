@@ -13,6 +13,7 @@ import { mysqlRouter } from "./_routes/mysql.js";
 import { deliveryRouter } from "./_routes/delivery.js";
 import { chatbotRouter } from "./_routes/chatbot.js";
 import { bookingRouter } from "./_routes/booking.js";
+import { reviewsRouter, startReviewsCrawlerCron } from "./_routes/reviews.js";
 
 // Ensure standard and VITE_ prefixed environment variables are correctly mapped
 mapEnvVariables();
@@ -131,6 +132,7 @@ app.use("/api/mysql", mysqlRouter);
 app.use("/api/delivery", deliveryRouter);
 app.use("/api/chatbot", chatbotRouter);
 app.use("/api/booking", bookingRouter);
+app.use("/api/reviews", reviewsRouter);
 
 app.use("/otp", otpRouter);
 app.use("/opay", opayRouter);
@@ -140,6 +142,7 @@ app.use("/mysql", mysqlRouter);
 app.use("/delivery", deliveryRouter);
 app.use("/chatbot", chatbotRouter);
 app.use("/booking", bookingRouter);
+app.use("/reviews", reviewsRouter);
 
 // Serve frontend assets
 async function serveApp() {
@@ -242,11 +245,12 @@ async function serveApp() {
   try {
     getFirestoreInstance().then(db => {
       startInstagramCrawlerCron(db);
+      startReviewsCrawlerCron(db);
     }).catch(err => {
-      console.error("[SERVER] Failed to auto-start Instagram background crawler Firestore connection:", err.message);
+      console.error("[SERVER] Failed to auto-start background crawlers Firestore connection:", err.message);
     });
   } catch (err: any) {
-    console.error("[SERVER] Failed to auto-start Instagram background crawler:", err.message);
+    console.error("[SERVER] Failed to auto-start background crawlers:", err.message);
   }
 }
 

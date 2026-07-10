@@ -39,19 +39,25 @@ export default function AboutAndReviews({ onReadMoreExperience, onViewMenu }: Ab
         const fbReviews: any[] = [];
         snapshot.forEach((snapshotDoc) => {
           const data = snapshotDoc.data();
-          fbReviews.push({ id: snapshotDoc.id, ...data });
+          // Filter: only show reviews with a rating greater than 3.5
+          if (data.rating === undefined || data.rating === null || data.rating > 3.5) {
+            fbReviews.push({ id: snapshotDoc.id, ...data });
+          }
         });
 
         if (fbReviews.length > 0) {
           setReviewsList(fbReviews.slice(0, 5));
         } else {
           const googleReviewsRef = collection(db, "google_reviews");
-          const q2 = query(googleReviewsRef, orderBy("createdAt", "desc"), limit(5));
+          const q2 = query(googleReviewsRef, orderBy("createdAt", "desc"), limit(15)); // Fetch more to filter down
           const snapshot2 = await getDocs(q2);
           const fbGReviews: any[] = [];
           snapshot2.forEach((snapshotDoc) => {
             const data = snapshotDoc.data();
-            fbGReviews.push({ id: snapshotDoc.id, ...data });
+            // Filter: only show reviews with a rating greater than 3.5
+            if (data.rating === undefined || data.rating === null || data.rating > 3.5) {
+              fbGReviews.push({ id: snapshotDoc.id, ...data });
+            }
           });
           if (fbGReviews.length > 0) {
             setReviewsList(fbGReviews.slice(0, 5));
