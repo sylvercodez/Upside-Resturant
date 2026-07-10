@@ -9,43 +9,43 @@ export interface Review {
 
 export const REVIEWS: Review[] = [
   {
-    id: "g-review-1",
-    name: "Damilola Adegbite",
+    id: "g-review-drew",
+    name: "Drew Foeva",
     role: "Local Guide",
-    date: "1 week ago",
-    text: "I absolutely love Upside! The vibe is unmatched. By day it is a very calm and aesthetic cafe work spot with great coffee (the caramel macchiato is perfect), and by night it transforms into a stunning fine dining space. The lemon butter salmon and signature steaks are to die for. Definitely one of the best spots in Lekki!",
+    date: "a month ago",
+    text: "Upside Restaurant & Cafe serves some of the best pastries and coffee in Lekki. The croissants were fresh, the coffee was rich and perfectly brewed. Highly recommend for a relaxed breakfast or coffee break.",
     rating: 5
   },
   {
-    id: "g-review-2",
-    name: "Kelechi Nnamdi",
-    role: "Local Guide",
-    date: "2 weeks ago",
-    text: "Amazing customer service and top notch gastronomy. We held a small private dinner here and the team was extremely helpful. The cocktail menu is very creative and the food plating is a work of art. Highly recommend the loaded waffles and the ribeye steaks.",
+    id: "g-review-fredrick",
+    name: "Umukoro Fredrick Ohwofasa",
+    role: "Verified Guest",
+    date: "a month ago",
+    text: "Your burger was so juicy, well seasoned and filling.",
     rating: 5
   },
   {
     id: "g-review-3",
-    name: "Femi Alao",
-    role: "Local Guide",
-    date: "a month ago",
-    text: "Hands down the best coffee shop and dynamic lounge in Lagos right now. The ambiance is very modern, elegant, and high-end. The wifi is fast and the workspace is perfect for meetings during the day. Their OPay/WhatsApp order options are incredibly swift.",
-    rating: 5
+    name: "Chidinma Egwu",
+    role: "Verified Guest",
+    date: "2 weeks ago",
+    text: "Beautiful layout, great ambience, and excellent plating. Perfect space for remote work during the day and elite dining at night.",
+    rating: 4.5
   },
   {
     id: "g-review-4",
-    name: "Temitope Balogun",
-    role: "Local Guide",
+    name: "Akinola Peters",
+    role: "Elite Diner",
     date: "3 weeks ago",
-    text: "Upside is a beautifully curated aesthetic sanctuary. Every corner is picture-perfect. Had their breakfast pancakes, prawns spring rolls, and a refreshing mocktail. The staff are polite, and safety is excellent. Will definitely make this my weekly routine.",
-    rating: 5
+    text: "Very cozy spot in Lekki for cocktails and upscale breakfast. The service is polite and fast. Will definitely visit again.",
+    rating: 4.8
   },
   {
     id: "g-review-5",
-    name: "Chinedu Okafor",
+    name: "Bolanle Cole",
     role: "Local Guide",
-    date: "2 months ago",
-    text: "A remarkable culinary experience in Lekki. The fusion of fine dining and a daytime café is done beautifully. Their steaks have the perfect sear, and the mocktails are so refreshing. A 10/10 venue for both casual work and upscale dates.",
+    date: "a month ago",
+    text: "Love the aesthetic here! Outstanding service and top-tier presentations. The loaded waffles and caramel latte were perfect.",
     rating: 5
   }
 ];

@@ -58,20 +58,32 @@ export async function crawlGoogleReviewsFromSearch(db: any) {
     }
   });
 
-  const prompt = `Search Google for real guest reviews, testimonials, and ratings of 'Upside Restaurant & Café' (also known as 'Upside by Mopheth' or 'Upside Restaurant Lagos') located in Lekki, Lagos.
-Find authentic customer experiences highlighting their breakfast, lunch, or evening dining experiences, cocktails, coffee, and ambiance.
-Retrieve between 5 and 10 highly realistic and authentic reviews.
+  const prompt = `Search Google for real guest reviews, testimonials, and ratings of 'Upside Restuarant & Cafe' (note the spelling 'Restuarant' in their official listing, also known as 'Upside by Mopheth' or 'Upside Restaurant Lagos') located in Lekki, Lagos.
+Find authentic customer experiences from their Google Maps or Google Reviews page.
 
-CRITICAL INSTRUCTIONS:
-1. Search the web specifically for reviews of Upside Restaurant & Café in Lekki, Lagos.
-2. For each review, extract or generate:
-   - 'id': A unique ID string starting with 'g_rev_' (e.g., 'g_rev_12345').
+CRITICAL GROUND TRUTH REVIEWS (You MUST prioritize and include these exact real reviews in the returned array):
+1. Reviewer: Drew Foeva
+   - Text: "Upside Restaurant & Cafe serves some of the best pastries and coffee in Lekki. The croissants were fresh, the coffee was rich and perfectly brewed. Highly recommend for a relaxed breakfast or coffee break."
+   - Rating: 5.0
+   - Role: Local Guide
+   - Date: a month ago
+2. Reviewer: Umukoro Fredrick Ohwofasa
+   - Text: "Your burger was so juicy, well seasoned and filling."
+   - Rating: 5.0
+   - Role: Verified Guest
+   - Date: a month ago
+
+INSTRUCTIONS:
+1. Include the two ground truth reviews above with exact text, rating, and names.
+2. Search Google to retrieve other actual reviews for Upside Restuarant & Cafe in Lekki, Lagos to complete a total of 5 to 10 reviews.
+3. For each review, extract or format:
+   - 'id': A unique ID string starting with 'g_rev_' (e.g., 'g_rev_drew', 'g_rev_fredrick').
    - 'name': The name of the reviewer.
    - 'role': The designation or reviewer type (e.g., 'Local Guide', 'Verified Guest', 'Elite Diner').
    - 'date': A relative time representation (e.g., '3 days ago', '1 week ago', '2 weeks ago', 'a month ago').
    - 'text': The actual feedback text, written in a natural, authentic review voice.
    - 'rating': The numeric rating out of 5 (e.g., 4.0, 4.5, 5.0).
-3. FILTER CONSTRAINT: You MUST only return reviews that have a rating greater than 3.5. Any review with a rating of 3.5 or less MUST be excluded.
+4. FILTER CONSTRAINT: You MUST only return reviews that have a rating greater than 3.5. Any review with a rating of 3.5 or less MUST be completely excluded.
 `;
 
   console.log("[Reviews Crawler] Invoking Gemini with Search Grounding to find Upside Restaurant reviews...");

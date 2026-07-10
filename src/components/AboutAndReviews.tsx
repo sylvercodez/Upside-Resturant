@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { REVIEWS } from "../data/reviews";
-import { Award, Compass, Heart, Share2, Star, Mail, MapPin, Instagram, Sparkles, Gift, Play, Pause, Volume2, VolumeX, MessageCircle, Zap, QrCode, Smartphone, ArrowRight } from "lucide-react";
+import { Award, Compass, Heart, Share2, Star, Mail, MapPin, Instagram, Sparkles, Gift, Play, Pause, Volume2, VolumeX, MessageCircle, Zap, QrCode, Smartphone, ArrowRight, RefreshCw, Check } from "lucide-react";
 import { collection, getDocs, query, orderBy, limit } from "firebase/firestore";
 import { db } from "../firebase";
+import { getApiUrl } from "../types";
 
 interface InstagramPost {
   id: string;
@@ -29,48 +30,79 @@ export default function AboutAndReviews({ onReadMoreExperience, onViewMenu }: Ab
   const [isMuted, setIsMuted] = useState(true);
   const videoRef = React.useRef<HTMLVideoElement>(null);
 
-  useEffect(() => {
-    async function fetchGoogleReviews() {
-      try {
-        setLoadingReviews(true);
-        const reviewsRef = collection(db, "reviews");
-        const q = query(reviewsRef, orderBy("createdAt", "desc"), limit(5));
-        const snapshot = await getDocs(q);
-        const fbReviews: any[] = [];
-        snapshot.forEach((snapshotDoc) => {
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
+
+  const fetchGoogleReviews = async () => {
+    try {
+      setLoadingReviews(true);
+      const reviewsRef = collection(db, "reviews");
+      const q = query(reviewsRef, orderBy("createdAt", "desc"), limit(10));
+      const snapshot = await getDocs(q);
+      const fbReviews: any[] = [];
+      snapshot.forEach((snapshotDoc) => {
+        const data = snapshotDoc.data();
+        // Filter: only show reviews with a rating greater than 3.5
+        if (data.rating === undefined || data.rating === null || data.rating > 3.5) {
+          fbReviews.push({ id: snapshotDoc.id, ...data });
+        }
+      });
+
+      if (fbReviews.length > 0) {
+        setReviewsList(fbReviews.slice(0, 5));
+      } else {
+        const googleReviewsRef = collection(db, "google_reviews");
+        const q2 = query(googleReviewsRef, orderBy("createdAt", "desc"), limit(20)); // Fetch more to filter down
+        const snapshot2 = await getDocs(q2);
+        const fbGReviews: any[] = [];
+        snapshot2.forEach((snapshotDoc) => {
           const data = snapshotDoc.data();
           // Filter: only show reviews with a rating greater than 3.5
           if (data.rating === undefined || data.rating === null || data.rating > 3.5) {
-            fbReviews.push({ id: snapshotDoc.id, ...data });
+            fbGReviews.push({ id: snapshotDoc.id, ...data });
           }
         });
-
-        if (fbReviews.length > 0) {
-          setReviewsList(fbReviews.slice(0, 5));
-        } else {
-          const googleReviewsRef = collection(db, "google_reviews");
-          const q2 = query(googleReviewsRef, orderBy("createdAt", "desc"), limit(15)); // Fetch more to filter down
-          const snapshot2 = await getDocs(q2);
-          const fbGReviews: any[] = [];
-          snapshot2.forEach((snapshotDoc) => {
-            const data = snapshotDoc.data();
-            // Filter: only show reviews with a rating greater than 3.5
-            if (data.rating === undefined || data.rating === null || data.rating > 3.5) {
-              fbGReviews.push({ id: snapshotDoc.id, ...data });
-            }
-          });
-          if (fbGReviews.length > 0) {
-            setReviewsList(fbGReviews.slice(0, 5));
-          }
+        if (fbGReviews.length > 0) {
+          setReviewsList(fbGReviews.slice(0, 5));
         }
-      } catch (err) {
-        console.warn("Could not fetch reviews from Firestore, using fallbacks:", err);
-      } finally {
-        setLoadingReviews(false);
       }
+    } catch (err) {
+      console.warn("Could not fetch reviews from Firestore, using fallbacks:", err);
+    } finally {
+      setLoadingReviews(false);
     }
+  };
+
+  useEffect(() => {
     fetchGoogleReviews();
   }, []);
+
+  const handleSyncReviews = async () => {
+    if (isSyncing) return;
+    try {
+      setIsSyncing(true);
+      setSyncMessage("Crawling fresh Google Reviews...");
+      const response = await fetch(getApiUrl("/api/reviews/crawl"), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        }
+      });
+      if (!response.ok) {
+        throw new Error("Failed to trigger reviews sync on server.");
+      }
+      const data = await response.json();
+      setSyncMessage(`Successfully crawled and updated ${data.reviews?.length || 0} reviews!`);
+      await fetchGoogleReviews();
+      setTimeout(() => setSyncMessage(null), 5000);
+    } catch (error: any) {
+      console.error("Error syncing Google reviews:", error);
+      setSyncMessage("Sync failed. Using available reviews.");
+      setTimeout(() => setSyncMessage(null), 4000);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   const togglePlay = () => {
     if (videoRef.current) {
@@ -451,24 +483,45 @@ export default function AboutAndReviews({ onReadMoreExperience, onViewMenu }: Ab
                   </p>
                 </div>
 
-                {/* View More Reviews Link on Google Search page */}
-                <button
-                  onClick={() => {
-                    window.open("https://www.google.com/search?q=upside+restaurant+and+cafe+review&oq=upside+restaurant+and+cafe+review&gs_lcrp=EgZjaHJvbWUyBggAEEUYOTIHCAEQIRigAdIBCTEwMTIzajBqN6gCALACAA&sourceid=chrome&ie=UTF-8#lrd=0x103bf53bc1bafc11:0x862e561d3c1caad2,1,,,,", "_blank");
-                  }}
-                  className="p-2 sm:p-2.5 bg-neutral-950 hover:bg-neutral-900 text-white transition-all cursor-pointer text-[10px] sm:text-xs font-mono flex items-center justify-center gap-1.5 border border-transparent uppercase tracking-widest whitespace-nowrap w-full sm:w-auto hover:text-amber-500 active:scale-95"
-                >
-                  <span className="inline-flex gap-0.5 font-sans font-bold text-[9px] mr-1.5">
-                    <span className="text-blue-400">G</span>
-                    <span className="text-red-400">o</span>
-                    <span className="text-yellow-400">o</span>
-                    <span className="text-blue-400">g</span>
-                    <span className="text-green-400">l</span>
-                    <span className="text-red-400">e</span>
-                  </span>
-                  <span>View More Reviews</span>
-                </button>
+                {/* Action Buttons */}
+                <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+                  {/* Manual Sync Trigger */}
+                  <button
+                    onClick={handleSyncReviews}
+                    disabled={isSyncing}
+                    className="p-2 sm:p-2.5 bg-neutral-100 hover:bg-neutral-200 text-neutral-800 disabled:opacity-50 transition-all cursor-pointer text-[10px] sm:text-xs font-mono flex items-center justify-center gap-1.5 border border-neutral-300 uppercase tracking-widest whitespace-nowrap w-full sm:w-auto active:scale-95"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 text-amber-600 ${isSyncing ? "animate-spin" : ""}`} />
+                    <span>{isSyncing ? "Syncing..." : "Sync Live Reviews"}</span>
+                  </button>
+
+                  {/* View More Reviews Link on Google Search page */}
+                  <button
+                    onClick={() => {
+                      window.open("https://www.google.com/search?q=upside+restaurant+and+cafe+review&oq=upside+restaurant+and+cafe+review&gs_lcrp=EgZjaHJvbWUyBggAEEUYOTIHCAEQIRigAdIBCTEwMTIzajBqN6gCALACAA&sourceid=chrome&ie=UTF-8#lrd=0x103bf53bc1bafc11:0x862e561d3c1caad2,1,,,,", "_blank");
+                    }}
+                    className="p-2 sm:p-2.5 bg-neutral-950 hover:bg-neutral-900 text-white transition-all cursor-pointer text-[10px] sm:text-xs font-mono flex items-center justify-center gap-1.5 border border-transparent uppercase tracking-widest whitespace-nowrap w-full sm:w-auto hover:text-amber-500 active:scale-95"
+                  >
+                    <span className="inline-flex gap-0.5 font-sans font-bold text-[9px] mr-1.5">
+                      <span className="text-blue-400">G</span>
+                      <span className="text-red-400">o</span>
+                      <span className="text-yellow-400">o</span>
+                      <span className="text-blue-400">g</span>
+                      <span className="text-green-400">l</span>
+                      <span className="text-red-400">e</span>
+                    </span>
+                    <span>View More Reviews</span>
+                  </button>
+                </div>
               </div>
+
+              {/* Crawl/Sync Status Notification banner */}
+              {syncMessage && (
+                <div className="bg-amber-50 border border-amber-200 text-amber-900 text-[10px] sm:text-xs font-mono px-4 py-2.5 flex items-center gap-2 rounded shadow-sm">
+                  <Sparkles className="w-4 h-4 text-amber-600 animate-pulse shrink-0" />
+                  <span>{syncMessage}</span>
+                </div>
+              )}
             </div>
           )}
 
