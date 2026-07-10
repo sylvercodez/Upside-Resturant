@@ -485,16 +485,6 @@ export default function AboutAndReviews({ onReadMoreExperience, onViewMenu }: Ab
 
                 {/* Action Buttons */}
                 <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-                  {/* Manual Sync Trigger */}
-                  <button
-                    onClick={handleSyncReviews}
-                    disabled={isSyncing}
-                    className="p-2 sm:p-2.5 bg-neutral-100 hover:bg-neutral-200 text-neutral-800 disabled:opacity-50 transition-all cursor-pointer text-[10px] sm:text-xs font-mono flex items-center justify-center gap-1.5 border border-neutral-300 uppercase tracking-widest whitespace-nowrap w-full sm:w-auto active:scale-95"
-                  >
-                    <RefreshCw className={`w-3.5 h-3.5 text-amber-600 ${isSyncing ? "animate-spin" : ""}`} />
-                    <span>{isSyncing ? "Syncing..." : "Sync Live Reviews"}</span>
-                  </button>
-
                   {/* View More Reviews Link on Google Search page */}
                   <button
                     onClick={() => {
@@ -514,14 +504,6 @@ export default function AboutAndReviews({ onReadMoreExperience, onViewMenu }: Ab
                   </button>
                 </div>
               </div>
-
-              {/* Crawl/Sync Status Notification banner */}
-              {syncMessage && (
-                <div className="bg-amber-50 border border-amber-200 text-amber-900 text-[10px] sm:text-xs font-mono px-4 py-2.5 flex items-center gap-2 rounded shadow-sm">
-                  <Sparkles className="w-4 h-4 text-amber-600 animate-pulse shrink-0" />
-                  <span>{syncMessage}</span>
-                </div>
-              )}
             </div>
           )}
 
