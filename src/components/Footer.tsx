@@ -155,6 +155,15 @@ export default function Footer({ onScrollToElement, onOpenReservations, branding
               <>
                 <li>
                   <button 
+                    onClick={() => onNavigate("/corporate-events")} 
+                    className="hover:text-amber-650 hover:underline transition-colors text-left flex items-center gap-1.5 font-bold text-neutral-800 hover:text-amber-600 tracking-wide uppercase text-[10px]"
+                    id="footer-corporate-events-link"
+                  >
+                    <span>Corporate Events &amp; Meetings</span>
+                  </button>
+                </li>
+                <li>
+                  <button 
                     onClick={() => onNavigate("/track")} 
                     className="hover:text-amber-650 hover:underline transition-colors text-left flex items-center gap-1.5 font-bold text-amber-600 tracking-wide uppercase text-[10px]"
                     id="footer-track-menu-link"

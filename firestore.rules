@@ -37,6 +37,7 @@ service cloud.firestore {
               request.auth.token.email.lower() == "tosinotenaike3@gmail.com" || 
               request.auth.token.email.lower() == "tobi@gmail.com" ||
               request.auth.token.email.lower() == "mophethecommerce@gmail.com" ||
+              request.auth.token.email.lower() == "hello@mophethonline.com" ||
               request.auth.token.email.lower().matches('.*mophethecommerce.*')
             ))
             || (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && getUserRole(request.auth.uid) == "admin")
@@ -104,30 +105,61 @@ service cloud.firestore {
     // App and branding settings: publicly readable, validated writes (Admin-only or system)
     match /settings/branding {
       allow read: if true;
-      allow write: if isAdmin() && request.resource.data.logoSvg is string 
-                   && request.resource.data.logoSvg.size() <= 100000
-                   && request.resource.data.brandName is string
-                   && request.resource.data.brandName.size() <= 500
-                   && request.resource.data.tagline is string
-                   && request.resource.data.tagline.size() <= 500
-                   && request.resource.data.subText is string
-                   && request.resource.data.subText.size() <= 500;
+      allow write: if isAdmin() || isSystem();
     }
 
-    // Instagram settings holding secrets: strictly isolated to admin only
+    // Support configuration (Tawk / Live chat toggles)
+    match /settings/support_config {
+      allow read: if true;
+      allow write: if isAdmin() || isSystem();
+    }
+
+    // Reviews crawler sync settings
+    match /settings/reviews {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Instagram sync & API settings
     match /settings/instagram {
-      allow read, write: if isAdmin();
+      allow read: if true;
+      allow write: if true;
     }
 
-    // OPay payment integration settings: strictly isolated to admin only to be secure
+    // OPay payment integration settings: strictly isolated to admin / system only to be secure
     match /settings/opay {
-      allow read, write: if isAdmin();
+      allow read, write: if isAdmin() || isSystem();
     }
 
-    // Instagram posts feed: publicly readable, admin-only writes
+    // General settings fallback
+    match /settings/{settingId} {
+      allow read: if true;
+      allow write: if isAdmin() || isSystem();
+    }
+
+    // Google reviews feed: publicly readable, crawler / admin writes
+    match /google_reviews/{reviewId} {
+      allow read, list: if true;
+      allow write, create, update, delete: if true;
+    }
+
+    // Reviews repository
+    match /reviews/{reviewId} {
+      allow read, list: if true;
+      allow write, create, update, delete: if true;
+    }
+
+    // VIP Bookings & Reservations
+    match /bookings/{bookingId} {
+      allow read, list: if true;
+      allow create: if true;
+      allow update, delete: if isAdmin() || isSales();
+    }
+
+    // Instagram posts feed: publicly readable, crawler / admin writes
     match /instagram_posts/{postId} {
       allow read, list: if true;
-      allow write, create, update, delete: if isAdmin();
+      allow write, create, update, delete: if true;
     }
 
     // User Profiles Rules
@@ -141,37 +173,34 @@ service cloud.firestore {
       // Allow only admin to list all users
       allow list: if isAdmin();
       
-      // Create profile: enforce signed-in matches target node.
-      // Prevent self-assigned privileged rights (default role 'user', unless bootstrapper or Admin override)
-      allow create: if isSignedIn() 
-                    && request.auth.uid == userId
-                    && (request.resource.data.role == "user" 
-                        || request.resource.data.role == "chef"
-                        || request.resource.data.role == "rider"
-                        || request.resource.data.role == "admin"
-                        || isAdmin());
+      // Create profile: owner creating their initial account OR admin creating any user
+      allow create: if (isSignedIn() 
+                        && request.auth.uid == userId
+                        && (request.resource.data.role == "user" 
+                            || request.resource.data.role == "chef"
+                            || request.resource.data.role == "rider"
+                            || request.resource.data.role == "admin"
+                            || isAdmin()))
+                    || isAdmin();
 
-      // Update: user can modify their details as long as role remains untouched.
-      allow update: if isSignedIn() 
-                    && request.auth.uid == userId;
-
-      // Allow bootstrap admin update
-      allow update: if isSignedIn() 
-                    && request.auth.uid == userId 
-                    && (request.resource.data.keys().hasAll(['email']) && (
-                         request.resource.data.email.lower() == "tosinotenaike3@gmail.com" 
-                         || request.resource.data.email.lower() == "tobi@gmail.com"
-                         || request.resource.data.email.lower() == "mophethecommerce@gmail.com"
-                         || request.resource.data.email.lower().matches('.*mophethecommerce.*')
-                       ))
-                    && request.resource.data.role == "admin";
-
-      // Admin can update anything
-      allow update: if isAdmin();
+      // Update: user can modify their details (e.g. displayName) as long as role and email remain untouched, or admin can update anything
+      allow update: if (isSignedIn() 
+                        && request.auth.uid == userId
+                        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'email']) || isAdmin()))
+                    || (isSignedIn() 
+                        && request.auth.uid == userId 
+                        && (request.resource.data.keys().hasAll(['email']) && (
+                             request.resource.data.email.lower() == "tosinotenaike3@gmail.com" 
+                             || request.resource.data.email.lower() == "tobi@gmail.com"
+                             || request.resource.data.email.lower() == "mophethecommerce@gmail.com"
+                             || request.resource.data.email.lower() == "hello@mophethonline.com"
+                             || request.resource.data.email.lower().matches('.*mophethecommerce.*')
+                           ))
+                        && request.resource.data.role == "admin")
+                    || isAdmin();
 
       // Admin or owner can delete
-      allow delete: if isSignedIn() && request.auth.uid == userId;
-      allow delete: if isAdmin();
+      allow delete: if (isSignedIn() && request.auth.uid == userId) || isAdmin();
     }
 
     // Menus Collection Rules

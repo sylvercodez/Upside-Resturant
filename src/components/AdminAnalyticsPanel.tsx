@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { collection, query, orderBy, onSnapshot, limit } from "firebase/firestore";
 import { db } from "../firebase";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 import { 
   BarChart3, 
   Users, 
@@ -16,7 +18,11 @@ import {
   Filter, 
   ArrowUpRight, 
   ArrowDownRight,
-  Info
+  Info,
+  Download,
+  FileText,
+  FileSpreadsheet,
+  CheckCircle2
 } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -400,6 +406,319 @@ export default function AdminAnalyticsPanel() {
     .reverse() // Keep Chronological left-to-right (newest at the end, so reverse from Firestore 'desc' state)
     .slice(-12); // Limit to last 12 active billing/telemetry days for layout fidelity
 
+  // Export Executive Analytics Report as PDF
+  const handleDownloadExecutiveReportPDF = () => {
+    try {
+      const doc = new jsPDF({
+        orientation: "portrait",
+        unit: "mm",
+        format: "a4"
+      });
+
+      const todayStr = new Date().toLocaleDateString("en-GB", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric"
+      });
+      const timeStr = new Date().toLocaleTimeString("en-GB", {
+        hour: "2-digit",
+        minute: "2-digit"
+      });
+
+      // Filter description string
+      let dateScopeLabel = "All Time Recorded";
+      if (dateRangePreset === "today") dateScopeLabel = "Today";
+      if (dateRangePreset === "7days") dateScopeLabel = "Last 7 Days";
+      if (dateRangePreset === "30days") dateScopeLabel = "Last 30 Days";
+      if (dateRangePreset === "custom") {
+        dateScopeLabel = `Custom Range (${customStartDate || "Start"} to ${customEndDate || "End"})`;
+      }
+
+      // 1. Header Banner Styling
+      doc.setFillColor(18, 18, 18);
+      doc.rect(0, 0, 210, 32, "F");
+
+      doc.setFillColor(217, 119, 6); // Amber Gold
+      doc.rect(0, 32, 210, 2, "F");
+
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(15);
+      doc.setFont("helvetica", "bold");
+      doc.text("UPSIDE RESTAURANT & LOUNGE", 14, 13);
+
+      doc.setFontSize(9);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(217, 119, 6);
+      doc.text("BUSINESS INTELLIGENCE & ANALYTICS EXECUTIVE REPORT", 14, 20);
+
+      doc.setFontSize(8);
+      doc.setTextColor(180, 180, 180);
+      doc.text(`Generated: ${todayStr} at ${timeStr} | Time Scope: ${dateScopeLabel}`, 14, 27);
+      doc.text(`Total Tracked Events: ${dateFilteredLogs.length}`, 196, 27, { align: "right" });
+
+      // 2. Executive KPI Summary Table
+      doc.setTextColor(20, 20, 20);
+      doc.setFontSize(11);
+      doc.setFont("helvetica", "bold");
+      doc.text("1. Executive Summary & Conversion Key Performance Indicators", 14, 42);
+
+      const totalRevenueCalculated = dateFilteredOrders.reduce((sum, o) => sum + Number(o.totalPrice || 0), 0);
+
+      const kpiRows = [
+        ["Total Visitor Footfall", `${uniqueSessions.toLocaleString()} unique guests / sessions`, "Core customer reach"],
+        ["Total Page & Screen Views", `${totalVisits.toLocaleString()} screen hits`, "Aggregate system engagement"],
+        ["Menu Catalog Explorers", `${menuExploration.toLocaleString()} interactions (${uniqueSessions > 0 ? ((menuExploration / uniqueSessions) * 100).toFixed(1) : 0}% rate)`, "Menu discovery volume"],
+        ["Reservation Conversions", `${reservationSuccesses} confirmed bookings (${reservationRate}% rate)`, "Table dining conversion"],
+        ["Sales Conversions (Paid)", `${checkoutSuccesses} successful orders (${checkoutRate}% rate)`, "Food delivery & pickup checkout"],
+        ["Total Recorded Revenue", `NGN ${totalRevenueCalculated.toLocaleString()}`, "Delivered & confirmed transactions"],
+        ["Average Order Value", `NGN ${checkoutSuccesses > 0 ? Math.round(totalRevenueCalculated / checkoutSuccesses).toLocaleString() : "0"}`, "Per-order sales ticket size"]
+      ];
+
+      autoTable(doc, {
+        startY: 46,
+        head: [["Metric Performance Indicator", "Current Value / Tally", "Executive Notes"]],
+        body: kpiRows,
+        theme: "striped",
+        headStyles: { fillColor: [24, 24, 27], textColor: [255, 255, 255], fontStyle: "bold", fontSize: 8 },
+        bodyStyles: { fontSize: 8, textColor: [40, 40, 40] },
+        alternateRowStyles: { fillColor: [248, 248, 250] },
+        margin: { left: 14, right: 14 }
+      });
+
+      // 3. Peak Insights Section
+      let currentY = (doc as any).lastAutoTable.finalY + 10;
+      doc.setFontSize(11);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(20, 20, 20);
+      doc.text("2. Day of Week & Peak Sales Analysis", 14, currentY);
+
+      const dayOfWeekRows = dayOfWeekStats.map(d => [
+        d.day,
+        d.checkouts.toString(),
+        d.reservations.toString(),
+        d.views.toString(),
+        d.combinedConversions.toString(),
+        peakSalesDay?.day === d.day ? "★ Peak Sales Day" : ""
+      ]);
+
+      autoTable(doc, {
+        startY: currentY + 4,
+        head: [["Day of Week", "Paid Checkouts", "Table Bookings", "Page Views", "Total Conversions", "Highlight"]],
+        body: dayOfWeekRows,
+        theme: "striped",
+        headStyles: { fillColor: [180, 83, 9], textColor: [255, 255, 255], fontStyle: "bold", fontSize: 8 },
+        bodyStyles: { fontSize: 8, textColor: [40, 40, 40] },
+        alternateRowStyles: { fillColor: [254, 243, 199] },
+        margin: { left: 14, right: 14 }
+      });
+
+      // 4. Daily Revenue Breakdown Table
+      currentY = (doc as any).lastAutoTable.finalY + 10;
+      if (currentY > 230) {
+        doc.addPage();
+        currentY = 20;
+      }
+
+      doc.setFontSize(11);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(20, 20, 20);
+      doc.text("3. Daily Timeline Performance", 14, currentY);
+
+      const timelineRows = dailyTimelineStats.map(t => [
+        t.date,
+        t.checkouts.toString(),
+        t.reservations.toString(),
+        t.views.toString(),
+        (t.checkouts + t.reservations).toString()
+      ]);
+
+      autoTable(doc, {
+        startY: currentY + 4,
+        head: [["Date", "Checkouts", "Reservations", "Page Views", "Total Actions"]],
+        body: timelineRows.length > 0 ? timelineRows : [["No daily data for period", "-", "-", "-", "-"]],
+        theme: "striped",
+        headStyles: { fillColor: [30, 41, 59], textColor: [255, 255, 255], fontStyle: "bold", fontSize: 8 },
+        bodyStyles: { fontSize: 8, textColor: [40, 40, 40] },
+        margin: { left: 14, right: 14 }
+      });
+
+      // 5. Popular Dishes Sold
+      currentY = (doc as any).lastAutoTable.finalY + 10;
+      if (currentY > 230) {
+        doc.addPage();
+        currentY = 20;
+      }
+
+      doc.setFontSize(11);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(20, 20, 20);
+      doc.text("4. Top Selling Dishes & Cuisine Revenue", 14, currentY);
+
+      const popularDishRows = popularItemsData.map((item, idx) => [
+        `#${idx + 1}`,
+        item.name,
+        `${item.quantity} portions`,
+        `NGN ${item.revenue.toLocaleString()}`
+      ]);
+
+      autoTable(doc, {
+        startY: currentY + 4,
+        head: [["Rank", "Dish Name", "Quantity Sold", "Gross Revenue (NGN)"]],
+        body: popularDishRows.length > 0 ? popularDishRows : [["-", "No ordered dishes in selected time frame", "-", "-"]],
+        theme: "striped",
+        headStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontStyle: "bold", fontSize: 8 },
+        bodyStyles: { fontSize: 8, textColor: [40, 40, 40] },
+        margin: { left: 14, right: 14 }
+      });
+
+      // Add page numbering footer to all pages
+      const pageCount = (doc as any).internal.getNumberOfPages();
+      for (let i = 1; i <= pageCount; i++) {
+        doc.setPage(i);
+        doc.setFontSize(7.5);
+        doc.setTextColor(140, 140, 140);
+        doc.text(
+          `Upside Restaurant & Lounge • Victoria Island, Lagos • Confidential Business Intelligence • Page ${i} of ${pageCount}`,
+          105,
+          290,
+          { align: "center" }
+        );
+      }
+
+      doc.save(`Upside_Analytics_Executive_Report_${new Date().toISOString().split("T")[0]}.pdf`);
+    } catch (err: any) {
+      console.error("PDF generation failed:", err);
+      alert(`Could not generate analytics PDF: ${err.message}`);
+    }
+  };
+
+  // Export Filtered Audit Logs as PDF
+  const handleDownloadFilteredLogsPDF = () => {
+    try {
+      const doc = new jsPDF({
+        orientation: "landscape",
+        unit: "mm",
+        format: "a4"
+      });
+
+      const todayStr = new Date().toLocaleDateString("en-GB", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric"
+      });
+      const timeStr = new Date().toLocaleTimeString("en-GB", {
+        hour: "2-digit",
+        minute: "2-digit"
+      });
+
+      // Header
+      doc.setFillColor(18, 18, 18);
+      doc.rect(0, 0, 297, 26, "F");
+
+      doc.setFillColor(217, 119, 6);
+      doc.rect(0, 26, 297, 1.5, "F");
+
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(14);
+      doc.setFont("helvetica", "bold");
+      doc.text("UPSIDE RESTAURANT & LOUNGE - FILTERED AUDIT & TELEMETRY LOGS", 14, 11);
+
+      doc.setFontSize(8);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(217, 119, 6);
+      doc.text(`Active Filter Criteria: Event Type = [${filterType.toUpperCase()}] | Session Query = [${searchSession || "ALL"}] | Date Scope = [${dateRangePreset.toUpperCase()}]`, 14, 18);
+
+      doc.setTextColor(180, 180, 180);
+      doc.text(`Generated: ${todayStr} ${timeStr} | Total Records Exported: ${filteredTableLogs.length}`, 283, 18, { align: "right" });
+
+      const logRows = filteredTableLogs.map((log) => {
+        const metadataString = log.metadata
+          ? Object.entries(log.metadata)
+              .filter(([k]) => k !== "userAgent" && k !== "screenResolution")
+              .map(([k, v]) => `${k}:${JSON.stringify(v)}`)
+              .join(", ")
+          : "-";
+
+        return [
+          new Date(log.timestamp).toLocaleString("en-GB"),
+          log.eventType,
+          log.pathName || "/",
+          log.sessionUid,
+          metadataString
+        ];
+      });
+
+      autoTable(doc, {
+        startY: 32,
+        head: [["Timestamp", "Event Action", "Path / Location", "Session UID", "Metadata & Query Parameters"]],
+        body: logRows.length > 0 ? logRows : [["No events match active filter parameters", "-", "-", "-", "-"]],
+        theme: "striped",
+        headStyles: { fillColor: [24, 24, 27], textColor: [255, 255, 255], fontStyle: "bold", fontSize: 8 },
+        bodyStyles: { fontSize: 7.5, textColor: [30, 30, 30] },
+        alternateRowStyles: { fillColor: [248, 248, 250] },
+        columnStyles: {
+          0: { cellWidth: 38 },
+          1: { cellWidth: 36 },
+          2: { cellWidth: 38 },
+          3: { cellWidth: 42 },
+          4: { cellWidth: "auto" }
+        },
+        margin: { left: 14, right: 14 }
+      });
+
+      const pageCount = (doc as any).internal.getNumberOfPages();
+      for (let i = 1; i <= pageCount; i++) {
+        doc.setPage(i);
+        doc.setFontSize(7);
+        doc.setTextColor(140, 140, 140);
+        doc.text(
+          `Upside Restaurant & Lounge Audit Logs • Filtered Export • Page ${i} of ${pageCount}`,
+          148.5,
+          204,
+          { align: "center" }
+        );
+      }
+
+      doc.save(`Upside_Filtered_Audit_Logs_${new Date().toISOString().split("T")[0]}.pdf`);
+    } catch (err: any) {
+      console.error("Filtered logs PDF error:", err);
+      alert(`Could not export filtered logs PDF: ${err.message}`);
+    }
+  };
+
+  // Export Filtered Logs as CSV
+  const handleExportFilteredLogsCSV = () => {
+    try {
+      const headers = ["Timestamp", "Event Type", "Path Name", "Session UID", "Metadata"];
+      const rows = filteredTableLogs.map((log) => {
+        const metadataString = log.metadata
+          ? Object.entries(log.metadata)
+              .map(([k, v]) => `${k}:${JSON.stringify(v)}`)
+              .join("; ")
+          : "";
+        return [
+          `"${new Date(log.timestamp).toISOString()}"`,
+          `"${log.eventType}"`,
+          `"${log.pathName || "/"}"`,
+          `"${log.sessionUid}"`,
+          `"${metadataString.replace(/"/g, '""')}"`
+        ];
+      });
+
+      const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows.map(e => e.join(","))].join("\n");
+      const encodedUri = encodeURI(csvContent);
+      const link = document.createElement("a");
+      link.setAttribute("href", encodedUri);
+      link.setAttribute("download", `Upside_Filtered_Logs_${new Date().toISOString().split("T")[0]}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (err: any) {
+      console.error("CSV export failure:", err);
+      alert(`Failed to export CSV: ${err.message}`);
+    }
+  };
+
   return (
     <div className="space-y-6 w-full text-left font-mono text-neutral-300 animate-fadeIn" id="admin-analytics-view">
       
@@ -413,17 +732,41 @@ export default function AdminAnalyticsPanel() {
             Engagement & <span className="font-serif italic text-amber-500">Conversions</span>
           </h2>
           <p className="text-[10px] text-neutral-400 font-sans max-w-xl">
-            Analyze visitor footfall, page hits, reservation checkout conversion rates and group trends by Date & Time.
+            Analyze visitor footfall, page hits, reservation checkout conversion rates and export executive PDF reports.
           </p>
         </div>
-        <div className="flex items-center gap-2 self-start md:self-center">
-          <span className="flex h-2 w-2 relative">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-          </span>
-          <span className="text-[10px] tracking-wider uppercase font-bold text-neutral-400">
-            Live Stream Feed Active
-          </span>
+        
+        {/* PDF & Report Action Bar */}
+        <div className="flex flex-wrap items-center gap-2 self-start md:self-center">
+          <button
+            onClick={handleDownloadExecutiveReportPDF}
+            className="flex items-center gap-2 px-3.5 py-2 bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-white font-bold text-[10px] tracking-wider uppercase transition-all shadow-md cursor-pointer border border-amber-500/50"
+            title="Download Executive Analytics Report as PDF"
+            id="download-analytics-executive-pdf-btn"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span>Download Analytics (PDF)</span>
+          </button>
+
+          <button
+            onClick={handleDownloadFilteredLogsPDF}
+            className="flex items-center gap-2 px-3 py-2 bg-neutral-900 hover:bg-neutral-850 text-neutral-200 border border-neutral-750 font-bold text-[10px] tracking-wider uppercase transition-all cursor-pointer"
+            title="Download currently filtered audit logs as PDF"
+            id="download-filtered-logs-pdf-btn"
+          >
+            <FileText className="w-3.5 h-3.5 text-amber-500" />
+            <span>Download Filtered PDF</span>
+          </button>
+
+          <div className="flex items-center gap-2 pl-2 border-l border-neutral-800">
+            <span className="flex h-2 w-2 relative">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+            </span>
+            <span className="text-[9px] tracking-wider uppercase font-bold text-neutral-400 hidden sm:inline">
+              Live Feed
+            </span>
+          </div>
         </div>
       </div>
 
@@ -1153,8 +1496,27 @@ export default function AdminAnalyticsPanel() {
                   placeholder="Filter by Session UID..."
                   value={searchSession}
                   onChange={(e) => setSearchSession(e.target.value)}
-                  className="bg-neutral-950 border border-neutral-850 text-white p-1.5 text-[10px] w-full max-w-xs focus:outline-none focus:border-amber-500 font-mono"
+                  className="bg-neutral-950 border border-neutral-850 text-white p-1.5 text-[10px] w-full sm:w-44 focus:outline-none focus:border-amber-500 font-mono"
                 />
+
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={handleDownloadFilteredLogsPDF}
+                    className="flex items-center gap-1 px-2.5 py-1.5 bg-neutral-950 hover:bg-neutral-900 text-amber-500 border border-neutral-800 text-[9px] font-bold uppercase tracking-wider transition-all cursor-pointer"
+                    title="Export currently filtered audit logs as PDF"
+                  >
+                    <Download className="w-3 h-3" />
+                    <span>PDF</span>
+                  </button>
+                  <button
+                    onClick={handleExportFilteredLogsCSV}
+                    className="flex items-center gap-1 px-2.5 py-1.5 bg-neutral-950 hover:bg-neutral-900 text-neutral-300 border border-neutral-800 text-[9px] font-bold uppercase tracking-wider transition-all cursor-pointer"
+                    title="Export currently filtered audit logs as CSV"
+                  >
+                    <FileSpreadsheet className="w-3 h-3 text-emerald-400" />
+                    <span>CSV</span>
+                  </button>
+                </div>
               </div>
             </div>
 

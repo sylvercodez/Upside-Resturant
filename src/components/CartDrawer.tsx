@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { X, Trash2, Ticket, ArrowRight, ShoppingCart, MessageSquare, Check, CreditCard, Sparkles, Minus, Plus, AlertCircle, HelpCircle, Store, MapPin, User } from "lucide-react";
+import { X, Trash2, Ticket, ArrowRight, ShoppingCart, MessageSquare, Check, CreditCard, Sparkles, Minus, Plus, AlertCircle, HelpCircle, Store, MapPin, User, ChefHat, Coffee } from "lucide-react";
 import { CartItem, CheckoutDetails, PromoCode, AVAILABLE_PROMOS, LAGOS_AREAS, ShippingLocation, getApiUrl } from "../types";
 import { logCustomEvent } from "../utils/analytics";
 import { MENU_ITEMS, MenuItem } from "../data/menu";
@@ -411,14 +411,137 @@ export default function CartDrawer({
   const discountAmount = activePromo ? Math.round((subtotal * activePromo.discountPercentage) / 100) : 0;
   const finalTotal = subtotal + deliveryFee - discountAmount;
 
-  // Curated Upsell Recommendations
-  const getUpsellItems = () => {
+  // Curated Smart Chef & Barista Recommendations Engine
+  const getSmartUpsellItems = () => {
     const itemIdsInCart = cartItems.map((c) => c.itemId);
     const finalMenu = menuItems || MENU_ITEMS;
-    return finalMenu.filter((item) => !itemIdsInCart.includes(item.id) && item.available !== false).slice(0, 2);
+    const availableItems = finalMenu.filter((item) => !itemIdsInCart.includes(item.id) && item.available !== false);
+    
+    if (availableItems.length === 0) return [];
+
+    const foodCategories = ["breakfast", "sandwich", "starter", "salad", "burger", "pizza", "pasta", "grilled-steaks", "grilled-fish", "platters", "cookies", "extras"];
+    const drinkCategories = ["coffee", "teas", "fruit-juice", "ice-coffee", "smoothie", "frappuccino", "milkshake", "signature-drinks", "cocktail", "mocktail", "drinks"];
+
+    const cartMenuItems = cartItems.map(c => finalMenu.find(m => m.id === c.itemId)).filter(Boolean) as MenuItem[];
+    const cartCategories = cartMenuItems.map(m => m.category?.toLowerCase() || "");
+
+    const hasCoffeeOrTea = cartCategories.some(c => ["coffee", "ice-coffee", "frappuccino", "teas"].includes(c));
+    const hasMains = cartCategories.some(c => ["grilled-steaks", "grilled-fish", "platters", "burger", "pizza", "pasta"].includes(c));
+    const hasBreakfast = cartCategories.some(c => ["breakfast", "sandwich"].includes(c));
+    const hasDrinks = cartCategories.some(c => drinkCategories.includes(c));
+    const hasFood = cartCategories.some(c => foodCategories.includes(c));
+    const hasCocktailsOrMocktails = cartCategories.some(c => ["cocktail", "mocktail", "signature-drinks"].includes(c));
+
+    interface SmartRec {
+      item: MenuItem;
+      source: "chef" | "barista";
+      badge: string;
+      reason: string;
+    }
+
+    const recommendations: SmartRec[] = [];
+
+    // --- 1. CHEF'S RECOMMENDATION ---
+    let chefItem: MenuItem | undefined;
+    let chefReason = "Chef's gourmet house specialty";
+
+    if (hasCoffeeOrTea) {
+      // Coffee in cart -> Pair with Cookies / Pastry or Club Sandwich
+      chefItem = availableItems.find(i => i.category === "cookies") ||
+                 availableItems.find(i => i.category === "sandwich") ||
+                 availableItems.find(i => i.category === "breakfast");
+      chefReason = "Warm sweet finish pairing with your brew";
+    } else if (hasCocktailsOrMocktails) {
+      // Drinks in cart -> Pair with delicious starter / wings / finger food
+      chefItem = availableItems.find(i => i.category === "starter" && (i.id.includes("wings") || i.id.includes("spring-roll") || i.id.includes("prawns"))) ||
+                 availableItems.find(i => i.category === "starter");
+      chefReason = "Gourmet appetizer to elevate your drinks";
+    } else if (hasMains) {
+      // Mains in cart -> Pair with fresh Salad or Starter
+      chefItem = availableItems.find(i => i.category === "salad") ||
+                 availableItems.find(i => i.category === "starter") ||
+                 availableItems.find(i => i.category === "cookies");
+      chefReason = chefItem?.category === "cookies" ? "Chef's decadent dessert finish" : "Crisp starter to begin your dining experience";
+    } else if (hasBreakfast) {
+      // Breakfast in cart -> Pair with gourmet cookies or starter
+      chefItem = availableItems.find(i => i.category === "cookies") ||
+                 availableItems.find(i => i.category === "starter");
+      chefReason = "Artisanal bakery pairing from the kitchen";
+    } else {
+      // Fallback Chef item
+      chefItem = availableItems.find(i => ["starter", "burger", "pasta", "cookies"].includes(i.category)) ||
+                 availableItems.find(i => foodCategories.includes(i.category));
+      chefReason = "Chef's signature culinary recommendation";
+    }
+
+    if (chefItem) {
+      recommendations.push({
+        item: chefItem,
+        source: "chef",
+        badge: "Chef's Pick",
+        reason: chefReason
+      });
+    }
+
+    // --- 2. BARISTA'S RECOMMENDATION ---
+    let baristaItem: MenuItem | undefined;
+    let baristaReason = "Barista's handcrafted specialty";
+
+    // Exclude the already selected chef item
+    const drinkCandidates = availableItems.filter(i => i.id !== chefItem?.id && drinkCategories.includes(i.category));
+
+    if (hasMains || (hasFood && !hasDrinks)) {
+      // Savory food in cart -> Recommend refreshing Signature Drink, Mocktail, or Iced Tea/Juice
+      baristaItem = drinkCandidates.find(i => ["signature-drinks", "mocktail", "fruit-juice"].includes(i.category)) ||
+                    drinkCandidates.find(i => ["ice-coffee", "smoothie", "teas"].includes(i.category));
+      baristaReason = "Refreshing palate cleanser for savory dishes";
+    } else if (hasBreakfast || (chefItem?.category === "cookies" && !hasCoffeeOrTea)) {
+      // Breakfast / Sweet -> Recommend warm artisan coffee or Latte
+      baristaItem = drinkCandidates.find(i => i.category === "coffee" && (i.name.toLowerCase().includes("cappuccino") || i.name.toLowerCase().includes("latte") || i.name.toLowerCase().includes("flat white"))) ||
+                    drinkCandidates.find(i => i.category === "coffee") ||
+                    drinkCandidates.find(i => i.category === "teas");
+      baristaReason = "Artisan espresso brew tailored for breakfast";
+    } else if (hasCoffeeOrTea) {
+      // Already has coffee -> Recommend specialty cold brew or signature mocktail
+      baristaItem = drinkCandidates.find(i => ["signature-drinks", "smoothie", "ice-coffee", "mocktail"].includes(i.category)) ||
+                    drinkCandidates.find(i => drinkCategories.includes(i.category));
+      baristaReason = "Signature chilled companion blend";
+    } else {
+      // Fallback Barista item
+      baristaItem = drinkCandidates.find(i => ["signature-drinks", "coffee", "mocktail"].includes(i.category)) ||
+                    drinkCandidates[0];
+      baristaReason = "Barista's handcrafted signature brew";
+    }
+
+    if (baristaItem) {
+      recommendations.push({
+        item: baristaItem,
+        source: "barista",
+        badge: "Barista's Craft",
+        reason: baristaReason
+      });
+    }
+
+    // If for some reason we don't have 2 items yet, fill from remaining available items
+    if (recommendations.length < 2) {
+      const existingIds = recommendations.map(r => r.item.id);
+      const leftover = availableItems.filter(i => !existingIds.includes(i.id));
+      for (const item of leftover) {
+        if (recommendations.length >= 2) break;
+        const isDrink = drinkCategories.includes(item.category);
+        recommendations.push({
+          item,
+          source: isDrink ? "barista" : "chef",
+          badge: isDrink ? "Barista's Pick" : "Chef's Pick",
+          reason: isDrink ? "Refreshing drink pairing" : "Chef's complementary dish"
+        });
+      }
+    }
+
+    return recommendations.slice(0, 2);
   };
 
-  const upsellRecommendations = getUpsellItems();
+  const upsellRecommendations = getSmartUpsellItems();
 
   const handleApplyPromo = () => {
     setPromoError("");
@@ -1177,29 +1300,64 @@ export default function CartDrawer({
                     )}
                   </div>
 
-                  {/* recommended related products upsells */}
+                  {/* recommended related products upsells: Chef & Barista Smart Pairings */}
                   {upsellRecommendations.length > 0 && (
-                    <div className="bg-white border border-neutral-200 p-4 space-y-3 text-left shadow-sm" id="cart-upsells-zone">
-                      <span className="text-[10px] tracking-widest text-amber-700 font-bold font-mono uppercase flex items-center gap-1.5">
-                        <Sparkles className="w-3.5 h-3.5 text-amber-600 animate-pulse" />
-                        <span>Baristas Recommended Pairings</span>
-                      </span>
-                      <div className="grid grid-cols-2 gap-3">
-                        {upsellRecommendations.map((up) => (
-                          <div
-                            key={up.id}
-                            onClick={() => onAddToCartDirect(up)}
-                            className="bg-white border border-neutral-200 p-2.5 flex flex-col justify-between hover:border-amber-600/40 cursor-pointer transition-all duration-300 shadow-sm"
-                            id={`upsell-card-${up.id}`}
-                          >
-                            <MenuImage src={up.image} name={up.name} className="w-full h-16 object-cover border border-neutral-200 mb-2" containerClassName="w-full h-16 mb-2" size="sm" />
-                            <h5 className="text-[10px] font-mono font-semibold text-neutral-800 truncate uppercase">{up.name}</h5>
-                            <div className="flex items-center justify-between mt-2">
-                              <span className="text-[10px] text-amber-600 font-mono font-bold">₦{up.price.toLocaleString()}</span>
-                              <span className="text-[9px] text-neutral-500 hover:text-black underline font-mono">Add +</span>
+                    <div className="bg-neutral-50/80 border border-neutral-200 p-3.5 space-y-3 text-left shadow-sm" id="cart-upsells-zone">
+                      <div className="flex items-center justify-between border-b border-neutral-200/80 pb-2">
+                        <span className="text-[10px] tracking-widest text-neutral-900 font-bold font-mono uppercase flex items-center gap-1.5">
+                          <Sparkles className="w-3.5 h-3.5 text-amber-600 animate-pulse" />
+                          <span>Chef &amp; Barista Recommended Pairings</span>
+                        </span>
+                        <span className="text-[9px] font-mono text-amber-700 font-bold uppercase tracking-wider bg-amber-500/10 px-1.5 py-0.5 border border-amber-500/20">
+                          Smart Pair
+                        </span>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-2.5">
+                        {upsellRecommendations.map((rec) => {
+                          const up = rec.item;
+                          const isChef = rec.source === "chef";
+                          return (
+                            <div
+                              key={up.id}
+                              onClick={() => onAddToCartDirect(up)}
+                              className="bg-white border border-neutral-200 p-2.5 flex flex-col justify-between hover:border-amber-600/60 hover:shadow-md cursor-pointer transition-all duration-200 shadow-sm group"
+                              id={`upsell-card-${up.id}`}
+                            >
+                              <div>
+                                <div className="flex items-center justify-between mb-1.5">
+                                  <span className={`inline-flex items-center gap-1 text-[8.5px] font-mono font-bold uppercase px-1.5 py-0.5 rounded-none border ${
+                                    isChef 
+                                      ? "bg-amber-50 text-amber-800 border-amber-300" 
+                                      : "bg-emerald-50 text-emerald-800 border-emerald-300"
+                                  }`}>
+                                    {isChef ? <ChefHat className="w-2.5 h-2.5 text-amber-700" /> : <Coffee className="w-2.5 h-2.5 text-emerald-700" />}
+                                    <span>{rec.badge}</span>
+                                  </span>
+                                </div>
+                                <MenuImage 
+                                  src={up.image} 
+                                  name={up.name} 
+                                  className="w-full h-16 object-cover border border-neutral-200 mb-1.5 group-hover:scale-105 transition-transform duration-300" 
+                                  containerClassName="w-full h-16 mb-1.5 overflow-hidden" 
+                                  size="sm" 
+                                />
+                                <h5 className="text-[10px] font-mono font-bold text-neutral-900 truncate uppercase" title={up.name}>
+                                  {up.name}
+                                </h5>
+                                <p className="text-[8.5px] font-mono text-neutral-500 line-clamp-1 italic mt-0.5" title={rec.reason}>
+                                  {rec.reason}
+                                </p>
+                              </div>
+                              <div className="flex items-center justify-between mt-2 pt-1.5 border-t border-neutral-100">
+                                <span className="text-[10px] text-amber-600 font-mono font-bold">₦{up.price.toLocaleString()}</span>
+                                <span className="text-[9px] text-neutral-700 group-hover:text-black font-mono font-bold flex items-center gap-0.5 underline">
+                                  <Plus className="w-2.5 h-2.5 text-amber-600 inline" /> Add
+                                </span>
+                              </div>
                             </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
                   )}

@@ -96,7 +96,7 @@
     },
     "User": {
       "title": "User",
-      "description": "User profile with roles and account states",
+      "description": "User profile with roles, permissions and account states",
       "type": "object",
       "properties": {
         "uid": {
@@ -113,10 +113,22 @@
         },
         "role": {
           "type": "string",
-          "enum": ["admin", "sales", "chef", "user"],
+          "enum": ["admin", "sales", "chef", "menu_lister", "rider", "developer", "user"],
           "description": "Predefined user security clearance role"
         },
+        "permissions": {
+          "type": "array",
+          "description": "List of granular module permission keys granted to this user"
+        },
+        "disabled": {
+          "type": "boolean",
+          "description": "Whether user account access is suspended"
+        },
         "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
           "type": "string",
           "format": "date-time"
         }
@@ -277,9 +289,53 @@
         "updatedAt": { "type": "string" }
       },
       "required": ["chatId", "customerName", "email", "status", "updatedAt"]
+    },
+    "Review": {
+      "title": "Review",
+      "description": "Customer testimonials and Google reviews verified for Upside Restaurant",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "role": { "type": "string" },
+        "date": { "type": "string" },
+        "text": { "type": "string" },
+        "rating": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name", "text", "rating"]
+    },
+    "Booking": {
+      "title": "Booking",
+      "description": "Table and dining reservations at Upside Restaurant & Lounge",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "guests": { "type": "number" },
+        "date": { "type": "string" },
+        "time": { "type": "string" },
+        "status": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "email", "date", "time"]
     }
   },
   "firestore": {
+    "google_reviews/{reviewId}": {
+      "schema": "Review",
+      "description": "Google reviews crawled and synchronized for the restaurant testimonial section"
+    },
+    "reviews/{reviewId}": {
+      "schema": "Review",
+      "description": "Customer reviews and feedback repository"
+    },
+    "bookings/{bookingId}": {
+      "schema": "Booking",
+      "description": "VIP table reservations and event bookings"
+    },
     "support_chats/{chatId}": {
       "schema": "SupportChat",
       "description": "Active help-desk communication sessions for live assistance"

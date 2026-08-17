@@ -62,7 +62,10 @@ export function getMailTransporter() {
         auth: {
           user: rawUser,
           pass: rawPass
-        }
+        },
+        connectionTimeout: 5000, // 5s connection timeout
+        greetingTimeout: 5000,
+        socketTimeout: 8000
       };
 
       let createTransportFn: any = null;

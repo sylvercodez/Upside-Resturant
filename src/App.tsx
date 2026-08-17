@@ -12,6 +12,7 @@ import Footer from "./components/Footer";
 import BottomNav from "./components/BottomNav";
 import DedicatedMenu from "./components/DedicatedMenu";
 import DedicatedExperience from "./components/DedicatedExperience";
+import DedicatedCorporateEvents from "./components/DedicatedCorporateEvents";
 import DedicatedDashboard from "./components/DedicatedDashboard";
 import DedicatedAuth from "./components/DedicatedAuth";
 import DedicatedTrack from "./components/DedicatedTrack";
@@ -215,9 +216,13 @@ useEffect(() => {
         const isAdminEmail = 
           emailLower === "hello@mophethonline.com" || 
           emailLower === "tobi@gmail.com" || 
+          emailLower === "tobi@acourze.com" ||
+          emailLower === "tosinotenaike3@gmail.com" ||
+          emailLower === "onlinestore@mophethgroup.com" ||
           emailLower === "mophethecommerce@gmail.com" ||
           emailLower === "mophethecommerce3@gmail.com" ||
-          emailLower.includes("mophethecommerce");
+          emailLower.includes("mopheth") ||
+          emailLower.includes("tosinotenaike");
         const targetRole = isAdminEmail ? "admin" : "user";
         
         try {
@@ -292,6 +297,7 @@ useEffect(() => {
     const path = window.location.pathname;
     const hash = window.location.hash;
     if (hash === "#/menu" || path === "/menu") return "/menu";
+    if (hash === "#/corporate-events" || path === "/corporate-events" || hash === "#/events" || path === "/events") return "/corporate-events";
     if (hash === "#/experience" || path === "/experience") return "/experience";
     if (hash === "#/dashboard" || path === "/dashboard") return "/dashboard";
     if (hash === "#/auth" || path === "/auth") return "/auth";
@@ -304,7 +310,27 @@ useEffect(() => {
     return "/";
   });
 
-  const activeView = currentPath === "/menu" ? "menu" : (currentPath === "/experience" ? "experience" : (currentPath === "/dashboard" ? "dashboard" : (currentPath === "/auth" ? "auth" : (currentPath === "/cart" ? "cart" : (currentPath === "/track" ? "track" : (currentPath === "/rider" ? "rider" : (currentPath === "/faq" ? "faq" : (currentPath === "/terms" || currentPath === "/privacy" ? "legal" : "landing"))))))));
+  const activeView = currentPath === "/menu" 
+    ? "menu" 
+    : (currentPath === "/corporate-events" 
+      ? "corporate-events" 
+      : (currentPath === "/experience" 
+        ? "experience" 
+        : (currentPath === "/dashboard" 
+          ? "dashboard" 
+          : (currentPath === "/auth" 
+            ? "auth" 
+            : (currentPath === "/cart" 
+              ? "cart" 
+              : (currentPath === "/track" 
+                ? "track" 
+                : (currentPath === "/rider" 
+                  ? "rider" 
+                  : (currentPath === "/faq" 
+                    ? "faq" 
+                    : (currentPath === "/terms" || currentPath === "/privacy" 
+                      ? "legal" 
+                      : "landing")))))))));
 
   const handleNavigate = (path: string) => {
     window.history.pushState(null, "", path);
@@ -331,6 +357,8 @@ useEffect(() => {
       const hash = window.location.hash;
       if (hash === "#/menu" || path === "/menu") {
         setCurrentPath("/menu");
+      } else if (hash === "#/corporate-events" || path === "/corporate-events" || hash === "#/events" || path === "/events") {
+        setCurrentPath("/corporate-events");
       } else if (hash === "#/experience" || path === "/experience") {
         setCurrentPath("/experience");
       } else if (hash === "#/dashboard" || path === "/dashboard") {
@@ -697,7 +725,7 @@ useEffect(() => {
   return (
     <div className="bg-black min-h-screen text-white select-none selection:bg-amber-500 selection:text-black antialiased ">
       {/* Luxury Navigation Header */}
-      {activeView !== "rider" && (
+      {activeView !== "rider" && activeView !== "dashboard" && (
         <Header
           onOpenCart={() => handleNavigate("/cart")}
           onScrollToElement={handleScrollToElement}
@@ -783,6 +811,15 @@ useEffect(() => {
         />
       )}
 
+      {activeView === "corporate-events" && (
+        <DedicatedCorporateEvents
+          onBackToLobby={() => {
+            handleNavigate("/");
+          }}
+          onOpenReservations={() => handleScrollToElement("home-reservation-section")}
+        />
+      )}
+
       {activeView === "dashboard" && (
         <DedicatedDashboard
           currentUser={currentUser}
@@ -802,6 +839,7 @@ useEffect(() => {
           onReorder={handleReorder}
           categories={allCategories}
           shippingLocations={shippingLocations}
+          branding={branding}
         />
       )}
 

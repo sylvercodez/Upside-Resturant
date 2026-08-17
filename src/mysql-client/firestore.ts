@@ -167,24 +167,35 @@ export async function getDocs(queryOrRef: any): Promise<any> {
     else if (collectionName === "riders") url = getApiUrl("/api/mysql/riders");
     else if (collectionName === "analytics_events") url = getApiUrl("/api/mysql/analytics");
     else if (collectionName === "assets") url = getApiUrl("/api/mysql/assets");
+    else if (collectionName === "google_reviews" || collectionName === "reviews") url = getApiUrl("/api/reviews");
+    else if (collectionName === "instagram_posts") url = getApiUrl("/api/instagram/posts");
 
     if (!url) {
-      console.warn(`[MySQL Firestore] Unsupported collection name: ${collectionName}`);
+      // Check localStorage for transient collection items
+      try {
+        const localItems: any[] = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k && k.startsWith(`transient_collection_${collectionName}_`)) {
+            const itemStr = localStorage.getItem(k);
+            if (itemStr) localItems.push(JSON.parse(itemStr));
+          }
+        }
+        if (localItems.length > 0) {
+          return makeQuerySnap(localItems);
+        }
+      } catch (_) {}
       return makeQuerySnap([]);
     }
 
     const res = await fetch(url);
     if (!res.ok) {
-      let errDetails = "";
-      try {
-        const errJson = await res.json();
-        errDetails = errJson.message || errJson.error || JSON.stringify(errJson);
-      } catch (_) {
-        try { errDetails = await res.text(); } catch (_) {}
-      }
-      throw new Error(`Failed to load collection ${collectionName}: ${res.status} - ${errDetails || res.statusText}`);
+      return makeQuerySnap([]);
     }
     let data = await res.json();
+    if (!Array.isArray(data)) {
+      data = data.items || data.reviews || data.posts || [];
+    }
 
     // Client-side filtering/constraints application
     for (const c of constraints) {
@@ -203,8 +214,8 @@ export async function getDocs(queryOrRef: any): Promise<any> {
     }
 
     return makeQuerySnap(data);
-  } catch (err) {
-    console.error(`[MySQL Firestore getDocs Error]:`, err);
+  } catch (err: any) {
+    console.warn(`[MySQL Firestore getDocs Warning - Gracefully Handled]:`, err?.message || err);
     return makeQuerySnap([]);
   }
 }

@@ -86,7 +86,7 @@ export default function Header({
         </button>
 
         {/* Desktop Links */}
-        <nav className="hidden md:flex items-center gap-8 text-xs tracking-widest font-mono uppercase font-bold">
+        <nav className="hidden md:flex items-center gap-7 lg:gap-8 text-xs tracking-widest font-mono uppercase font-bold">
           <button
             onClick={() => onNavigate ? onNavigate("/menu") : onScrollToElement("menu-fast")}
             className={`transition-all py-2 relative after:absolute after:bottom-0 after:left-0 after:h-[2px] after:bg-amber-600 after:transition-all ${
@@ -96,6 +96,17 @@ export default function Header({
             }`}
           >
             Our Menu
+          </button>
+          <button
+            onClick={() => onNavigate ? onNavigate("/corporate-events") : onScrollToElement("hero")}
+            className={`transition-all py-2 relative after:absolute after:bottom-0 after:left-0 after:h-[2px] after:bg-amber-600 after:transition-all ${
+              currentPath === "/corporate-events"
+                ? "text-amber-600 after:w-full font-black"
+                : "text-neutral-800 hover:text-amber-600 after:w-0 hover:after:w-full"
+            }`}
+            id="header-nav-corporate-events"
+          >
+            Corporate Events
           </button>
           <button
             onClick={() => onNavigate ? onNavigate("/experience") : onScrollToElement("experience")}

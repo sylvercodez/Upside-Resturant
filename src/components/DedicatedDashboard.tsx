@@ -39,13 +39,147 @@ import {
   Mail,
   Send,
   CheckSquare,
-  AlertCircle
+  AlertCircle,
+  Menu,
+  ChevronLeft,
+  ChevronRight,
+  ChevronDown,
+  ChevronUp,
+  Sliders,
+  Square,
+  BarChart3,
+  MessageSquare,
+  Instagram,
+  Database,
+  CreditCard,
+  Layers,
+  FolderKanban,
+  Percent,
+  Eye,
+  Tag,
+  SlidersHorizontal,
+  Lock,
+  Unlock,
+  CheckCheck,
+  RefreshCw,
+  FileSpreadsheet,
+  Download,
+  Key,
+  ShieldAlert,
+  Shield,
+  Save,
+  UserPlus,
+  EyeOff,
+  UserCog,
+  Pencil,
+  KeyRound
 } from "lucide-react";
 import { collection, query, updateDoc, doc, onSnapshot, setDoc, deleteDoc } from "firebase/firestore";
 import { db, handleFirestoreError, OperationType } from "../firebase";
 import { ShippingLocation, getApiUrl } from "../types";
 import classicDrinks from "../assets/images/classic_restaurant_drinks_1782058509882.jpg";
 import gourmetDrinks from "../assets/images/gourmet_drinks_hero_1782059009940.jpg";
+import UserProfilePanel from "./UserProfilePanel";
+import CreateUserModal from "./CreateUserModal";
+import AdminEditUserModal from "./AdminEditUserModal";
+import { sendUserPasswordResetEmail } from "../utils/userManagement";
+
+export interface PermissionItem {
+  id: string;
+  name: string;
+  desc: string;
+}
+
+export interface PermissionCategory {
+  id: string;
+  title: string;
+  icon: string;
+  permissions: PermissionItem[];
+}
+
+export const PERMISSION_CATEGORIES: PermissionCategory[] = [
+  {
+    id: "orders",
+    title: "Orders & Kitchen Operations",
+    icon: "🛍️",
+    permissions: [
+      { id: "orders_pipeline", name: "Orders Pipeline", desc: "View kitchen queue, update cooking stages, and assign dispatch riders." },
+      { id: "whatsapp_orders", name: "WhatsApp & Manual Orders", desc: "Audit and approve WhatsApp manual orders & bank transfer slips." }
+    ]
+  },
+  {
+    id: "catalog",
+    title: "Menu & Dish Catalog Management",
+    icon: "🍜",
+    permissions: [
+      { id: "menus_panel", name: "Dynamic Menu Manager", desc: "Add, edit prices, descriptions, ingredients, and remove dishes." },
+      { id: "categories_panel", name: "Category Classifications", desc: "Manage menu category titles, display ordering, and enable/disable states." },
+      { id: "images_panel", name: "Image Asset Library", desc: "Upload single or bulk high-res dish photos and manage visual assets." }
+    ]
+  },
+  {
+    id: "logistics",
+    title: "Logistics & Delivery Fleet",
+    icon: "🚚",
+    permissions: [
+      { id: "shipping_panel", name: "Delivery Locations & Zones", desc: "Set Lagos delivery fees, coverage zones, and turnaround times." },
+      { id: "riders_panel", name: "Logistics Riders Fleet", desc: "Register dispatch riders, monitor fleet statuses, and assign orders." }
+    ]
+  },
+  {
+    id: "growth",
+    title: "Marketing & Growth",
+    icon: "🎟️",
+    permissions: [
+      { id: "coupons_panel", name: "Coupons & Discounts", desc: "Create discount promo codes, % sales campaigns, and min order thresholds." },
+      { id: "analytics_panel", name: "Analytics & PDF Reports", desc: "View sales graphs, live conversion rates, and export executive PDF reports." }
+    ]
+  },
+  {
+    id: "crm",
+    title: "Customer Support & Social Media",
+    icon: "💬",
+    permissions: [
+      { id: "support_panel", name: "Support Desk & Live Chat", desc: "Live customer chat responses and support ticket resolution." },
+      { id: "instagram_panel", name: "Instagram Gallery Sync", desc: "Configure Instagram live feed sync and social media integration." }
+    ]
+  },
+  {
+    id: "system",
+    title: "System, Payment & Database",
+    icon: "⚙️",
+    permissions: [
+      { id: "users_panel", name: "User Directory & Access Control", desc: "Manage staff roles, grant categorized permission checkboxes, and suspend users." },
+      { id: "opay_panel", name: "OPay Payment Gateway", desc: "Configure live merchant keys and webhook security settings." },
+      { id: "mysql_panel", name: "MySQL Database Console", desc: "Direct database table queries, SQL commands, and health checks." }
+    ]
+  }
+];
+
+export const ROLE_DEFAULT_PERMISSIONS: Record<string, string[]> = {
+  admin: [
+    "orders_pipeline", "whatsapp_orders", "menus_panel", "categories_panel",
+    "images_panel", "shipping_panel", "riders_panel", "coupons_panel",
+    "analytics_panel", "support_panel", "instagram_panel", "users_panel",
+    "opay_panel", "mysql_panel"
+  ],
+  sales: [
+    "orders_pipeline", "whatsapp_orders", "coupons_panel", "analytics_panel", "support_panel"
+  ],
+  chef: [
+    "orders_pipeline"
+  ],
+  menu_lister: [
+    "menus_panel", "categories_panel", "images_panel"
+  ],
+  rider: [
+    "shipping_panel", "riders_panel"
+  ],
+  developer: [
+    "mysql_panel", "opay_panel", "instagram_panel"
+  ],
+  user: []
+};
 
 interface DedicatedDashboardProps {
   currentUser: FirebaseUser | null;
@@ -63,6 +197,12 @@ interface DedicatedDashboardProps {
   shippingLocations?: ShippingLocation[];
   isMySQLActive?: boolean;
   onRefreshMySQLData?: () => void;
+  branding?: {
+    logoSvg: string;
+    brandName: string;
+    tagline: string;
+    subText: string;
+  } | null;
 }
 
 const PRESET_IMAGES = [
@@ -85,11 +225,37 @@ export default function DedicatedDashboard({
   categories,
   shippingLocations = [],
   isMySQLActive = false,
-  onRefreshMySQLData
+  onRefreshMySQLData,
+  branding
 }: DedicatedDashboardProps) {
   const finalMenuItems = menuItems || MENU_ITEMS;
   const displayCategories = categories || CATEGORIES;
-  const isPrivileged = userRole === "admin" || userRole === "sales" || userRole === "chef";
+
+  // Custom Granular Permissions & Sidebar Layout States
+  const [currentUserProfile, setCurrentUserProfile] = useState<any>(null);
+
+  // Dynamic role and administrator evaluation
+  const effectiveRole = currentUserProfile?.role || (currentUser as any)?.role || userRole || "user";
+  const userEmailLower = (currentUser?.email || "").toLowerCase().trim();
+  const isSysAdmin = 
+    effectiveRole === "admin" || 
+    userRole === "admin" ||
+    userEmailLower === "hello@mophethonline.com" || 
+    userEmailLower === "tobi@gmail.com" || 
+    userEmailLower === "tobi@acourze.com" ||
+    userEmailLower === "tosinotenaike3@gmail.com" ||
+    userEmailLower === "onlinestore@mophethgroup.com" ||
+    userEmailLower === "mophethecommerce@gmail.com" ||
+    userEmailLower === "mophethecommerce3@gmail.com" ||
+    userEmailLower.includes("mopheth") ||
+    userEmailLower.includes("tosinotenaike");
+
+  const isPrivileged = isSysAdmin || 
+    effectiveRole === "sales" || 
+    effectiveRole === "chef" || 
+    effectiveRole === "menu_lister" || 
+    effectiveRole === "developer" || 
+    effectiveRole === "rider";
 
   // State Tabs depending on profile roles
   const [activeTab, setActiveTab] = useState<string>("history");
@@ -106,8 +272,188 @@ export default function DedicatedDashboard({
 
   // Real-time directory storage
   const [allUsers, setAllUsers] = useState<any[]>([]);
+  const [isCreateUserModalOpen, setIsCreateUserModalOpen] = useState(false);
+  const [editingUserProfileUser, setEditingUserProfileUser] = useState<any>(null);
+  const [isEditUserModalOpen, setIsEditUserModalOpen] = useState(false);
+  const [quickResetStatus, setQuickResetStatus] = useState<Record<string, { loading?: boolean; success?: string; error?: string }>>({});
   const [userSearchText, setUserSearchText] = useState("");
   const [menuSearchText, setMenuSearchText] = useState("");
+  
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
+    my_account: true,
+    operations: true,
+    catalog: true,
+    logistics: true,
+    growth: true,
+    crm: true,
+    admin: true,
+  });
+
+  const handleToggleSection = (sectionId: string) => {
+    setExpandedSections((prev) => ({
+      ...prev,
+      [sectionId]: prev[sectionId] !== undefined ? !prev[sectionId] : false,
+    }));
+  };
+
+  const [editingPermissionsUser, setEditingPermissionsUser] = useState<any>(null);
+  const [selectedUserPermissions, setSelectedUserPermissions] = useState<string[]>([]);
+  const [selectedUserRole, setSelectedUserRole] = useState<string>("user");
+  const [isSavingPermissions, setIsSavingPermissions] = useState(false);
+  const [permissionSaveSuccess, setPermissionSaveSuccess] = useState("");
+  const [permissionSaveError, setPermissionSaveError] = useState("");
+  const [activePermCategoryFilter, setActivePermCategoryFilter] = useState<string>("all");
+
+  const handleOpenPermissionsModal = (user: any) => {
+    setEditingPermissionsUser(user);
+    setSelectedUserRole(user.role || "user");
+    const existing = Array.isArray(user.permissions)
+      ? user.permissions
+      : (ROLE_DEFAULT_PERMISSIONS[user.role || "user"] || []);
+    setSelectedUserPermissions([...existing]);
+    setActivePermCategoryFilter("all");
+  };
+
+  const handleApplyRolePreset = (role: string) => {
+    setSelectedUserRole(role);
+    setSelectedUserPermissions(ROLE_DEFAULT_PERMISSIONS[role] || []);
+  };
+
+  const handleTogglePermission = (permId: string) => {
+    setSelectedUserPermissions(prev => 
+      prev.includes(permId) ? prev.filter(k => k !== permId) : [...prev, permId]
+    );
+  };
+
+  const handleToggleCategoryPermissions = (catId: string) => {
+    const cat = PERMISSION_CATEGORIES.find(c => c.id === catId);
+    if (!cat) return;
+    const catKeys = cat.permissions.map(p => p.id);
+    const allSelected = catKeys.every(k => selectedUserPermissions.includes(k));
+    if (allSelected) {
+      setSelectedUserPermissions(prev => prev.filter(k => !catKeys.includes(k)));
+    } else {
+      setSelectedUserPermissions(prev => Array.from(new Set([...prev, ...catKeys])));
+    }
+  };
+
+  const handleSavePermissions = async () => {
+    if (!editingPermissionsUser) return;
+    setIsSavingPermissions(true);
+    setPermissionSaveSuccess("");
+    setPermissionSaveError("");
+
+    try {
+      const userRef = doc(db, "users", editingPermissionsUser.id);
+      await updateDoc(userRef, {
+        role: selectedUserRole,
+        permissions: selectedUserPermissions,
+        updatedAt: new Date().toISOString()
+      });
+
+      // Update current user profile in state if current user was updated
+      if (currentUser?.uid === editingPermissionsUser.id) {
+        setCurrentUserProfile((prev: any) => ({
+          ...(prev || {}),
+          id: editingPermissionsUser.id,
+          role: selectedUserRole,
+          permissions: selectedUserPermissions
+        }));
+      }
+
+      // Update in allUsers list
+      setAllUsers((prev: any[]) =>
+        prev.map((u) =>
+          u.id === editingPermissionsUser.id
+            ? { ...u, role: selectedUserRole, permissions: selectedUserPermissions }
+            : u
+        )
+      );
+
+      // Sync to MySQL backend if active
+      try {
+        await fetch(getApiUrl(`/api/mysql/users/${editingPermissionsUser.id}`), {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            role: selectedUserRole,
+            permissions: selectedUserPermissions
+          })
+        });
+      } catch (_) {}
+
+      setPermissionSaveSuccess(`Permissions for ${editingPermissionsUser.email || editingPermissionsUser.name || "user"} updated successfully!`);
+      setTimeout(() => {
+        setEditingPermissionsUser(null);
+        setPermissionSaveSuccess("");
+      }, 1200);
+    } catch (err: any) {
+      console.error("Save permissions error:", err);
+      setPermissionSaveError(err.message || "Failed to update user permissions.");
+    } finally {
+      setIsSavingPermissions(false);
+    }
+  };
+
+  const handleOpenEditUserModal = (usr: any) => {
+    setEditingUserProfileUser(usr);
+    setIsEditUserModalOpen(true);
+  };
+
+  const handleQuickSendPasswordReset = async (usr: any) => {
+    if (!usr?.email) return;
+    setQuickResetStatus((prev) => ({
+      ...prev,
+      [usr.id]: { loading: true }
+    }));
+    try {
+      const res = await sendUserPasswordResetEmail(usr.email, usr.displayName, usr.id);
+      setQuickResetStatus((prev) => ({
+        ...prev,
+        [usr.id]: { loading: false, success: res.message || "Reset email sent!" }
+      }));
+      setTimeout(() => {
+        setQuickResetStatus((prev) => ({
+          ...prev,
+          [usr.id]: { loading: false, success: "" }
+        }));
+      }, 6000);
+    } catch (err: any) {
+      setQuickResetStatus((prev) => ({
+        ...prev,
+        [usr.id]: { loading: false, error: err.message || "Failed to send reset email." }
+      }));
+      setTimeout(() => {
+        setQuickResetStatus((prev) => ({
+          ...prev,
+          [usr.id]: { loading: false, error: "" }
+        }));
+      }, 6000);
+    }
+  };
+
+  const hasAccessToTab = (tabId: string) => {
+    // Personal account tabs always accessible to everyone logged in
+    if (tabId === "profile" || tabId === "history" || tabId === "wishlist" || tabId === "tracker") {
+      return true;
+    }
+    // Full system administrators have unrestricted access to all operational & system panels
+    if (isSysAdmin || effectiveRole === "admin" || userRole === "admin") {
+      return true;
+    }
+    // Custom assigned permissions overrides (if non-empty array)
+    if (Array.isArray(currentUserProfile?.permissions) && currentUserProfile.permissions.length > 0) {
+      return currentUserProfile.permissions.includes(tabId);
+    }
+    if (Array.isArray((currentUser as any)?.permissions) && (currentUser as any).permissions.length > 0) {
+      return (currentUser as any).permissions.includes(tabId);
+    }
+    // Role default permissions fallback
+    const defaults = ROLE_DEFAULT_PERMISSIONS[effectiveRole] || [];
+    return defaults.includes(tabId);
+  };
   
   // Real-time pipeline order logs
   const [allOrders, setAllOrders] = useState<any[]>([]);
@@ -244,7 +590,7 @@ export default function DedicatedDashboard({
 
   // Load Instagram configuration
   useEffect(() => {
-    if (currentUser && (userRole === "admin" || userRole === "developer")) {
+    if (currentUser && (isSysAdmin || effectiveRole === "admin" || effectiveRole === "developer" || userRole === "admin" || userRole === "developer")) {
       const unsub = onSnapshot(doc(db, "settings", "instagram"), (docSnap) => {
         if (docSnap.exists()) {
           const data = docSnap.data();
@@ -257,11 +603,11 @@ export default function DedicatedDashboard({
       });
       return () => unsub();
     }
-  }, [currentUser, userRole]);
+  }, [currentUser, userRole, isSysAdmin, effectiveRole]);
 
   // Load current Instagram posts in database
   useEffect(() => {
-    if (currentUser && (userRole === "admin" || userRole === "developer")) {
+    if (currentUser && (isSysAdmin || effectiveRole === "admin" || effectiveRole === "developer" || userRole === "admin" || userRole === "developer")) {
       const q = query(collection(db, "instagram_posts"));
       const unsubscribe = onSnapshot(q, (snapshot) => {
         const posts: any[] = [];
@@ -280,7 +626,7 @@ export default function DedicatedDashboard({
       });
       return () => unsubscribe();
     }
-  }, [currentUser, userRole]);
+  }, [currentUser, userRole, isSysAdmin, effectiveRole]);
 
   // OPAY SECURE GATEWAY CONFIGURATION FOR ADMINS
   const [opayMerchantId, setOpayMerchantId] = useState("");
@@ -293,7 +639,7 @@ export default function DedicatedDashboard({
 
   // Load OPay settings config
   useEffect(() => {
-    if (currentUser && (userRole === "admin" || userRole === "developer")) {
+    if (currentUser && (isSysAdmin || effectiveRole === "admin" || effectiveRole === "developer" || userRole === "admin" || userRole === "developer")) {
       const unsub = onSnapshot(doc(db, "settings", "opay"), (docSnap) => {
         if (docSnap.exists()) {
           const data = docSnap.data();
@@ -441,11 +787,11 @@ export default function DedicatedDashboard({
   };
 
   useEffect(() => {
-    if (currentUser && userRole === "admin" && activeTab === "mysql_panel") {
+    if (currentUser && (isSysAdmin || effectiveRole === "admin" || userRole === "admin") && activeTab === "mysql_panel") {
       setMysqlStatus("loading");
       fetchMySQLStatus();
     }
-  }, [currentUser, userRole, activeTab]);
+  }, [currentUser, userRole, activeTab, isSysAdmin, effectiveRole]);
 
   const handleSaveMySQLConfig = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -724,7 +1070,7 @@ export default function DedicatedDashboard({
 
   // Custom Image observer inside dashboard
   useEffect(() => {
-    if (currentUser && userRole === "admin") {
+    if (currentUser && (isSysAdmin || effectiveRole === "admin" || userRole === "admin")) {
       const q = query(collection(db, "assets"));
       const unsubscribe = onSnapshot(q, async (snapshot) => {
         if (snapshot.empty) {
@@ -1255,35 +1601,100 @@ export default function DedicatedDashboard({
 
   // Auto fallback tabs selection safely on load or role shift
   useEffect(() => {
-    if (userRole === "admin") {
+    if (isSysAdmin || effectiveRole === "admin" || userRole === "admin") {
       setActiveTab("users_panel");
-    } else if (userRole === "sales" || userRole === "chef") {
+    } else if (effectiveRole === "sales" || effectiveRole === "chef" || userRole === "sales" || userRole === "chef") {
       setActiveTab("orders_pipeline");
-    } else if (userRole === "menu_lister") {
+    } else if (effectiveRole === "menu_lister" || userRole === "menu_lister") {
       setActiveTab("menus_panel");
-    } else if (userRole === "developer") {
+    } else if (effectiveRole === "developer" || userRole === "developer") {
       setActiveTab("mysql_panel");
     } else {
       setActiveTab("history");
     }
-  }, [userRole]);
+  }, [userRole, effectiveRole, isSysAdmin]);
 
-  // Read users real-time if Admin clearance
+  // Read current user's profile and custom permissions in real-time
   useEffect(() => {
-    if (currentUser && userRole === "admin") {
+    if (currentUser?.uid) {
+      const userRef = doc(db, "users", currentUser.uid);
+      const unsubscribe = onSnapshot(userRef, (docSnap) => {
+        if (docSnap.exists()) {
+          setCurrentUserProfile({ id: docSnap.id, ...docSnap.data() });
+        }
+      }, (err) => {
+        console.warn("Current user profile listener error:", err);
+      });
+      return () => unsubscribe();
+    }
+  }, [currentUser?.uid]);
+
+  // Helper to fetch directory users from MySQL & Firestore
+  const fetchUsersList = async () => {
+    try {
+      const res = await fetch(getApiUrl("/api/mysql/users/all"));
+      if (res.ok) {
+        const mysqlUsers = await res.json();
+        if (Array.isArray(mysqlUsers) && mysqlUsers.length > 0) {
+          setAllUsers((prev) => {
+            const map = new Map<string, any>();
+            prev.forEach((u) => map.set(u.id || u.uid, u));
+            mysqlUsers.forEach((u) => {
+              const key = u.uid || u.id;
+              map.set(key, { ...(map.get(key) || {}), id: key, ...u });
+            });
+            return Array.from(map.values());
+          });
+        }
+      }
+    } catch (err) {
+      console.warn("MySQL users fetch notice:", err);
+    }
+  };
+
+  // Read users real-time if Admin or privileged clearance
+  useEffect(() => {
+    if (!currentUser) return;
+    if (!isSysAdmin && effectiveRole !== "admin" && userRole !== "admin") return;
+
+    let isMounted = true;
+
+    // 1. Fetch from MySQL immediately
+    fetchUsersList();
+
+    // 2. Listen to Firestore collection in real-time
+    let unsubscribe: (() => void) | null = null;
+    try {
       const q = query(collection(db, "users"));
-      const unsubscribe = onSnapshot(q, (snapshot) => {
+      unsubscribe = onSnapshot(q, (snapshot) => {
+        if (!isMounted) return;
         const tempUsers: any[] = [];
         snapshot.forEach((docSnap) => {
           tempUsers.push({ id: docSnap.id, ...docSnap.data() });
         });
-        setAllUsers(tempUsers);
+        setAllUsers((prev) => {
+          const map = new Map<string, any>();
+          prev.forEach((u) => map.set(u.id || u.uid, u));
+          tempUsers.forEach((u) => {
+            const key = u.id || u.uid;
+            map.set(key, { ...(map.get(key) || {}), ...u, id: key });
+          });
+          return Array.from(map.values());
+        });
       }, (err) => {
-        console.error("User list reading permission denied:", err);
+        console.warn("Firestore user list notice:", err);
+        fetchUsersList();
       });
-      return () => unsubscribe();
+    } catch (fsErr) {
+      console.warn("Firestore user query catch:", fsErr);
+      fetchUsersList();
     }
-  }, [currentUser, userRole]);
+
+    return () => {
+      isMounted = false;
+      if (unsubscribe) unsubscribe();
+    };
+  }, [currentUser?.uid, isSysAdmin, effectiveRole, userRole]);
 
   // Read global pipeline orders real-time if privileged staff clearance
   useEffect(() => {
@@ -1302,7 +1713,7 @@ export default function DedicatedDashboard({
       });
       return () => unsubscribe();
     }
-  }, [currentUser, userRole, isPrivileged]);
+  }, [currentUser, userRole, isPrivileged, isSysAdmin, effectiveRole]);
 
   // Read riders real-time for dropdown selection
   useEffect(() => {
@@ -1781,319 +2192,398 @@ export default function DedicatedDashboard({
            (ord.address || "").toLowerCase().includes(s);
   });
 
-  return (
-    <div className="bg-white min-h-screen text-neutral-900 pb-24" id="dedicated-dashboard-spa">
-      {/* Visual Ambient Banner */}
-      <div className="relative h-64 w-full overflow-hidden bg-neutral-900 border-b border-neutral-200">
-        <div className="absolute inset-0 bg-gradient-to-t from-white via-white/40 to-black/60 z-10" />
-        
-        {/* Decorative image */}
-        <img 
-          src={gourmetDrinks} 
-          alt="Dining banner background" 
-          className="w-full h-full object-cover scale-105 filter blur-xs"
-        />
+  interface NavItem {
+    id: string;
+    label: string;
+    icon: string;
+    badge?: any;
+    badgeColor?: string;
+  }
 
-        {/* Back Link Overlay */}
-        <div className="absolute top-10 left-[5%] lg:left-[10%] z-20">
-          <button
-            onClick={onBackToLobby}
-            className="flex items-center gap-2 px-3 py-1.5 bg-black/85 border border-amber-500/50 hover:border-amber-500/50 text-amber-500 hover:text-amber-500 transition-all font-mono text-[9px] uppercase tracking-widest cursor-pointer"
-            id="dashboard-back-lobby-btn"
-          >
-            <ArrowLeft className="w-3.5 h-3.5" />
-            <span>Return to Menu</span>
-          </button>
+  interface NavSection {
+    id: string;
+    title: string;
+    items: NavItem[];
+  }
+
+  const navSections: NavSection[] = [
+    {
+      id: "my_account",
+      title: "My Account",
+      items: [
+        { id: "profile", label: "My Profile & Security", icon: "👤" },
+        { id: "history", label: userRole === "user" ? "My Orders" : "My Orders (Personal)", icon: "📜" },
+        { id: "wishlist", label: "Wishlist Bookmarks", icon: "💖", badge: favorites.length > 0 ? favorites.length : null },
+        { id: "tracker", label: "Order Tracker", icon: "🚚" }
+      ]
+    },
+    {
+      id: "operations",
+      title: "Operations & Kitchen",
+      items: [
+        { id: "orders_pipeline", label: "Orders Pipeline", icon: "🛍️", badge: allOrders.length > 0 ? allOrders.length : null, badgeColor: "bg-amber-500 text-black" },
+        { id: "whatsapp_orders", label: "WhatsApp Orders", icon: "💬", badge: allOrders.filter(o => o.paymentMethod === "whatsapp" || o.type === "whatsapp").length || null, badgeColor: "bg-emerald-500 text-black" }
+      ]
+    },
+    {
+      id: "catalog",
+      title: "Menu & Catalog",
+      items: [
+        { id: "menus_panel", label: "Dynamic Menu", icon: "🍜" },
+        { id: "categories_panel", label: "Category Manager", icon: "📂" },
+        { id: "images_panel", label: "Image Asset Library", icon: "🖼️", badge: customImages.length + PRESET_IMAGES.length }
+      ]
+    },
+    {
+      id: "logistics",
+      title: "Logistics & Fleet",
+      items: [
+        { id: "shipping_panel", label: "Delivery Locations", icon: "📍" },
+        { id: "riders_panel", label: "Dispatch Riders", icon: "🚴", badge: ridersList.length || null }
+      ]
+    },
+    {
+      id: "growth",
+      title: "Marketing & Growth",
+      items: [
+        { id: "coupons_panel", label: "Coupons & Discounts", icon: "🎟️" },
+        { id: "analytics_panel", label: "Analytics & PDF Export", icon: "📊" }
+      ]
+    },
+    {
+      id: "crm",
+      title: "Communications",
+      items: [
+        { id: "support_panel", label: "Support Desk", icon: "🎧" },
+        { id: "instagram_panel", label: "Instagram Sync", icon: "📸" }
+      ]
+    },
+    {
+      id: "admin",
+      title: "System & Access",
+      items: [
+        { id: "users_panel", label: "User Directory & Access", icon: "👥", badge: allUsers.length || null },
+        { id: "opay_panel", label: "OPay Gateway", icon: "💳" },
+        { id: "mysql_panel", label: "MySQL Console", icon: "🗄️" }
+      ]
+    }
+  ];
+
+  const currentNavInfo = (() => {
+    for (const section of navSections) {
+      const match = section.items.find(it => it.id === activeTab);
+      if (match) {
+        return { sectionTitle: section.title, itemLabel: match.label, itemIcon: match.icon };
+      }
+    }
+    return { sectionTitle: "Operations Portal", itemLabel: activeTab, itemIcon: "⚡" };
+  })();
+
+  return (
+    <div className="bg-neutral-50 min-h-screen text-neutral-900 flex flex-col lg:flex-row relative font-sans selection:bg-amber-500 selection:text-white antialiased" id="dedicated-dashboard-spa">
+      
+      {/* Mobile Drawer Backdrop */}
+      {mobileSidebarOpen && (
+        <div 
+          className="fixed inset-0 bg-black/40 backdrop-blur-xs z-40 lg:hidden"
+          onClick={() => setMobileSidebarOpen(false)}
+        />
+      )}
+
+      {/* SIDEBAR (Responsive drawer on mobile, sticky on desktop) */}
+      <aside 
+        className={`fixed lg:sticky top-0 left-0 h-screen z-50 flex flex-col justify-between bg-white border-r border-neutral-200 transition-all duration-300 ${
+          mobileSidebarOpen ? "translate-x-0 w-72" : "-translate-x-full lg:translate-x-0"
+        } ${sidebarCollapsed ? "lg:w-20" : "lg:w-72"} shrink-0 shadow-xs`}
+      >
+        {/* Sidebar Header with Official Brand Logo */}
+        <div className="p-4 border-b border-neutral-200 flex items-center justify-between bg-white">
+          <div className={`flex items-center gap-3 overflow-hidden ${sidebarCollapsed ? "lg:justify-center w-full" : ""}`}>
+            {/* Upside Logo replacing UP */}
+            <button
+              onClick={onBackToLobby}
+              className="cursor-pointer group flex items-center gap-2.5 text-left"
+              title="Return to Upside Menu"
+            >
+              {branding?.logoSvg ? (
+                <div 
+                  className="w-10 h-10 overflow-hidden flex items-center justify-center p-0 flex-shrink-0 group-hover:scale-105 transition-transform"
+                  style={{ contentVisibility: "auto" }}
+                  dangerouslySetInnerHTML={{ __html: branding.logoSvg }}
+                />
+              ) : (
+                <div className="w-9 h-9 bg-neutral-900 text-amber-400 border border-neutral-800 flex items-center justify-center shrink-0 font-black text-sm tracking-wider rounded-xs">
+                  UP
+                </div>
+              )}
+
+              {!sidebarCollapsed && (
+                <div className="text-left truncate">
+                  <div className="flex items-center gap-1">
+                    <span className="text-xs font-black tracking-wider text-neutral-900 uppercase">
+                      Upside
+                    </span>
+                    <span className="w-1.5 h-1.5 bg-amber-500 rounded-full" />
+                  </div>
+                  <span className="text-[10px] font-mono text-neutral-500 font-bold block truncate uppercase">
+                    {userRole} console
+                  </span>
+                </div>
+              )}
+            </button>
+          </div>
+
+          <div className="flex items-center gap-1">
+            {/* Desktop Collapse Toggle */}
+            <button
+              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+              className="hidden lg:flex p-1.5 text-neutral-500 hover:text-neutral-900 hover:bg-neutral-100 transition-colors cursor-pointer rounded-xs"
+              title={sidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+            >
+              {sidebarCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
+            </button>
+            {/* Mobile Close Button */}
+            <button
+              onClick={() => setMobileSidebarOpen(false)}
+              className="lg:hidden p-1.5 text-neutral-500 hover:text-neutral-900 hover:bg-neutral-100 transition-colors rounded-xs"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
-        {/* User Identity Overlay */}
-        <div className="absolute bottom-6 left-[5%] lg:left-[10%] z-20 text-left">
-          {currentUser && (
-            <div className="space-y-1">
-              <span className="text-[10px] tracking-[0.3em] text-amber-600 font-mono font-bold uppercase block">
-                {userRole.toUpperCase()} OPERATIONS PORTAL
-              </span>
-              <h1 className="text-2xl md:text-3xl font-extrabold font-mono text-neutral-950 tracking-wide uppercase">
-                Welcome back, {currentUser.displayName || currentUser.email?.split("@")[0] || "Staff Member"}
-              </h1>
-              <p className="text-xs text-neutral-800 font-mono">
-                {userRole === "admin" && "Total system clearance. You can manage user roles and add menu options dynamically."}
-                {userRole === "sales" && "Review user orders, transition cook pipelines, and handle client dispatch stages."}
-                {userRole === "chef" && "Elite kitchen monitor tracker. Review and update cooking preparations."}
-                {userRole === "user" && "Manage your historical orders, active deliveries, and saved items in Lagos."}
+        {/* Sidebar Nav Items (Scrollable with Accordion Dropdowns) */}
+        <div className="flex-1 overflow-y-auto p-3 space-y-3 text-left">
+          {navSections.map((section) => {
+            const visibleItems = section.items.filter((it) => hasAccessToTab(it.id));
+            if (visibleItems.length === 0) return null;
+
+            const isExpanded = expandedSections[section.id] !== false;
+
+            return (
+              <div key={section.id} className="border border-neutral-150 rounded-xs overflow-hidden bg-neutral-50/50">
+                {!sidebarCollapsed ? (
+                  // Accordion Section Header Button
+                  <button
+                    type="button"
+                    onClick={() => handleToggleSection(section.id)}
+                    className="w-full flex items-center justify-between px-3 py-2 bg-neutral-100/70 hover:bg-neutral-200/70 transition-colors cursor-pointer text-left border-b border-neutral-150"
+                  >
+                    <span className="text-[10px] font-mono font-bold tracking-wider text-neutral-700 uppercase">
+                      {section.title}
+                    </span>
+                    <span className="text-neutral-500">
+                      {isExpanded ? (
+                        <ChevronDown className="w-3.5 h-3.5" />
+                      ) : (
+                        <ChevronRight className="w-3.5 h-3.5" />
+                      )}
+                    </span>
+                  </button>
+                ) : (
+                  <div className="px-2 py-1 text-center border-b border-neutral-200">
+                    <span className="text-[8px] font-mono font-bold text-neutral-400 uppercase">•••</span>
+                  </div>
+                )}
+
+                {/* Sub-Items dropdown list (Dropped down by default) */}
+                {(isExpanded || sidebarCollapsed) && (
+                  <div className="p-1 space-y-0.5 bg-white">
+                    {visibleItems.map((item) => {
+                      const isActive = activeTab === item.id;
+                      return (
+                        <button
+                          key={item.id}
+                          onClick={() => {
+                            setActiveTab(item.id);
+                            setMobileSidebarOpen(false);
+                          }}
+                          className={`w-full flex items-center justify-between px-2.5 py-2 text-xs font-mono transition-all cursor-pointer rounded-xs text-left ${
+                            isActive
+                              ? "bg-amber-500 text-white font-bold shadow-xs border-l-3 border-amber-700"
+                              : "text-neutral-700 hover:text-neutral-950 hover:bg-neutral-100"
+                          } ${sidebarCollapsed ? "lg:justify-center lg:px-2" : ""}`}
+                          title={sidebarCollapsed ? item.label : undefined}
+                        >
+                          <div className="flex items-center gap-2.5 truncate">
+                            <span className="text-sm shrink-0">{item.icon}</span>
+                            {!sidebarCollapsed && <span className="truncate font-semibold">{item.label}</span>}
+                          </div>
+                          {!sidebarCollapsed && item.badge !== undefined && item.badge !== null && (
+                            <span className={`text-[9px] font-mono font-bold px-1.5 py-0.5 rounded-full ml-2 shrink-0 ${
+                              isActive 
+                                ? "bg-white text-neutral-950" 
+                                : "bg-neutral-200 text-neutral-800"
+                            }`}>
+                              {item.badge}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Sidebar Footer */}
+        <div className="p-3 border-t border-neutral-200 bg-white space-y-2 text-left">
+          {currentUser && !sidebarCollapsed && (
+            <div className="px-2.5 py-2 bg-neutral-50 border border-neutral-200 rounded-xs space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-mono text-neutral-900 font-bold truncate">
+                  {currentUser.displayName || currentUser.email?.split("@")[0] || "Staff"}
+                </span>
+                <span className={`text-[8.5px] font-mono uppercase font-black px-1.5 py-0.5 border rounded-xs ${
+                  userRole === "admin" 
+                    ? "bg-rose-50 text-rose-700 border-rose-200" 
+                    : userRole === "sales" 
+                    ? "bg-amber-50 text-amber-700 border-amber-200" 
+                    : userRole === "chef"
+                    ? "bg-purple-50 text-purple-700 border-purple-200"
+                    : "bg-neutral-100 text-neutral-700 border-neutral-200"
+                }`}>
+                  {userRole}
+                </span>
+              </div>
+              <p className="text-[9.5px] font-mono text-neutral-500 truncate">
+                {currentUser.email}
               </p>
             </div>
           )}
+
+          <div className={`flex items-center gap-1.5 ${sidebarCollapsed ? "flex-col" : ""}`}>
+            <button
+              onClick={onBackToLobby}
+              className={`flex items-center justify-center gap-1.5 px-3 py-2 bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-900 font-mono text-[10px] uppercase font-bold tracking-wider transition-colors cursor-pointer rounded-xs ${
+                sidebarCollapsed ? "w-full" : "flex-1"
+              }`}
+              title="Return to Upside Menu Lobby"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              {!sidebarCollapsed && <span>Return to Menu</span>}
+            </button>
+            <button
+              onClick={onLogout}
+              className="p-2 bg-neutral-100 hover:bg-rose-50 border border-neutral-200 hover:border-rose-300 text-neutral-600 hover:text-rose-700 transition-colors cursor-pointer rounded-xs"
+              title="Logout session"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
+          </div>
         </div>
-      </div>
+      </aside>
 
-      <div className="w-full max-w-none px-[5%] lg:px-[10%] mt-8 space-y-8">
-        {currentUser ? (
-          <>
-            {/* Standard Account KPI Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" id="account-metrics-dashboard-grid">
-              
-              {/* Metric 1 */}
-              <div className="bg-neutral-55 border border-neutral-200 p-5 flex flex-col justify-between text-left relative overflow-hidden group transition-all">
-                <div className="absolute top-4 right-4 text-neutral-300">
-                  <UserIcon className="w-8 h-8" />
-                </div>
-                <span className="text-[9px] font-mono tracking-widest text-neutral-500 uppercase block">Profile Clearance</span>
-                <span className="text-sm font-bold font-mono text-amber-600 uppercase mt-4 block">{userRole}</span>
-                <span className="text-[9px] font-mono text-neutral-500 mt-1 block">Account authority level</span>
-              </div>
-
-              {/* Metric 2 */}
-              <div className="bg-neutral-55 border border-neutral-200 p-5 flex flex-col justify-between text-left relative overflow-hidden group transition-all">
-                <div className="absolute top-4 right-4 text-neutral-300">
-                  <ShoppingBag className="w-8 h-8" />
-                </div>
-                <span className="text-[9px] font-mono tracking-widest text-neutral-500 uppercase block">Wishlist Bookmarks</span>
-                <span className="text-2xl font-black font-mono text-neutral-900 mt-4 block">{favorites.length} <span className="text-xs font-normal text-neutral-500">ITEM(S)</span></span>
-                <span className="text-[9px] font-mono text-neutral-500 mt-1 block">Custom personal choices</span>
-              </div>
-
-              {/* Metric 3 */}
-              <div className="bg-neutral-55 border border-neutral-200 p-5 flex flex-col justify-between text-left relative overflow-hidden group transition-all">
-                <div className="absolute top-4 right-4 text-neutral-300">
-                  <Utensils className="w-8 h-8" />
-                </div>
-                <span className="text-[9px] font-mono tracking-widest text-neutral-500 uppercase block">Preferred Taste</span>
-                <span className="text-sm font-bold font-mono text-amber-600 uppercase truncate mt-4 block">{getFavCategory()}</span>
-                <span className="text-[9px] font-mono text-neutral-500 mt-1 block">Most wishlisted category</span>
-              </div>
-
-              {/* Metric 4 */}
-              <div className="bg-neutral-55 border border-neutral-200 p-5 flex flex-col justify-between text-left relative overflow-hidden group transition-all">
-                <div className="absolute top-4 right-4 text-neutral-300">
-                  <Compass className="w-8 h-8" />
-                </div>
-                <span className="text-[9px] font-mono tracking-widest text-neutral-500 uppercase block">Database Network</span>
-                <span className="text-xs font-bold font-mono text-emerald-600 uppercase mt-4 block">Connected Live</span>
-                <span className="text-[9px] font-mono text-neutral-500 mt-1 block">Zero delay client syncs</span>
+      {/* MAIN WORKSPACE CONTENT */}
+      <main className="flex-1 min-w-0 flex flex-col bg-neutral-50 min-h-screen overflow-y-auto">
+        {/* Top Header Bar for Main Workspace */}
+        <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-xs border-b border-neutral-200 px-4 sm:px-6 py-3 flex items-center justify-between shadow-xs">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setMobileSidebarOpen(true)}
+              className="lg:hidden p-2 bg-white border border-neutral-200 text-neutral-700 hover:text-neutral-900 rounded-xs cursor-pointer shadow-2xs"
+              title="Open Navigation Menu"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
+            
+            <div className="text-left">
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-mono uppercase tracking-widest text-neutral-500 font-semibold">
+                  {currentNavInfo.sectionTitle}
+                </span>
+                <span className="text-neutral-300">/</span>
+                <span className="text-xs font-mono font-bold uppercase tracking-wider text-amber-700 flex items-center gap-1.5">
+                  <span>{currentNavInfo.itemIcon}</span>
+                  <span>{currentNavInfo.itemLabel}</span>
+                </span>
               </div>
             </div>
+          </div>
 
-            {/* Core Workspace double-column containing dynamic tabs based on clearance levels */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-              
-              {/* Dynamic Interactive Panel Workspace */}
-              <div className="lg:col-span-12 space-y-6">
-                
-                {/* Visual Premium Unified Tab Switcher Navigation */}
-                <div className="flex flex-wrap gap-1 border-b border-neutral-200 bg-neutral-150 p-1 font-mono">
-                  {/* Standard Tabs */}
-                  <button
-                    onClick={() => setActiveTab("history")}
-                    className={`px-6 py-3 text-xs tracking-wider uppercase font-bold text-center transition-all cursor-pointer flex items-center gap-1.5 ${
-                      activeTab === "history"
-                        ? "bg-amber-600 text-white"
-                        : "text-neutral-600 hover:text-neutral-900 hover:bg-neutral-200"
-                    }`}
-                  >
-                    📜 My Orders ({userRole === "user" ? "Client" : "Personal"})
-                  </button>
-                  <button
-                    onClick={() => setActiveTab("wishlist")}
-                    className={`px-6 py-3 text-xs tracking-wider uppercase font-bold text-center transition-all cursor-pointer flex items-center gap-1.5 ${
-                      activeTab === "wishlist"
-                        ? "bg-amber-600 text-white"
-                        : "text-neutral-600 hover:text-neutral-900 hover:bg-neutral-200"
-                    }`}
-                  >
-                    💖 Wishlist ({favorites.length})
-                  </button>
-                  <button
-                    onClick={() => setActiveTab("tracker")}
-                    className={`px-6 py-3 text-xs tracking-wider uppercase font-bold text-center transition-all cursor-pointer flex items-center gap-1.5 ${
-                      activeTab === "tracker"
-                        ? "bg-amber-600 text-white"
-                        : "text-neutral-600 hover:text-neutral-900 hover:bg-neutral-200"
-                    }`}
-                  >
-                    🚚 Order Tracker
-                  </button>
+          <div className="flex items-center gap-3">
+            {isMySQLActive && (
+              <span className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-50 border border-emerald-200 text-emerald-700 font-mono text-[9px] uppercase font-bold rounded-xs">
+                <span className="w-1.5 h-1.5 bg-emerald-500 animate-pulse rounded-full" />
+                MySQL Connected
+              </span>
+            )}
+            <button
+              onClick={onBackToLobby}
+              className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-900 font-mono text-[10px] uppercase font-bold tracking-wider transition-colors cursor-pointer rounded-xs"
+            >
+              <ArrowLeft className="w-3 h-3" />
+              <span>Return to Menu</span>
+            </button>
+          </div>
+        </header>
 
-                  {/* Privileged pipeline (Sales, Chef, Admin) */}
-                  {(userRole === "admin" || userRole === "sales" || userRole === "chef") && (
-                    <>
-                      <button
-                        onClick={() => setActiveTab("orders_pipeline")}
-                        className={`px-6 py-3 text-xs tracking-wider uppercase font-bold text-center transition-all cursor-pointer flex items-center gap-1.5 ${
-                          activeTab === "orders_pipeline"
-                            ? "bg-amber-600 text-white border-l-2 border-amber-400"
-                            : "text-amber-600 hover:text-amber-500 hover:bg-amber-100"
-                        }`}
-                      >
-                        🛍️ Orders Pipeline ({allOrders.length})
-                      </button>
-                      <button
-                        onClick={() => setActiveTab("whatsapp_orders")}
-                        className={`px-6 py-3 text-xs tracking-wider uppercase font-bold text-center transition-all cursor-pointer flex items-center gap-1.5 ${
-                          activeTab === "whatsapp_orders"
-                            ? "bg-amber-600 text-white border-l-2 border-amber-400"
-                            : "text-neutral-600 hover:text-neutral-900 hover:bg-neutral-200"
-                        }`}
-                      >
-                        💬 WhatsApp Orders ({allOrders.filter(o => o.paymentMethod === "whatsapp" || o.type === "whatsapp").length})
-                      </button>
-                    </>
-                  )}
-
-                  {/* Admin-only user directory */}
-                  {userRole === "admin" && (
-                    <button
-                      onClick={() => setActiveTab("users_panel")}
-                      className={`px-6 py-3 text-xs tracking-wider uppercase font-bold text-center transition-all cursor-pointer flex items-center gap-1.5 ${
-                        activeTab === "users_panel"
-                          ? "bg-amber-600 text-white"
-                          : "text-neutral-600 hover:text-neutral-900 hover:bg-neutral-200"
-                      }`}
-                    >
-                      👥 User Directory ({allUsers.length})
-                    </button>
-                  )}
-
-                  {/* Admin or Menu Lister menu managers */}
-                  {(userRole === "admin" || userRole === "menu_lister") && (
-                    <>
-                      <button
-                        onClick={() => setActiveTab("menus_panel")}
-                        className={`px-6 py-3 text-xs tracking-wider uppercase font-bold text-center transition-all cursor-pointer flex items-center gap-1.5 ${
-                          activeTab === "menus_panel"
-                            ? "bg-amber-600 text-white"
-                            : "text-neutral-600 hover:text-neutral-900 hover:bg-neutral-200"
-                        }`}
-                      >
-                        🍜 Dynamic Menu Manager
-                      </button>
-                      <button
-                        onClick={() => setActiveTab("categories_panel")}
-                        className={`px-6 py-3 text-xs tracking-wider uppercase font-bold text-center transition-all cursor-pointer flex items-center gap-1.5 ${
-                          activeTab === "categories_panel"
-                            ? "bg-amber-600 text-white"
-                            : "text-neutral-600 hover:text-neutral-900 hover:bg-neutral-200"
-                        }`}
-                      >
-                        📂 Category Manager
-                      </button>
-                      <button
-                        onClick={() => setActiveTab("images_panel")}
-                        className={`px-6 py-3 text-xs tracking-wider uppercase font-bold text-center transition-all cursor-pointer flex items-center gap-1.5 ${
-                          activeTab === "images_panel"
-                            ? "bg-amber-600 text-white"
-                            : "text-neutral-600 hover:text-neutral-900 hover:bg-neutral-200"
-                      }`}
-                    >
-                      🖼️ Image Library ({customImages.length + PRESET_IMAGES.length})
-                    </button>
-                    </>
-                  )}
-
-                  {/* Admin or Developer system panels */}
-                  {(userRole === "admin" || userRole === "developer") && (
-                    <>
-                      <button
-                        onClick={() => setActiveTab("instagram_panel")}
-                        className={`px-6 py-3 text-xs tracking-wider uppercase font-bold text-center transition-all cursor-pointer flex items-center gap-1.5 ${
-                          activeTab === "instagram_panel"
-                            ? "bg-amber-600 text-white"
-                            : "text-neutral-600 hover:text-neutral-900 hover:bg-neutral-200"
-                        }`}
-                      >
-                        📸 Instagram Integration
-                      </button>
-                      <button
-                        onClick={() => setActiveTab("opay_panel")}
-                        className={`px-6 py-3 text-xs tracking-wider uppercase font-bold text-center transition-all cursor-pointer flex items-center gap-1.5 ${
-                          activeTab === "opay_panel"
-                            ? "bg-amber-600 text-white"
-                            : "text-neutral-600 hover:text-neutral-900 hover:bg-neutral-200"
-                        }`}
-                      >
-                        💳 OPay Gateway Settings
-                      </button>
-                    </>
-                  )}
-
-                  {/* Admin or Developer MySQL console */}
-                  {(userRole === "admin" || userRole === "developer") && (
-                    <button
-                      onClick={() => setActiveTab("mysql_panel")}
-                      className={`px-6 py-3 text-xs tracking-wider uppercase font-bold text-center transition-all cursor-pointer flex items-center gap-1.5 ${
-                        activeTab === "mysql_panel"
-                          ? "bg-amber-600 text-white"
-                          : "text-neutral-600 hover:text-neutral-900 hover:bg-neutral-200"
-                      }`}
-                    >
-                      🗄️ MySQL Database Console
-                    </button>
-                  )}
-
-                  {/* Admin-only shipping & riders */}
-                  {userRole === "admin" && (
-                    <>
-                      <button
-                        onClick={() => setActiveTab("shipping_panel")}
-                        className={`px-6 py-3 text-xs tracking-wider uppercase font-bold text-center transition-all cursor-pointer flex items-center gap-1.5 ${
-                          activeTab === "shipping_panel"
-                            ? "bg-amber-600 text-white"
-                            : "text-neutral-600 hover:text-neutral-900 hover:bg-neutral-200"
-                        }`}
-                        id="tab-btn-shipping-manager"
-                      >
-                        🚚 Delivery Locations
-                      </button>
-                      <button
-                        onClick={() => setActiveTab("riders_panel")}
-                        className={`px-6 py-3 text-xs tracking-wider uppercase font-bold text-center transition-all cursor-pointer flex items-center gap-1.5 ${
-                          activeTab === "riders_panel"
-                            ? "bg-amber-600 text-white"
-                            : "text-neutral-600 hover:text-neutral-900 hover:bg-neutral-200"
-                        }`}
-                      >
-                        🚴 Logistics & Riders
-                      </button>
-                    </>
-                  )}
-
-                  {/* Admin or Sales Panels */}
-                  {(userRole === "admin" || userRole === "sales") && (
-                    <>
-                      <button
-                        onClick={() => setActiveTab("analytics_panel")}
-                        className={`px-6 py-3 text-xs tracking-wider uppercase font-bold text-center transition-all cursor-pointer flex items-center gap-1.5 ${
-                          activeTab === "analytics_panel"
-                            ? "bg-amber-600 text-white"
-                            : "text-neutral-600 hover:text-neutral-900 hover:bg-neutral-200"
-                        }`}
-                      >
-                        📊 Analytics & Conversions
-                      </button>
-                      <button
-                        onClick={() => setActiveTab("support_panel")}
-                        className={`px-6 py-3 text-xs tracking-wider uppercase font-bold text-center transition-all cursor-pointer flex items-center gap-1.5 ${
-                          activeTab === "support_panel"
-                            ? "bg-amber-600 text-white"
-                            : "text-neutral-600 hover:text-neutral-900 hover:bg-neutral-200"
-                        }`}
-                      >
-                        🎧 Support Desk Chats
-                      </button>
-                      <button
-                        onClick={() => setActiveTab("coupons_panel")}
-                        className={`px-6 py-3 text-xs tracking-wider uppercase font-bold text-center transition-all cursor-pointer flex items-center gap-1.5 ${
-                          activeTab === "coupons_panel"
-                            ? "bg-amber-600 text-white"
-                            : "text-neutral-600 hover:text-neutral-900 hover:bg-neutral-200"
-                        }`}
-                        id="tab-btn-coupon-manager"
-                      >
-                        🎟️ Coupons & Discounts
-                      </button>
-                    </>
-                  )}
+        {/* Content Workspace */}
+        <div className="p-4 sm:p-6 lg:p-8 space-y-6">
+          {currentUser ? (
+            <>
+              {/* Quick Metrics Bar */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5" id="account-metrics-dashboard-grid">
+                <div className="bg-white border border-neutral-200 p-4 sm:p-5 flex flex-col justify-between text-left shadow-xs rounded-xs">
+                  <span className="text-[10px] font-mono tracking-widest text-neutral-500 uppercase font-semibold block">Authority Clearance</span>
+                  <span className="text-sm font-bold font-mono text-amber-700 uppercase mt-2 block">{userRole}</span>
                 </div>
+                <div className="bg-white border border-neutral-200 p-4 sm:p-5 flex flex-col justify-between text-left shadow-xs rounded-xs">
+                  <span className="text-[10px] font-mono tracking-widest text-neutral-500 uppercase font-semibold block">Wishlist Bookmarks</span>
+                  <span className="text-sm font-bold font-mono text-neutral-900 mt-2 block">{favorites.length} Saved</span>
+                </div>
+                <div className="bg-white border border-neutral-200 p-4 sm:p-5 flex flex-col justify-between text-left shadow-xs rounded-xs">
+                  <span className="text-[10px] font-mono tracking-widest text-neutral-500 uppercase font-semibold block">Active Orders Pipeline</span>
+                  <span className="text-sm font-bold font-mono text-amber-700 mt-2 block">{allOrders.length} Processed</span>
+                </div>
+                <div className="bg-white border border-neutral-200 p-4 sm:p-5 flex flex-col justify-between text-left shadow-xs rounded-xs">
+                  <span className="text-[10px] font-mono tracking-widest text-neutral-500 uppercase font-semibold block">System State</span>
+                  <span className="text-sm font-bold font-mono text-emerald-700 mt-2 flex items-center gap-1.5">
+                    <span className="w-2 h-2 bg-emerald-500 rounded-full animate-ping" />
+                    Live Sync Active
+                  </span>
+                </div>
+              </div>
+
+              {/* Dynamic Active Tab View Container */}
+              <div className="space-y-6">
+                {!hasAccessToTab(activeTab) ? (
+                  <div className="p-12 text-center bg-white border border-neutral-200 shadow-xs space-y-4 rounded-xs">
+                    <ShieldAlert className="w-10 h-10 text-amber-600 mx-auto" />
+                    <h3 className="text-base font-mono font-bold uppercase text-neutral-900">Access Clearance Required</h3>
+                    <p className="text-xs font-mono text-neutral-600 max-w-md mx-auto">
+                      You do not have sufficient permissions to view the "{activeTab}" module. Please contact a system administrator to request access.
+                    </p>
+                    <button
+                      onClick={() => setActiveTab("history")}
+                      className="px-4 py-2 bg-amber-600 text-white font-mono text-xs font-bold uppercase tracking-wider cursor-pointer hover:bg-amber-700 transition-colors rounded-xs"
+                    >
+                      Return to My Orders
+                    </button>
+                  </div>
+                ) : (
+                  <>
+
+                {/* TAB 0: USER PROFILE & IDENTITY MANAGEMENT */}
+                {activeTab === "profile" && (
+                  <div className="bg-[#121212] border border-neutral-850 p-6 sm:p-8 space-y-6 text-left" id="dashboard-profile-tab">
+                    <UserProfilePanel
+                      currentUser={currentUser}
+                      userRole={currentUserProfile?.role || userRole}
+                      userProfileData={currentUserProfile}
+                      onProfileUpdated={(updated) => {
+                        setCurrentUserProfile((prev: any) => ({
+                          ...(prev || {}),
+                          displayName: updated.displayName
+                        }));
+                      }}
+                      onNavigateToTab={(tabId) => setActiveTab(tabId)}
+                      onLogout={onLogout}
+                    />
+                  </div>
+                )}
 
                 {/* TAB 1: USER ORDER HISTORY */}
                 {activeTab === "history" && (
@@ -2195,7 +2685,7 @@ export default function DedicatedDashboard({
                 )}
 
                 {/* TAB 3: ORDER PIPELINE MONITOR (Sales/Chef/Admin) */}
-                {isPrivileged && activeTab === "orders_pipeline" && (
+                {activeTab === "orders_pipeline" && (
                   <div className="bg-[#121212] border border-neutral-850 p-6 space-y-6 text-left" id="dashboard-pipeline-tab">
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-neutral-800 pb-4">
                       <div>
@@ -2771,7 +3261,7 @@ export default function DedicatedDashboard({
                 )}
 
                 {/* TAB 3.5: WHATSAPP ORDERS MANAGER (Sales/Chef/Admin) */}
-                {isPrivileged && activeTab === "whatsapp_orders" && (
+                {activeTab === "whatsapp_orders" && (
                   <div className="bg-[#121212] border border-neutral-850 p-6 space-y-6 text-left" id="dashboard-whatsapp-orders-tab">
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-neutral-800 pb-4">
                       <div>
@@ -2980,106 +3470,257 @@ export default function DedicatedDashboard({
                 )}
 
                 {/* TAB 4: USER DIRECTORY ROLE ASSIGNER (Admins Only) */}
-                {userRole === "admin" && activeTab === "users_panel" && (
+                {activeTab === "users_panel" && (
                   <div className="bg-[#121212] border border-neutral-850 p-6 space-y-6 text-left" id="dashboard-users-tab">
-                    <div className="border-b border-neutral-800 pb-3 flex justify-between items-center">
+                    <div className="border-b border-neutral-800 pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                       <div>
                         <h2 className="text-xs font-mono font-bold tracking-widest text-amber-500 uppercase flex items-center gap-2">
-                          <span>👥 Platform User Directory</span>
+                          <span>👥 Platform User Directory &amp; Roles</span>
                           <span className="px-2 py-0.5 bg-neutral-800 text-[9px] text-neutral-400 rounded-none tracking-normal font-normal">System Admin Only</span>
                         </h2>
-                        <p className="text-[10px] text-neutral-500 font-sans mt-0.5">Assign, review, and adjust staff authority clearances.</p>
+                        <p className="text-[10px] text-neutral-500 font-sans mt-0.5">
+                          Create staff accounts, assign functional roles, grant granular security clearances, and monitor active logins.
+                        </p>
                       </div>
-                      <span className="text-[9px] font-mono text-neutral-500 uppercase font-semibold block">{allUsers.length} total users</span>
+                      
+                      <div className="flex items-center gap-3">
+                        <span className="text-[10px] font-mono text-neutral-400 uppercase font-semibold hidden md:inline">
+                          {allUsers.length} total users
+                        </span>
+                        <button
+                          onClick={() => setIsCreateUserModalOpen(true)}
+                          className="px-4 py-2.5 bg-amber-500 hover:bg-amber-400 text-black font-mono text-xs font-bold uppercase tracking-wider transition-colors flex items-center gap-2 cursor-pointer shadow-md"
+                          id="admin-create-user-header-btn"
+                        >
+                          <UserPlus className="w-4 h-4" />
+                          <span>+ Create New User</span>
+                        </button>
+                      </div>
                     </div>
 
-                    {/* Search Field */}
-                    <div className="relative max-w-md">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-600" />
-                      <input
-                        type="text"
-                        placeholder="Search users by name, email, or role..."
-                        value={userSearchText}
-                        onChange={(e) => setUserSearchText(e.target.value)}
-                        className="w-full bg-neutral-950 border border-neutral-850 p-2.5 pl-10 text-xs font-mono placeholder:text-neutral-600 focus:outline-none focus:border-amber-500/50"
-                      />
+                    {/* Search Field & Stats Row */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="relative flex-1 max-w-md">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-600" />
+                        <input
+                          type="text"
+                          placeholder="Search users by name, email, or role..."
+                          value={userSearchText}
+                          onChange={(e) => setUserSearchText(e.target.value)}
+                          className="w-full bg-neutral-950 border border-neutral-850 p-2.5 pl-10 text-xs font-mono placeholder:text-neutral-600 focus:outline-none focus:border-amber-500/50"
+                        />
+                      </div>
+                      <span className="text-[9px] font-mono text-neutral-500 uppercase font-semibold md:hidden">
+                        Showing {filteredUsers.length} of {allUsers.length} users
+                      </span>
                     </div>
 
                     <div className="overflow-x-auto border border-neutral-800" id="users-directory-table-node">
                       <table className="w-full text-left border-collapse font-mono text-[11px]">
                         <thead>
                           <tr className="bg-neutral-900 text-neutral-400 uppercase tracking-widest text-[9px] border-b border-neutral-800 select-none">
-                            <th className="p-3.5">Full Name</th>
-                            <th className="p-3.5">Email Contact</th>
-                            <th className="p-3.5">Access Role</th>
-                            <th className="p-3.5 text-center">Profile State / Actions</th>
-                            <th className="p-3.5 text-center">Change Permission Level</th>
+                            <th className="p-3.5">Staff / User</th>
+                            <th className="p-3.5">Assigned Role</th>
+                            <th className="p-3.5">Granular Permissions</th>
+                            <th className="p-3.5 text-center">Account Status</th>
+                            <th className="p-3.5 text-center">Admin Controls &amp; Security Mailer</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-neutral-850 select-text">
-                          {filteredUsers.map((usr) => (
-                            <tr key={usr.id} className="hover:bg-neutral-900/40 transition-colors">
-                              <td className="p-3.5 font-sans font-semibold text-white">
-                                {usr.displayName || "Anonymous Staff"}
-                              </td>
-                              <td className="p-3.5 text-neutral-300 font-mono text-xs">
-                                {usr.email}
-                              </td>
-                              <td className="p-3.5">
-                                <span className={`px-2 py-0.5 text-[8.5px] uppercase tracking-wider font-extrabold font-mono border ${
-                                  usr.role === "admin" 
-                                    ? "bg-rose-950/15 text-rose-400 border-rose-500/20" 
-                                    : usr.role === "sales" 
-                                    ? "bg-amber-950/20 text-text-amber-400 border-amber-500/20 text-amber-400" 
-                                    : usr.role === "chef" 
-                                    ? "bg-violet-950/15 text-violet-400 border-violet-500/20"
-                                    : "bg-neutral-900 text-neutral-400 border-neutral-800"
-                                }`}>
-                                  {usr.role || "user"}
-                                </span>
-                              </td>
-                              <td className="p-3.5 text-center flex items-center justify-center gap-2">
-                                <span className={`px-2 py-0.5 text-[8px] uppercase tracking-wider font-bold border ${
-                                  usr.disabled 
-                                    ? "bg-red-950/35 text-red-500 border-red-500/30 font-extrabold" 
-                                    : "bg-emerald-950/20 text-emerald-400 border-emerald-500/20"
-                                }`}>
-                                  {usr.disabled ? "🚫 Suspended" : "⚡ Active"}
-                                </span>
-                                <button
-                                  onClick={() => handleToggleUserDisabled(usr.id, !!usr.disabled)}
-                                  className={`px-2 py-1 text-[8.5px] uppercase font-bold border transition-colors cursor-pointer ${
-                                    usr.disabled 
-                                      ? "bg-emerald-950/20 text-emerald-400 border-emerald-500/30 hover:bg-emerald-900" 
-                                      : "bg-red-950/20 text-red-400 border-red-500/20 hover:bg-red-900"
-                                  }`}
-                                >
-                                  {usr.disabled ? "Enable" : "Suspend"}
-                                </button>
-                                <button
-                                  onClick={() => handleDeleteUserProfile(usr.id)}
-                                  className="px-2 py-1 text-[8.5px] uppercase font-bold border border-red-900/50 text-red-400 bg-red-950/15 hover:bg-red-900 hover:text-white transition-colors cursor-pointer"
-                                >
-                                  Delete ✕
-                                </button>
-                              </td>
-                              <td className="p-3.5 text-center">
-                                {/* Roles dropdown select */}
-                                <select
-                                  value={usr.role || "user"}
-                                  onChange={(e) => handleSetUserRole(usr.id, e.target.value)}
-                                  className="bg-neutral-950 text-amber-500 font-mono text-[10px] uppercase font-bold tracking-wider border border-neutral-800 py-1 px-3.5 focus:outline-none focus:border-amber-500 cursor-pointer"
-                                >
-                                  <option value="user">User</option>
-                                  <option value="chef">Chef</option>
-                                  <option value="sales">Sales</option>
-                                  <option value="menu_lister">Menu Lister</option>
-                                  <option value="developer">Developer</option>
-                                  <option value="admin">Admin</option>
-                                </select>
+                          {filteredUsers.map((usr) => {
+                            const effectivePerms = Array.isArray(usr.permissions) && usr.permissions.length > 0
+                              ? usr.permissions
+                              : (ROLE_DEFAULT_PERMISSIONS[usr.role || "user"] || []);
+                            const hasCustomOverrides = Array.isArray(usr.permissions) && usr.permissions.length > 0;
+                            const isUserAdmin = usr.role === "admin";
+                            const resetState = quickResetStatus[usr.id] || {};
+
+                            return (
+                              <tr key={usr.id} className="hover:bg-neutral-900/40 transition-colors">
+                                <td className="p-3.5">
+                                  <div className="flex items-center gap-2.5">
+                                    <div className="w-7 h-7 bg-amber-500/10 border border-amber-500/30 flex items-center justify-center font-bold text-amber-500 text-xs font-mono">
+                                      {(usr.displayName || usr.email || "U")[0].toUpperCase()}
+                                    </div>
+                                    <div>
+                                      <span className="font-sans font-semibold text-white block">
+                                        {usr.displayName || "Staff Member"}
+                                      </span>
+                                      <span className="text-neutral-400 font-mono text-[10px] block">
+                                        {usr.email}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </td>
+
+                                <td className="p-3.5">
+                                  <span className={`px-2 py-0.5 text-[8.5px] uppercase tracking-wider font-extrabold font-mono border ${
+                                    usr.role === "admin" 
+                                      ? "bg-rose-950/20 text-rose-400 border-rose-500/30" 
+                                      : usr.role === "sales" 
+                                      ? "bg-amber-950/25 text-amber-400 border-amber-500/30" 
+                                      : usr.role === "chef" 
+                                      ? "bg-violet-950/20 text-violet-400 border-violet-500/30"
+                                      : usr.role === "menu_lister"
+                                      ? "bg-sky-950/20 text-sky-400 border-sky-500/30"
+                                      : usr.role === "developer"
+                                      ? "bg-emerald-950/20 text-emerald-400 border-emerald-500/30"
+                                      : "bg-neutral-900 text-neutral-400 border-neutral-800"
+                                  }`}>
+                                    {usr.role || "user"}
+                                  </span>
+                                </td>
+
+                                <td className="p-3.5">
+                                  <div className="space-y-1">
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      {isUserAdmin ? (
+                                        <span className="px-2 py-0.5 bg-rose-950/30 border border-rose-500/30 text-rose-400 text-[8.5px] font-bold uppercase tracking-wider flex items-center gap-1">
+                                          <ShieldCheck className="w-3 h-3 text-rose-400" />
+                                          <span>Full Clearance (All Modules)</span>
+                                        </span>
+                                      ) : hasCustomOverrides ? (
+                                        <span className="px-2 py-0.5 bg-amber-950/30 border border-amber-500/40 text-amber-400 text-[8.5px] font-bold uppercase tracking-wider flex items-center gap-1">
+                                          <Sliders className="w-3 h-3 text-amber-400" />
+                                          <span>Custom ({effectivePerms.length} Active)</span>
+                                        </span>
+                                      ) : (
+                                        <span className="px-2 py-0.5 bg-neutral-900 border border-neutral-800 text-neutral-400 text-[8.5px] font-mono">
+                                          Role Defaults ({effectivePerms.length} Granted)
+                                        </span>
+                                      )}
+                                    </div>
+                                    {!isUserAdmin && effectivePerms.length > 0 && (
+                                      <div className="flex flex-wrap gap-1 max-w-xs">
+                                        {effectivePerms.slice(0, 3).map((pid: string) => (
+                                          <span key={pid} className="text-[8px] px-1.5 py-0.2 bg-neutral-950 text-neutral-400 border border-neutral-850">
+                                            {pid.replace("_panel", "").replace("_", " ")}
+                                          </span>
+                                        ))}
+                                        {effectivePerms.length > 3 && (
+                                          <span className="text-[8px] px-1 py-0.2 text-neutral-500 font-bold">
+                                            +{effectivePerms.length - 3} more
+                                          </span>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                </td>
+
+                                <td className="p-3.5 text-center">
+                                  <div className="flex items-center justify-center gap-1.5">
+                                    <span className={`px-2 py-0.5 text-[8px] uppercase tracking-wider font-bold border ${
+                                      usr.disabled 
+                                        ? "bg-red-950/35 text-red-500 border-red-500/30 font-extrabold" 
+                                        : "bg-emerald-950/20 text-emerald-400 border-emerald-500/20"
+                                    }`}>
+                                      {usr.disabled ? "🚫 Suspended" : "⚡ Active"}
+                                    </span>
+                                    <button
+                                      onClick={() => handleToggleUserDisabled(usr.id, !!usr.disabled)}
+                                      className={`px-2 py-1 text-[8.5px] uppercase font-bold border transition-colors cursor-pointer ${
+                                        usr.disabled 
+                                          ? "bg-emerald-950/20 text-emerald-400 border-emerald-500/30 hover:bg-emerald-900" 
+                                          : "bg-red-950/20 text-red-400 border-red-500/20 hover:bg-red-900"
+                                      }`}
+                                    >
+                                      {usr.disabled ? "Enable" : "Suspend"}
+                                    </button>
+                                    <button
+                                      onClick={() => handleDeleteUserProfile(usr.id)}
+                                      className="px-2 py-1 text-[8.5px] uppercase font-bold border border-red-900/50 text-red-400 bg-red-950/15 hover:bg-red-900 hover:text-white transition-colors cursor-pointer"
+                                      title="Delete user record"
+                                    >
+                                      <Trash2 className="w-3 h-3" />
+                                    </button>
+                                  </div>
+                                </td>
+
+                                <td className="p-3.5 text-center">
+                                  <div className="flex flex-col sm:flex-row items-center justify-center gap-1.5">
+                                    {/* Edit Profile Button */}
+                                    <button
+                                      onClick={() => handleOpenEditUserModal(usr)}
+                                      className="w-full sm:w-auto px-2.5 py-1.5 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/40 hover:border-amber-500 text-amber-400 font-mono text-[9px] font-bold uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-1 shadow-xs"
+                                      title="Edit full profile details, roles, password, and clearances"
+                                    >
+                                      <Pencil className="w-3 h-3 text-amber-400" />
+                                      <span>Edit Profile</span>
+                                    </button>
+
+                                    {/* Send Password Reset Email Button */}
+                                    <button
+                                      onClick={() => handleQuickSendPasswordReset(usr)}
+                                      disabled={resetState.loading || !usr.email}
+                                      className={`w-full sm:w-auto px-2.5 py-1.5 border font-mono text-[9px] font-bold uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-1 shadow-xs ${
+                                        resetState.success
+                                          ? "bg-emerald-950/30 border-emerald-500/40 text-emerald-400"
+                                          : resetState.error
+                                          ? "bg-red-950/30 border-red-500/40 text-red-400"
+                                          : "bg-neutral-800 hover:bg-neutral-700 border-neutral-700 text-neutral-300 hover:text-white"
+                                      }`}
+                                      title={`Send password reset email to ${usr.email}`}
+                                    >
+                                      {resetState.loading ? (
+                                        <>
+                                          <RefreshCw className="w-3 h-3 animate-spin text-amber-400" />
+                                          <span>Sending...</span>
+                                        </>
+                                      ) : resetState.success ? (
+                                        <>
+                                          <CheckCheck className="w-3 h-3 text-emerald-400" />
+                                          <span>Mail Sent!</span>
+                                        </>
+                                      ) : (
+                                        <>
+                                          <Mail className="w-3 h-3 text-amber-400" />
+                                          <span>Reset Email</span>
+                                        </>
+                                      )}
+                                    </button>
+
+                                    {/* Manage Access Modal */}
+                                    <button
+                                      onClick={() => handleOpenPermissionsModal(usr)}
+                                      className="w-full sm:w-auto px-2.5 py-1.5 bg-neutral-900 hover:bg-neutral-850 border border-neutral-750 text-neutral-400 hover:text-neutral-200 font-mono text-[9px] font-bold uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-1"
+                                      title="Granular permissions matrix"
+                                    >
+                                      <Sliders className="w-3 h-3 text-neutral-400" />
+                                      <span>Clearance</span>
+                                    </button>
+                                  </div>
+
+                                  {resetState.error && (
+                                    <div className="text-[8.5px] text-red-400 font-mono mt-1 text-center">
+                                      {resetState.error}
+                                    </div>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+
+                          {filteredUsers.length === 0 && (
+                            <tr>
+                              <td colSpan={5} className="p-8 text-center text-neutral-500 font-mono text-xs">
+                                <div className="flex flex-col items-center justify-center gap-3">
+                                  <Users className="w-8 h-8 text-neutral-600 animate-pulse" />
+                                  <span className="text-neutral-400">No users found in directory</span>
+                                  <p className="text-[10px] text-neutral-600 max-w-sm">
+                                    Click below to synchronize users across Cloud Firestore and the MySQL database.
+                                  </p>
+                                  <button
+                                    type="button"
+                                    onClick={fetchUsersList}
+                                    className="px-3 py-1.5 bg-neutral-800 hover:bg-neutral-700 text-amber-400 border border-neutral-700 text-[10px] uppercase font-bold tracking-wider transition-all cursor-pointer flex items-center gap-1.5"
+                                  >
+                                    <RefreshCw className="w-3 h-3" />
+                                    <span>Synchronize Directory</span>
+                                  </button>
+                                </div>
                               </td>
                             </tr>
-                          ))}
+                          )}
                         </tbody>
                       </table>
                     </div>
@@ -3087,7 +3728,7 @@ export default function DedicatedDashboard({
                 )}
 
                 {/* TAB 5S: GLOBAL MENU CREATE MANAGEMENT (Admins / Menu Listers) */}
-                {(userRole === "admin" || userRole === "menu_lister") && activeTab === "menus_panel" && (
+                {activeTab === "menus_panel" && (
                   <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 text-left" id="dashboard-menus-control-panel-grid">
                     
                     {/* Add/Edit Menu Item Form */}
@@ -3500,7 +4141,7 @@ export default function DedicatedDashboard({
                   </div>
                 )}
 
-                {(userRole === "admin" || userRole === "menu_lister") && activeTab === "categories_panel" && (
+                {activeTab === "categories_panel" && (
                   <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 text-left" id="dashboard-categories-control">
                     <div className="xl:col-span-5 bg-[#121212] border border-neutral-850 p-6 space-y-4 font-mono">
                       <div>
@@ -3700,7 +4341,7 @@ export default function DedicatedDashboard({
                   </div>
                 )}
 
-                {(userRole === "admin" || userRole === "menu_lister") && activeTab === "images_panel" && (
+                {activeTab === "images_panel" && (
                   <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 text-left" id="dashboard-images-control">
                     {/* Add Image Panel (Single & Bulk) */}
                     <div className="xl:col-span-5 bg-[#121212] border border-neutral-850 p-6 space-y-4 font-mono">
@@ -4092,7 +4733,7 @@ export default function DedicatedDashboard({
                   </div>
                 )}
 
-                {(userRole === "admin" || userRole === "developer") && activeTab === "instagram_panel" && (
+                {activeTab === "instagram_panel" && (
                   <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 text-left" id="dashboard-instagram-control">
                     
                     {/* Left side splits: API Config & Hand curations */}
@@ -4331,7 +4972,7 @@ export default function DedicatedDashboard({
                   </div>
                 )}
 
-                {(userRole === "admin" || userRole === "developer") && activeTab === "opay_panel" && (
+                {activeTab === "opay_panel" && (
                   <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 text-left" id="dashboard-opay-control">
                     
                     {/* Left Column: Documentation & Status */}
@@ -4480,7 +5121,7 @@ export default function DedicatedDashboard({
                   </div>
                 )}
 
-                {userRole === "admin" && activeTab === "shipping_panel" && (
+                {activeTab === "shipping_panel" && (
                   <div className="bg-[#121212] border border-neutral-850 p-6 space-y-6 text-left" id="dashboard-shipping-tab">
                     <div className="flex flex-col gap-1.5 border-b border-neutral-800 pb-4">
                       <h2 className="text-lg font-bold font-mono text-white tracking-wider uppercase flex items-center gap-2 animate-fadeIn">
@@ -4659,23 +5300,23 @@ export default function DedicatedDashboard({
                   </div>
                 )}
 
-                {(userRole === "admin" || userRole === "sales") && activeTab === "analytics_panel" && (
+                {activeTab === "analytics_panel" && (
                   <AdminAnalyticsPanel />
                 )}
 
-                {userRole === "admin" && activeTab === "riders_panel" && (
+                {activeTab === "riders_panel" && (
                   <RidersManagementPanel />
                 )}
 
-                {(userRole === "admin" || userRole === "sales") && activeTab === "support_panel" && (
+                {activeTab === "support_panel" && (
                   <SupportManagementPanel />
                 )}
 
-                {(userRole === "admin" || userRole === "sales") && activeTab === "coupons_panel" && (
+                {activeTab === "coupons_panel" && (
                   <CouponManagementPanel />
                 )}
 
-                {(userRole === "admin" || userRole === "developer") && activeTab === "mysql_panel" && (
+                {activeTab === "mysql_panel" && (
                   <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 text-left" id="dashboard-mysql-control">
                     
                     {/* Left Column: Connection Check and Schema Monitor */}
@@ -4938,10 +5579,11 @@ export default function DedicatedDashboard({
 
                   </div>
                 )}
-              </div>
-            </div>
-          </>
-        ) : (
+              </>
+            )}
+          </div>
+        </>
+      ) : (
           /* Logged out visual gate setup */
           <div className="max-w-md mx-auto bg-[#121212] border border-neutral-850 shadow-2xl p-8 space-y-6 text-center" id="dashboard-logged-out-gate">
             <div className="w-16 h-16 bg-neutral-900/80 border border-neutral-800 flex items-center justify-center mx-auto relative">
@@ -4983,6 +5625,239 @@ export default function DedicatedDashboard({
             <p className="text-[9px] text-neutral-600 font-sans">
               🔒 Safe identity encryption verified under standard security guidelines.
             </p>
+          </div>
+        )}
+        </div>
+
+        {/* 🛡️ CATEGORIZED PERMISSION MANAGEMENT SIDE DRAWER */}
+        {editingPermissionsUser && (
+          <div className="fixed inset-0 z-50 flex justify-end" id="user-permissions-drawer">
+            {/* Backdrop overlay */}
+            <div 
+              className="fixed inset-0 bg-neutral-950/40 backdrop-blur-xs transition-opacity animate-fadeIn"
+              onClick={() => setEditingPermissionsUser(null)}
+            />
+
+            {/* Slide-over Drawer Panel */}
+            <div className="relative z-50 bg-white w-full max-w-2xl h-full flex flex-col shadow-2xl border-l border-neutral-200 text-left animate-slideLeft overflow-hidden">
+              
+              {/* Drawer Header */}
+              <div className="p-5 sm:p-6 border-b border-neutral-200 flex justify-between items-start bg-white">
+                <div className="space-y-1.5 pr-4">
+                  <div className="flex items-center gap-2">
+                    <span className="p-1.5 bg-amber-50 border border-amber-200 rounded-xs text-amber-700">
+                      <Shield className="w-4 h-4" />
+                    </span>
+                    <h3 className="text-sm font-mono font-bold tracking-wider text-neutral-900 uppercase">
+                      User Access &amp; Permissions
+                    </h3>
+                  </div>
+                  <p className="text-xs text-neutral-600 font-sans leading-relaxed">
+                    Configure authorized administrative modules and capabilities for{" "}
+                    <span className="font-mono font-bold text-neutral-900 bg-neutral-100 px-1.5 py-0.5 rounded-xs">
+                      {editingPermissionsUser.email || editingPermissionsUser.name || "User"}
+                    </span>
+                  </p>
+                </div>
+                <button 
+                  type="button"
+                  onClick={() => setEditingPermissionsUser(null)}
+                  className="p-2 border border-neutral-200 hover:bg-neutral-100 text-neutral-500 hover:text-neutral-900 transition-colors cursor-pointer rounded-xs"
+                  title="Close side drawer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Drawer Content - Scrollable */}
+              <div className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-6 bg-neutral-50/50">
+                
+                {/* User Snapshot & Role Selector */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 bg-white p-4 border border-neutral-200 rounded-xs shadow-2xs">
+                  <div>
+                    <span className="block text-[10px] font-mono tracking-wider uppercase text-neutral-500 font-semibold mb-1">
+                      Account Profile
+                    </span>
+                    <p className="text-xs font-mono font-bold text-neutral-900 truncate">
+                      {editingPermissionsUser.email || "No Email"}
+                    </p>
+                    <p className="text-[10px] font-mono text-neutral-500 mt-0.5">
+                      UID: {editingPermissionsUser.id?.slice(0, 14)}...
+                    </p>
+                  </div>
+                  <div>
+                    <span className="block text-[10px] font-mono tracking-wider uppercase text-neutral-500 font-semibold mb-1">
+                      Assigned Base Role
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={selectedUserRole}
+                        onChange={(e) => handleApplyRolePreset(e.target.value)}
+                        className="bg-neutral-50 border border-neutral-300 text-neutral-900 font-mono text-xs p-1.5 rounded-xs focus:outline-none focus:border-amber-500 flex-1"
+                      >
+                        <option value="user">User (Client Default)</option>
+                        <option value="sales">Sales &amp; Dispatch</option>
+                        <option value="chef">Chef / Kitchen</option>
+                        <option value="menu_lister">Menu Lister</option>
+                        <option value="rider">Logistics Rider (Fleet)</option>
+                        <option value="developer">Developer</option>
+                        <option value="admin">Administrator (Full Access)</option>
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => handleApplyRolePreset(selectedUserRole)}
+                        className="px-2.5 py-1.5 bg-neutral-100 hover:bg-neutral-200 border border-neutral-300 text-neutral-800 text-[10px] font-mono uppercase font-bold tracking-wider transition-colors cursor-pointer rounded-xs"
+                        title="Reset permissions to the default set for this role"
+                      >
+                        Preset
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Quick Selection Helpers */}
+                <div className="flex items-center justify-between text-xs font-mono border-b border-neutral-200 pb-3">
+                  <span className="text-neutral-700 text-[11px] uppercase font-bold tracking-wider">
+                    Module Permissions ({selectedUserPermissions.length} selected)
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const allKeys = PERMISSION_CATEGORIES.flatMap(c => c.permissions.map(p => p.id));
+                        setSelectedUserPermissions(allKeys);
+                      }}
+                      className="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-900 text-[10px] font-mono uppercase font-bold tracking-wider transition-colors cursor-pointer rounded-xs"
+                    >
+                      Grant All
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedUserPermissions([])}
+                      className="px-2.5 py-1 bg-white hover:bg-neutral-100 border border-neutral-200 text-neutral-600 text-[10px] font-mono uppercase font-bold tracking-wider transition-colors cursor-pointer rounded-xs"
+                    >
+                      Clear All
+                    </button>
+                  </div>
+                </div>
+
+                {/* Categorized Checkbox Groups */}
+                <div className="space-y-4">
+                  {PERMISSION_CATEGORIES.map((cat) => {
+                    const catKeys = cat.permissions.map(p => p.id);
+                    const allCatSelected = catKeys.every(k => selectedUserPermissions.includes(k));
+                    const someCatSelected = catKeys.some(k => selectedUserPermissions.includes(k));
+
+                    return (
+                      <div key={cat.id} className="bg-white border border-neutral-200 rounded-xs p-4 space-y-3 shadow-2xs">
+                        {/* Category Header */}
+                        <div className="flex items-center justify-between border-b border-neutral-100 pb-2">
+                          <div className="flex items-center gap-2">
+                            <span className="text-base">{cat.icon}</span>
+                            <div>
+                              <h4 className="text-xs font-mono font-bold text-neutral-900 uppercase tracking-wider">
+                                {cat.title}
+                              </h4>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleToggleCategoryPermissions(cat.id)}
+                            className={`px-2 py-1 text-[9px] font-mono uppercase font-bold tracking-wider border rounded-xs cursor-pointer transition-colors ${
+                              allCatSelected 
+                                ? "bg-amber-100 text-amber-900 border-amber-300" 
+                                : someCatSelected
+                                ? "bg-neutral-100 text-neutral-800 border-neutral-300"
+                                : "bg-neutral-50 text-neutral-500 border-neutral-200 hover:bg-neutral-100"
+                            }`}
+                          >
+                            {allCatSelected ? "Deselect Category" : "Select Category"}
+                          </button>
+                        </div>
+
+                        {/* Category Items */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                          {cat.permissions.map((perm) => {
+                            const isChecked = selectedUserPermissions.includes(perm.id);
+                            return (
+                              <label
+                                key={perm.id}
+                                className={`flex items-start gap-2.5 p-2.5 border rounded-xs transition-colors cursor-pointer select-none ${
+                                  isChecked
+                                    ? "bg-amber-50/70 border-amber-300 text-neutral-900"
+                                    : "bg-neutral-50/50 border-neutral-200 text-neutral-700 hover:bg-neutral-100/60"
+                                }`}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={isChecked}
+                                  onChange={() => handleTogglePermission(perm.id)}
+                                  className="mt-0.5 w-4 h-4 rounded-xs border-neutral-300 text-amber-600 focus:ring-0 focus:ring-offset-0 cursor-pointer accent-amber-500"
+                                />
+                                <div className="space-y-0.5 text-left min-w-0">
+                                  <span className={`text-[11px] font-mono font-bold block truncate ${isChecked ? "text-amber-950" : "text-neutral-900"}`}>
+                                    {perm.name}
+                                  </span>
+                                  <span className="text-[10px] text-neutral-500 block leading-tight font-sans">
+                                    {perm.desc}
+                                  </span>
+                                </div>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Status Messages */}
+                {permissionSaveSuccess && (
+                  <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-mono flex items-center gap-2 rounded-xs">
+                    <CheckSquare className="w-4 h-4 shrink-0 text-emerald-600" />
+                    <span>{permissionSaveSuccess}</span>
+                  </div>
+                )}
+                {permissionSaveError && (
+                  <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 text-xs font-mono flex items-center gap-2 rounded-xs">
+                    <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+                    <span>{permissionSaveError}</span>
+                  </div>
+                )}
+
+              </div>
+
+              {/* Drawer Footer */}
+              <div className="p-4 border-t border-neutral-200 flex items-center justify-end gap-3 bg-white">
+                <button
+                  type="button"
+                  onClick={() => setEditingPermissionsUser(null)}
+                  className="px-4 py-2 border border-neutral-200 hover:bg-neutral-100 text-neutral-700 font-mono text-[10px] font-bold tracking-wider uppercase transition-colors cursor-pointer rounded-xs"
+                  disabled={isSavingPermissions}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSavePermissions}
+                  disabled={isSavingPermissions}
+                  className="px-6 py-2 bg-neutral-900 hover:bg-neutral-800 text-white font-mono text-[10px] font-bold tracking-wider uppercase transition-colors cursor-pointer disabled:opacity-40 flex items-center gap-2 shadow-xs rounded-xs"
+                >
+                  {isSavingPermissions ? (
+                    <>
+                      <Clock className="w-3.5 h-3.5 animate-spin" />
+                      <span>Saving Permissions...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-3.5 h-3.5" />
+                      <span>Save Access Configuration</span>
+                    </>
+                  )}
+                </button>
+              </div>
+
+            </div>
           </div>
         )}
 
@@ -5114,7 +5989,45 @@ export default function DedicatedDashboard({
             </div>
           </div>
         )}
-      </div>
+
+        {/* 👤 ADMIN CREATE USER & ROLE PROVISIONING MODAL */}
+        <CreateUserModal
+          isOpen={isCreateUserModalOpen}
+          onClose={() => setIsCreateUserModalOpen(false)}
+          onUserCreated={(newUser) => {
+            setAllUsers((prev) => {
+              const existingIndex = prev.findIndex((u) => u.id === newUser.id || u.email === newUser.email);
+              if (existingIndex >= 0) {
+                const copy = [...prev];
+                copy[existingIndex] = { ...copy[existingIndex], ...newUser };
+                return copy;
+              }
+              return [newUser, ...prev];
+            });
+          }}
+        />
+
+        {/* ✏️ ADMIN EDIT USER PROFILE & SECURITY CLEARANCES MODAL */}
+        <AdminEditUserModal
+          isOpen={isEditUserModalOpen}
+          user={editingUserProfileUser}
+          onClose={() => {
+            setIsEditUserModalOpen(false);
+            setEditingUserProfileUser(null);
+          }}
+          onUserUpdated={(updatedUser) => {
+            setAllUsers((prev) =>
+              prev.map((u) => (u.id === updatedUser.id ? { ...u, ...updatedUser } : u))
+            );
+            if (currentUser?.uid === updatedUser.id) {
+              setCurrentUserProfile((prev: any) => ({
+                ...(prev || {}),
+                ...updatedUser
+              }));
+            }
+          }}
+        />
+      </main>
     </div>
   );
 }

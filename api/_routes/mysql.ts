@@ -2,6 +2,7 @@ import express from "express";
 import path from "path";
 import fs from "fs";
 import { getMySQLPool, querySql, resetMySQLPool, sanitizeMySQLHost } from "../_utils/mysqlDb.js";
+import { getMailTransporter, getFromEmailAddress } from "../_utils/smtp.js";
 
 // ========================================================
 // BACKEND STRUCTURAL FALLBACK SEEDS
@@ -2086,11 +2087,35 @@ mysqlRouter.delete("/orders/:id", async (req: any, res: any) => {
 // 5g. Full Users List and role/disabled controllers
 mysqlRouter.get("/users/all", async (req: any, res: any) => {
   try {
-    const rows = await querySql("SELECT uid, email, displayName, role, disabled, createdAt FROM users");
-    const users = rows.map((r: any) => ({
-      ...r,
-      disabled: r.disabled === 1 || r.disabled === true
-    }));
+    let rows: any[] = [];
+    try {
+      rows = await querySql("SELECT uid, email, displayName, role, disabled, permissions, createdAt FROM users");
+    } catch (colErr: any) {
+      if (colErr.message && colErr.message.includes("Unknown column 'permissions'")) {
+        try {
+          await querySql("ALTER TABLE users ADD COLUMN permissions TEXT DEFAULT NULL");
+          rows = await querySql("SELECT uid, email, displayName, role, disabled, permissions, createdAt FROM users");
+        } catch (_) {
+          rows = await querySql("SELECT uid, email, displayName, role, disabled, createdAt FROM users");
+        }
+      } else {
+        throw colErr;
+      }
+    }
+
+    const users = rows.map((r: any) => {
+      let permissions = [];
+      if (r.permissions) {
+        try {
+          permissions = typeof r.permissions === "string" ? JSON.parse(r.permissions) : r.permissions;
+        } catch (_) {}
+      }
+      return {
+        ...r,
+        permissions,
+        disabled: r.disabled === 1 || r.disabled === true
+      };
+    });
     return res.json(users);
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
@@ -2100,7 +2125,7 @@ mysqlRouter.get("/users/all", async (req: any, res: any) => {
 mysqlRouter.put("/users/:uid", async (req: any, res: any) => {
   try {
     const { uid } = req.params;
-    const { role, disabled } = req.body;
+    const { role, disabled, displayName, email, permissions } = req.body;
 
     let updates: string[] = [];
     let params: any[] = [];
@@ -2113,9 +2138,24 @@ mysqlRouter.put("/users/:uid", async (req: any, res: any) => {
       updates.push("disabled = ?");
       params.push(disabled ? 1 : 0);
     }
+    if (displayName !== undefined) {
+      updates.push("displayName = ?");
+      params.push(displayName.trim());
+    }
+    if (email !== undefined) {
+      updates.push("email = ?");
+      params.push(email.toLowerCase().trim());
+    }
+    if (permissions !== undefined) {
+      try {
+        await querySql("ALTER TABLE users ADD COLUMN permissions TEXT DEFAULT NULL");
+      } catch (_) {}
+      updates.push("permissions = ?");
+      params.push(typeof permissions === "string" ? permissions : JSON.stringify(permissions));
+    }
 
     if (updates.length === 0) {
-      return res.status(400).json({ error: "No properties specified for update." });
+      return res.json({ success: true, message: "No updates needed" });
     }
 
     params.push(uid);
@@ -2131,13 +2171,35 @@ mysqlRouter.put("/users/:uid", async (req: any, res: any) => {
 mysqlRouter.get("/users/:uid", async (req: any, res: any) => {
   try {
     const { uid } = req.params;
-    const rows = await querySql("SELECT uid, email, displayName, role, disabled, createdAt FROM users WHERE uid = ?", [uid]);
+    let rows: any[] = [];
+    try {
+      rows = await querySql("SELECT uid, email, displayName, role, disabled, permissions, createdAt FROM users WHERE uid = ?", [uid]);
+    } catch (colErr: any) {
+      if (colErr.message && colErr.message.includes("Unknown column 'permissions'")) {
+        try {
+          await querySql("ALTER TABLE users ADD COLUMN permissions TEXT DEFAULT NULL");
+          rows = await querySql("SELECT uid, email, displayName, role, disabled, permissions, createdAt FROM users WHERE uid = ?", [uid]);
+        } catch (_) {
+          rows = await querySql("SELECT uid, email, displayName, role, disabled, createdAt FROM users WHERE uid = ?", [uid]);
+        }
+      } else {
+        throw colErr;
+      }
+    }
+
     if (!rows || rows.length === 0) {
       return res.status(404).json({ error: "User not found" });
     }
     const user = rows[0];
+    let permissions = [];
+    if (user.permissions) {
+      try {
+        permissions = typeof user.permissions === "string" ? JSON.parse(user.permissions) : user.permissions;
+      } catch (_) {}
+    }
     return res.json({
       ...user,
+      permissions,
       disabled: user.disabled === 1 || user.disabled === true
     });
   } catch (err: any) {
@@ -2148,7 +2210,7 @@ mysqlRouter.get("/users/:uid", async (req: any, res: any) => {
 mysqlRouter.post("/users/:uid", async (req: any, res: any) => {
   try {
     const { uid } = req.params;
-    const { email, displayName, role, disabled } = req.body;
+    const { email, displayName, role, disabled, permissions } = req.body;
     
     // Check if exists
     const rows = await querySql("SELECT * FROM users WHERE uid = ?", [uid]);
@@ -2160,6 +2222,10 @@ mysqlRouter.post("/users/:uid", async (req: any, res: any) => {
       if (displayName !== undefined) { updates.push("displayName = ?"); params.push(displayName.trim()); }
       if (role !== undefined) { updates.push("role = ?"); params.push(role); }
       if (disabled !== undefined) { updates.push("disabled = ?"); params.push(disabled ? 1 : 0); }
+      if (permissions !== undefined) {
+        updates.push("permissions = ?");
+        params.push(typeof permissions === "string" ? permissions : JSON.stringify(permissions));
+      }
       
       if (updates.length > 0) {
         params.push(uid);
@@ -2170,9 +2236,10 @@ mysqlRouter.post("/users/:uid", async (req: any, res: any) => {
       const emailLower = email ? email.toLowerCase().trim() : "";
       const cleanName = displayName ? displayName.trim() : emailLower.split("@")[0] || "User";
       const userRole = role || "user";
+      const permStr = permissions ? (typeof permissions === "string" ? permissions : JSON.stringify(permissions)) : null;
       await querySql(
-        "INSERT INTO users (uid, email, displayName, role, password_hash, disabled, createdAt) VALUES (?, ?, ?, ?, NULL, ?, ?)",
-        [uid, emailLower, cleanName, userRole, disabled ? 1 : 0, new Date().toISOString()]
+        "INSERT INTO users (uid, email, displayName, role, password_hash, disabled, permissions, createdAt) VALUES (?, ?, ?, ?, NULL, ?, ?, ?)",
+        [uid, emailLower, cleanName, userRole, disabled ? 1 : 0, permStr, new Date().toISOString()]
       );
     }
     return res.json({ success: true });
@@ -2186,6 +2253,244 @@ mysqlRouter.delete("/users/:uid", async (req: any, res: any) => {
     const { uid } = req.params;
     await querySql("DELETE FROM users WHERE uid = ?", [uid]);
     return res.json({ success: true });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// Update user password directly (Admin or Authorized User)
+mysqlRouter.post("/users/:uid/password", async (req: any, res: any) => {
+  try {
+    const { uid } = req.params;
+    const { password } = req.body;
+    if (!password || password.length < 6) {
+      return res.status(400).json({ error: "Password must be at least 6 characters." });
+    }
+    const passHash = hashPassword(password);
+    await querySql("UPDATE users SET password_hash = ? WHERE uid = ?", [passHash, uid]);
+    return res.json({ success: true, message: "Password updated successfully." });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// Dispatch password reset email with secure token link
+mysqlRouter.post("/auth/send-password-reset", async (req: any, res: any) => {
+  try {
+    const { email, uid } = req.body;
+    if (!email && !uid) {
+      return res.status(400).json({ error: "Email address or User UID is required." });
+    }
+
+    let targetEmail = (email || "").toLowerCase().trim();
+    let displayName = "Staff Member";
+
+    // Lookup user
+    let userRow: any = null;
+    if (uid) {
+      const rows = await querySql("SELECT * FROM users WHERE uid = ?", [uid]);
+      if (rows && rows.length > 0) userRow = rows[0];
+    }
+    if (!userRow && targetEmail) {
+      const rows = await querySql("SELECT * FROM users WHERE LOWER(email) = ?", [targetEmail]);
+      if (rows && rows.length > 0) userRow = rows[0];
+    }
+
+    if (userRow) {
+      targetEmail = userRow.email;
+      displayName = userRow.displayName || targetEmail.split("@")[0];
+    } else if (!targetEmail) {
+      return res.status(404).json({ error: "User account not found." });
+    }
+
+    // Generate secure token and 6-digit security passcode
+    const resetToken = "rst_" + crypto.randomBytes(24).toString("hex");
+    const securityPasscode = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = Date.now() + 24 * 60 * 60 * 1000; // 24 hours validity
+    const resetId = "rst_id_" + Math.random().toString(36).substring(2, 11);
+
+    try {
+      await querySql(
+        "INSERT INTO password_resets (id, email, token, expiresAt, used, createdAt) VALUES (?, ?, ?, ?, 0, ?)",
+        [resetId, targetEmail, resetToken, expiresAt, new Date().toISOString()]
+      );
+    } catch (e) {
+      console.warn("[Password Reset] Could not insert into password_resets table, fallback mode active:", e);
+    }
+
+    const origin = (req.headers.origin || req.headers.referer || "https://ais-dev-sbzn5bjecas4gnypehx4a5-856555242900.europe-west2.run.app").replace(/\/$/, "");
+    const resetLink = `${origin}/#reset-password?token=${resetToken}&email=${encodeURIComponent(targetEmail)}`;
+
+    console.log(`\n======================================================`);
+    console.log(`[PASSWORD RESET SYSTEM] Email: ${targetEmail}`);
+    console.log(`[PASSWORD RESET SYSTEM] User Name: ${displayName}`);
+    console.log(`[PASSWORD RESET SYSTEM] Reset Link: ${resetLink}`);
+    console.log(`[PASSWORD RESET SYSTEM] Security PIN: ${securityPasscode}`);
+    console.log(`======================================================\n`);
+
+    let emailSent = false;
+    let transporterError: string | null = null;
+
+    try {
+      const transporter = getMailTransporter();
+      if (transporter) {
+        const fromAddr = getFromEmailAddress();
+        const mailOptions = {
+          from: fromAddr,
+          to: targetEmail,
+          subject: `🔐 Password Reset Request - Upside Restaurant & Lounge`,
+          text: `Hello ${displayName},\n\nA password reset request was initiated for your Upside account (${targetEmail}).\n\nTo reset your password, visit:\n${resetLink}\n\nYour security verification PIN is: ${securityPasscode}\n\nThis link remains active for 24 hours. If you did not request this, please disregard this email.\n\nWarm regards,\nUpside Security Team`,
+          html: `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Reset Your Upside Account Password</title>
+</head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #0c0a09; color: #f5f5f4; margin: 0; padding: 30px 15px;">
+  <div style="max-width: 580px; margin: 0 auto; background-color: #1c1917; border: 1px solid #44403c; border-radius: 6px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+    
+    <!-- Gold Header Bar -->
+    <div style="background: linear-gradient(135deg, #d97706, #b45309); padding: 24px 32px; text-align: left;">
+      <h1 style="margin: 0; color: #000000; font-size: 20px; font-weight: 800; letter-spacing: 2px; text-transform: uppercase; font-family: monospace;">
+        UPSIDE RESTAURANT &amp; LOUNGE
+      </h1>
+      <p style="margin: 4px 0 0 0; color: #451a03; font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase;">
+        Account Security &amp; Identity Services
+      </p>
+    </div>
+
+    <!-- Body Content -->
+    <div style="padding: 32px; font-size: 14px; line-height: 1.6; color: #d6d3d1;">
+      <h2 style="color: #ffffff; font-size: 18px; margin-top: 0; font-weight: 700;">
+        Password Reset Notification
+      </h2>
+      
+      <p style="margin-bottom: 16px;">
+        Hello <strong style="color: #f59e0b;">${displayName}</strong>,
+      </p>
+      
+      <p style="margin-bottom: 24px; color: #a8a29e;">
+        A request has been authorized to reset the login password for your account associated with <strong style="color: #fafaf9;">${targetEmail}</strong>.
+      </p>
+
+      <!-- Action Button -->
+      <div style="text-align: center; margin: 30px 0;">
+        <a href="${resetLink}" target="_blank" style="display: inline-block; background-color: #d97706; color: #000000; font-weight: 700; text-decoration: none; padding: 14px 28px; border-radius: 2px; font-size: 13px; letter-spacing: 1.5px; text-transform: uppercase; font-family: monospace;">
+          🔑 Reset Account Password
+        </a>
+      </div>
+
+      <!-- Security PIN Card -->
+      <div style="background-color: #0c0a09; border: 1px solid #292524; padding: 16px; margin: 24px 0; border-radius: 4px; text-align: center;">
+        <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #78716c; font-family: monospace; margin-bottom: 6px;">
+          Security Verification Passcode
+        </div>
+        <div style="font-size: 26px; font-weight: 800; letter-spacing: 8px; color: #f59e0b; font-family: monospace;">
+          ${securityPasscode}
+        </div>
+        <div style="font-size: 11px; color: #78716c; margin-top: 6px;">
+          Valid for 24 hours. Keep this confidential.
+        </div>
+      </div>
+
+      <!-- Direct Link Fallback -->
+      <div style="margin-top: 24px; padding-top: 16px; border-top: 1px solid #292524; font-size: 11px; color: #78716c; word-break: break-all;">
+        <span style="font-weight: 600; color: #a8a29e;">Direct Link:</span><br>
+        <a href="${resetLink}" style="color: #d97706; text-decoration: underline;">${resetLink}</a>
+      </div>
+
+      <p style="margin-top: 24px; font-size: 12px; color: #78716c;">
+        If you did not authorize this action or believe this was triggered in error, no further action is required. Your password will remain unchanged.
+      </p>
+    </div>
+
+    <!-- Footer -->
+    <div style="background-color: #141210; padding: 16px 32px; border-top: 1px solid #292524; text-align: center; font-size: 11px; color: #57534e;">
+      &copy; 2026 Upside Restaurant &amp; Lounge. 12B Admiralty Way, Lekki Phase 1, Lagos.
+    </div>
+
+  </div>
+</body>
+</html>
+          `
+        };
+
+        await transporter.sendMail(mailOptions);
+        emailSent = true;
+      }
+    } catch (err: any) {
+      console.warn("[Password Reset Email Dispatch Warning]:", err.message);
+      transporterError = err.message;
+    }
+
+    return res.json({
+      success: true,
+      emailSent,
+      targetEmail,
+      displayName,
+      resetLink,
+      message: emailSent
+        ? `Password reset email dispatched to ${targetEmail} successfully.`
+        : `Password reset link prepared for ${targetEmail}. (SMTP details logged to server console).`,
+      notice: transporterError ? `Email note: ${transporterError}` : undefined
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// Verify reset token validity
+mysqlRouter.post("/auth/verify-reset-token", async (req: any, res: any) => {
+  try {
+    const { token, email } = req.body;
+    if (!token) return res.status(400).json({ error: "Token is required." });
+
+    const rows = await querySql("SELECT * FROM password_resets WHERE token = ? AND used = 0", [token]);
+    if (!rows || rows.length === 0) {
+      return res.status(400).json({ valid: false, error: "Password reset link is invalid or has already been used." });
+    }
+
+    const record = rows[0];
+    if (Date.now() > Number(record.expiresAt)) {
+      return res.status(400).json({ valid: false, error: "Password reset link has expired. Please request a new one." });
+    }
+
+    return res.json({ valid: true, email: record.email });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// Complete reset with token
+mysqlRouter.post("/auth/reset-password-with-token", async (req: any, res: any) => {
+  try {
+    const { token, email, newPassword } = req.body;
+    if (!token || !newPassword) {
+      return res.status(400).json({ error: "Token and new password are required." });
+    }
+    if (newPassword.length < 6) {
+      return res.status(400).json({ error: "Password must be at least 6 characters." });
+    }
+
+    const rows = await querySql("SELECT * FROM password_resets WHERE token = ? AND used = 0", [token]);
+    if (!rows || rows.length === 0) {
+      return res.status(400).json({ error: "Invalid or already used reset token." });
+    }
+
+    const record = rows[0];
+    if (Date.now() > Number(record.expiresAt)) {
+      return res.status(400).json({ error: "This password reset token has expired." });
+    }
+
+    const passHash = hashPassword(newPassword);
+    const targetEmail = (email || record.email).toLowerCase().trim();
+
+    await querySql("UPDATE users SET password_hash = ? WHERE LOWER(email) = ?", [passHash, targetEmail]);
+    await querySql("UPDATE password_resets SET used = 1 WHERE token = ?", [token]);
+
+    return res.json({ success: true, message: "Password updated successfully! You can now log in with your new credentials." });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }

@@ -164,9 +164,12 @@ export async function autoInitializeSchema(activePool: mysql.Pool): Promise<void
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
 
-  // Retroactively ensure password_hash column exists
+  // Retroactively ensure password_hash and permissions columns exist
   try {
     await activePool.execute("ALTER TABLE users ADD COLUMN password_hash VARCHAR(255) DEFAULT NULL");
+  } catch (_) {}
+  try {
+    await activePool.execute("ALTER TABLE users ADD COLUMN permissions TEXT DEFAULT NULL");
   } catch (_) {}
 
   // 6. Create shipping_areas table
@@ -232,6 +235,18 @@ export async function autoInitializeSchema(activePool: mysql.Pool): Promise<void
       url LONGTEXT NOT NULL,
       createdAt VARCHAR(255),
       isPreset TINYINT(1) DEFAULT 0
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  // 12. Create password_resets table
+  await activePool.execute(`
+    CREATE TABLE IF NOT EXISTS password_resets (
+      id VARCHAR(255) PRIMARY KEY,
+      email VARCHAR(255) NOT NULL,
+      token VARCHAR(255) NOT NULL,
+      expiresAt BIGINT NOT NULL,
+      used TINYINT(1) DEFAULT 0,
+      createdAt VARCHAR(255)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
 

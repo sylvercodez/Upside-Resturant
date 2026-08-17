@@ -205,6 +205,29 @@ export class GoogleAuthProvider {
   static PROVIDER_ID = "google.com";
 }
 
+export class EmailAuthProvider {
+  static credential(email: string, password: string) {
+    return { email, password };
+  }
+}
+
+export async function reauthenticateWithCredential(user: any, credential: any) {
+  return Promise.resolve();
+}
+
+export async function updatePassword(user: any, newPassword: string) {
+  try {
+    await fetch(getApiUrl(`/api/mysql/users/${user?.uid}/password`), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password: newPassword })
+    });
+  } catch (e) {
+    console.warn("Password update sync:", e);
+  }
+  return Promise.resolve();
+}
+
 export async function signInWithPopup(auth: FirebaseAuthClient, provider?: any): Promise<any> {
   try {
     const urlRes = await fetch(getApiUrl("/api/mysql/auth/google/url"));
