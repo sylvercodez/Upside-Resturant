@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { collection, query, where, orderBy, onSnapshot, doc, deleteDoc, updateDoc } from "firebase/firestore";
 import { db, auth, handleFirestoreError, OperationType } from "../firebase";
 import { ShoppingBag, ChevronDown, ChevronUp, Clock, MapPin, CheckCircle, Package, Truck, ArrowRight } from "lucide-react";
+import { formatOrderDate } from "../utils/dateHelpers";
 
 interface OrderItem {
   name: string;
@@ -267,13 +268,13 @@ export default function OrderHistory({ onReorderClick, onTrackClick }: OrderHist
 
           return orders.map((order) => {
             const isExpanded = expandedOrderId === order.id;
-            const formattedDate = new Date(order.timestamp).toLocaleDateString("en-NG", {
+            const formattedDate = formatOrderDate(order, {
               year: "numeric",
               month: "short",
               day: "numeric",
               hour: "2-digit",
               minute: "2-digit"
-            });
+            }, order.id);
 
             const unpaid = 
               (order.paymentStatus || "").toLowerCase() === "waiting for payment" ||

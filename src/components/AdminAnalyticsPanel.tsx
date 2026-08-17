@@ -3,6 +3,7 @@ import { collection, query, orderBy, onSnapshot, limit } from "firebase/firestor
 import { db } from "../firebase";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import { getSafeTimestamp } from "../utils/dateHelpers";
 import { 
   BarChart3, 
   Users, 
@@ -187,15 +188,7 @@ export default function AdminAnalyticsPanel() {
 
   // Filter orders based on date range selected by user
   const dateFilteredOrders = orders.filter((ord) => {
-    if (!ord.timestamp && !ord.createdAt) return false;
-    let orderTime = 0;
-    if (typeof ord.timestamp === "number") {
-      orderTime = ord.timestamp;
-    } else if (typeof ord.timestamp === "string") {
-      orderTime = new Date(ord.timestamp).getTime() || 0;
-    } else if (ord.createdAt) {
-      orderTime = new Date(ord.createdAt).getTime() || 0;
-    }
+    const orderTime = getSafeTimestamp(ord, ord.id);
     if (!orderTime) return false;
     const now = new Date().getTime();
 
@@ -275,14 +268,7 @@ export default function AdminAnalyticsPanel() {
   // ================= RECHARTS: Daily Revenue Trend Calculation =================
   const revenueMap: Record<string, { date: string; revenue: number; ordersCount: number; timestamp: number }> = {};
   dateFilteredOrders.forEach((ord) => {
-    let orderTime = 0;
-    if (typeof ord.timestamp === "number") {
-      orderTime = ord.timestamp;
-    } else if (typeof ord.timestamp === "string") {
-      orderTime = new Date(ord.timestamp).getTime() || 0;
-    } else if (ord.createdAt) {
-      orderTime = new Date(ord.createdAt).getTime() || 0;
-    }
+    const orderTime = getSafeTimestamp(ord, ord.id);
     if (!orderTime) return;
     const d = new Date(orderTime);
     const dateKey = d.toLocaleDateString("en-GB", {

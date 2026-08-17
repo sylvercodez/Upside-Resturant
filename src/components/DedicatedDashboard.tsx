@@ -9,6 +9,7 @@ import RidersManagementPanel from "./RidersManagementPanel";
 import SupportManagementPanel from "./SupportManagementPanel";
 import { CouponManagementPanel } from "./CouponManagementPanel";
 import MenuImage from "./MenuImage";
+import { formatOrderDate, getSafeTimestamp } from "../utils/dateHelpers";
 import { 
   ShieldCheck, 
   MapPin, 
@@ -1475,7 +1476,7 @@ export default function DedicatedDashboard({
           tempOrders.push({ id: docSnap.id, ...docSnap.data() });
         });
         // Sort descending
-        tempOrders.sort((a, b) => b.timestamp - a.timestamp);
+        tempOrders.sort((a, b) => getSafeTimestamp(b, b.id) - getSafeTimestamp(a, a.id));
         setAllOrders(tempOrders);
       }, (err) => {
         console.error("Orders pipeline reading permission denied:", err);
@@ -2602,13 +2603,13 @@ export default function DedicatedDashboard({
                     ) : (
                       <div className="space-y-3.5" id="pipeline-orders-list-node">
                         {filteredOrders.map((ord) => {
-                          const formattedDate = new Date(ord.timestamp).toLocaleString("en-NG", {
+                          const formattedDate = formatOrderDate(ord, {
                             year: "numeric",
                             month: "short",
                             day: "numeric",
                             hour: "2-digit",
                             minute: "2-digit"
-                          });
+                          }, ord.id);
 
                           let ordStatus = ord.status || "Prepping";
                           if (ordStatus === "paid" || ordStatus === "pending") {
@@ -2920,42 +2921,12 @@ export default function DedicatedDashboard({
 
                                     {/* Channel-Specific Verification Controls */}
                                     {(() => {
-                                      const isOpay = ord.paymentMethod === "opay" || ord.paymentMethod === "OPay" || ord.type === "opay" || (!ord.paymentMethod && ord.id?.startsWith("order_"));
                                       const isWhatsapp = ord.paymentMethod === "whatsapp" || ord.type === "whatsapp";
                                       const payStatus = (ord.paymentStatus || "").toLowerCase();
                                       const isPaid = ["paid", "success", "payment_successful"].includes(payStatus);
 
                                       return (
                                         <>
-                                          {isOpay && (
-                                            <div className="bg-black/30 p-2 border border-[#ff6b00]/10 space-y-1.5 mt-1 text-left">
-                                              <div className="flex justify-between items-center text-[8px] text-neutral-400 font-bold uppercase">
-                                                <span>OPay Controls</span>
-                                                <span className="text-neutral-500">Ref: #{ord.id?.slice(-6).toUpperCase()}</span>
-                                              </div>
-                                              <div className="flex flex-col gap-1.5">
-                                                <div className="flex gap-1">
-                                                  <button
-                                                    onClick={() => handleVerifyOpayOrder(ord.id)}
-                                                    disabled={isVerifyingOpayId === ord.id}
-                                                    className="flex-grow py-1 px-1.5 bg-[#ff6b00]/15 hover:bg-[#ff6b00]/30 text-[#ff6b00] border border-[#ff6b00]/30 text-[9px] font-bold uppercase transition-all flex items-center justify-center gap-1 cursor-pointer disabled:opacity-50"
-                                                  >
-                                                    {isVerifyingOpayId === ord.id ? "Checking..." : "🔍 Verify OPay"}
-                                                  </button>
-                                                  {!isPaid && (
-                                                    <button
-                                                      onClick={() => handleUpdateWhatsAppStatus(ord, "paid")}
-                                                      className="py-1 px-1.5 bg-neutral-850 hover:bg-neutral-800 border border-neutral-700 text-neutral-300 text-[9px] font-bold uppercase transition-all cursor-pointer"
-                                                      title="Manually force OPay order as Paid"
-                                                    >
-                                                      Force Paid
-                                                    </button>
-                                                  )}
-                                                </div>
-                                              </div>
-                                            </div>
-                                          )}
-
                                           {isWhatsapp && (
                                             <div className="bg-black/30 p-2 border border-emerald-500/10 space-y-1.5 mt-1 text-left">
                                               <div className="flex justify-between items-center text-[8px] text-neutral-400 font-bold uppercase">
@@ -3136,7 +3107,7 @@ export default function DedicatedDashboard({
                                   <div className="flex items-start justify-between gap-2 border-b border-neutral-850 pb-2">
                                     <div>
                                       <span className="text-[9px] text-neutral-500 font-mono block">
-                                        {ord.timestamp ? new Date(ord.timestamp).toLocaleString() : "Unknown date"}
+                                        {formatOrderDate(ord, undefined, ord.id)}
                                       </span>
                                       <h3 className="text-xs font-mono font-bold text-white uppercase mt-0.5 tracking-wider">
                                         ID: #{ord.id?.substring(6) || ord.id}
