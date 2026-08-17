@@ -1,8 +1,10 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { resolveItemImage, mapTitleToImageUrl } from "../utils/menu";
 
 interface MenuImageProps {
   src?: string;
   name: string;
+  category?: string;
   className?: string;
   containerClassName?: string;
   alt?: string;
@@ -12,14 +14,33 @@ interface MenuImageProps {
 export default function MenuImage({
   src,
   name,
+  category,
   className = "w-full h-full object-cover",
   containerClassName = "w-full h-full",
   alt,
   size = "lg"
 }: MenuImageProps) {
   const [hasError, setHasError] = useState(false);
+  const [currentSrc, setCurrentSrc] = useState<string>("");
 
-  // Premium, high-contrast twilight & ambient dark gradients
+  // Determine initial effective image URL
+  useEffect(() => {
+    setHasError(false);
+    const resolved = resolveItemImage(src, name, category);
+    setCurrentSrc(resolved);
+  }, [src, name, category]);
+
+  const handleImageError = () => {
+    // If the custom src failed, try our fallback map once before falling back to initials
+    const fallbackUrl = mapTitleToImageUrl(name, undefined, category);
+    if (currentSrc !== fallbackUrl && fallbackUrl) {
+      setCurrentSrc(fallbackUrl);
+    } else {
+      setHasError(true);
+    }
+  };
+
+  // Premium ambient dark gradients for initials fallback
   const gradients = [
     "from-[#2a1708] to-[#0e0702] text-amber-100/90 border-amber-900/40",
     "from-[#1c1c1c] to-[#0a0a0a] text-neutral-300/90 border-neutral-800/40",
@@ -38,19 +59,17 @@ export default function MenuImage({
     return Math.abs(hash) % gradients.length;
   };
 
-  const gradientClass = gradients[getGradientIndex(name)];
+  const gradientClass = gradients[getGradientIndex(name || "Item")];
 
   const getInitials = (str: string) => {
-    const parts = str.trim().split(/\s+/);
+    const parts = (str || "").trim().split(/\s+/);
     if (parts.length >= 2) {
       return (parts[0][0] + parts[1][0]).toUpperCase();
     }
-    return str.substring(0, 2).toUpperCase();
+    return (str || "MM").substring(0, 2).toUpperCase();
   };
 
-  const hasNoImage = !src || src.trim() === "" || src === "none" || src === "null" || src === "undefined";
-
-  if (hasNoImage || hasError) {
+  if (hasError || !currentSrc) {
     const initials = getInitials(name);
     
     if (size === "sm") {
@@ -74,13 +93,13 @@ export default function MenuImage({
         <div className="absolute inset-2 border border-white/[0.03] pointer-events-none" />
         
         {/* Watermark icon/initials in the background */}
-        <div className="absolute -bottom-4 -right-4 text-white/[0.02] text-7xl font-sans font-black pointer-events-none select-none select-none uppercase">
+        <div className="absolute -bottom-4 -right-4 text-white/[0.02] text-7xl font-sans font-black pointer-events-none select-none uppercase">
           {initials}
         </div>
 
         <div className="space-y-2 z-10">
           <span className="text-[10px] tracking-[0.25em] text-amber-500/70 uppercase block font-mono">
-            CULINARY SANCTUM
+            UPSIDE CULINARY
           </span>
           <h5 className="text-xs md:text-sm font-sans font-light tracking-widest text-white/95 uppercase max-w-[170px] mx-auto leading-relaxed group-hover:text-amber-400 transition-colors">
             {name}
@@ -94,10 +113,10 @@ export default function MenuImage({
   return (
     <div className={`overflow-hidden relative ${containerClassName} flex items-center justify-center`}>
       <img
-        src={src}
+        src={currentSrc}
         alt={alt || name}
         className={`${className} w-full h-full object-cover`}
-        onError={() => setHasError(true)}
+        onError={handleImageError}
         loading="lazy"
         referrerPolicy="no-referrer"
       />

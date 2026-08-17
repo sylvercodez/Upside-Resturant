@@ -20,9 +20,9 @@ function getAppUrl(req: any): string {
   return `${protocol}://${host}`;
 }
 
-const stripQuotes = (str: string): string => {
-  if (!str) return "";
-  let s = str.trim();
+const stripQuotes = (str: any): string => {
+  if (str === null || str === undefined) return "";
+  let s = String(str).trim();
   while ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'"))) {
     s = s.substring(1, s.length - 1).trim();
   }
@@ -31,26 +31,26 @@ const stripQuotes = (str: string): string => {
 
 /**
  * Helper to securely retrieve OPay integration settings.
- * Pulls from Firestore 'settings/opay', falling back to safe server-side process.env configurations.
+ * Pulls from process.env, falling back to MySQL settings and Firestore 'settings/opay'.
  */
 async function getOpayConfig() {
-  console.log("=== [VERCEL LOG] OPAY CONFIGURATION RESOLUTION INITIATED ===");
+  console.log("=== [SERVER LOG] OPAY CONFIGURATION RESOLUTION INITIATED ===");
   
-  // Respect process.env as primary configurations first
-  let merchantId = process.env.VITE_OPAY_MERCHANT_ID || process.env.OPAY_MERCHANT_ID;
-  let publicKey = process.env.VITE_OPAY_PUBLIC_KEY || process.env.OPAY_PUBLIC_KEY;
-  let secretKey = process.env.VITE_OPAY_SECRET_KEY || process.env.OPAY_SECRET_KEY;
-  let environment = process.env.VITE_OPAY_ENVIRONMENT || process.env.OPAY_ENVIRONMENT || "sandbox";
+  // 1. Read directly from process.env with quote and whitespace sanitization
+  let merchantId = stripQuotes(process.env.OPAY_MERCHANT_ID || process.env.VITE_OPAY_MERCHANT_ID);
+  let publicKey = stripQuotes(process.env.OPAY_PUBLIC_KEY || process.env.VITE_OPAY_PUBLIC_KEY);
+  let secretKey = stripQuotes(process.env.OPAY_SECRET_KEY || process.env.VITE_OPAY_SECRET_KEY);
+  let environment = stripQuotes(process.env.OPAY_ENVIRONMENT || process.env.VITE_OPAY_ENVIRONMENT || "");
 
-  console.log("[VERCEL LOG] Checked Environment Variables in Process:");
-  console.log(` - OPAY_MERCHANT_ID: ${merchantId ? `Present (length: ${merchantId.length}, partial: ${merchantId.substring(0, 4)}...${merchantId.substring(Math.max(0, merchantId.length - 4))})` : "MISSING"}`);
-  console.log(` - OPAY_PUBLIC_KEY: ${publicKey ? `Present (length: ${publicKey.length}, partial: ${publicKey.substring(0, 8)}...)` : "MISSING"}`);
-  console.log(` - OPAY_SECRET_KEY: ${secretKey ? `Present (length: ${secretKey.length}, partial: ...${secretKey.substring(Math.max(0, secretKey.length - 8))})` : "MISSING"}`);
-  console.log(` - OPAY_ENVIRONMENT: ${process.env.OPAY_ENVIRONMENT || "NOT SET (Defaulting to sandbox)"}`);
+  console.log("[SERVER LOG] Checked Environment Variables in Process:");
+  console.log(` - OPAY_MERCHANT_ID: ${merchantId ? `Present (len: ${merchantId.length}, partial: ${merchantId.substring(0, 4)}...${merchantId.substring(Math.max(0, merchantId.length - 4))})` : "MISSING"}`);
+  console.log(` - OPAY_PUBLIC_KEY: ${publicKey ? `Present (len: ${publicKey.length}, partial: ${publicKey.substring(0, 8)}...)` : "MISSING"}`);
+  console.log(` - OPAY_SECRET_KEY: ${secretKey ? `Present (len: ${secretKey.length}, partial: ...${secretKey.substring(Math.max(0, secretKey.length - 8))})` : "MISSING"}`);
+  console.log(` - OPAY_ENVIRONMENT (raw): ${environment || "NOT SET"}`);
 
-  // Fallback to MySQL and Firestore settings ONLY if process.env values are not fully available
+  // 2. Query MySQL and Firestore settings ONLY if process.env values are not fully available
   if (!merchantId || !publicKey || !secretKey) {
-    console.log("[VERCEL LOG] process.env variables incomplete. Querying MySQL settings first, then Firestore as fallback...");
+    console.log("[SERVER LOG] process.env variables incomplete. Querying MySQL settings first, then Firestore as fallback...");
     let opaySettings: any = {};
     
     // A. Query MySQL settings first
@@ -58,10 +58,10 @@ async function getOpayConfig() {
       const rows = await querySql("SELECT setting_value FROM settings WHERE setting_key = ?", ["opay"]);
       if (rows && rows.length > 0) {
         opaySettings = JSON.parse(rows[0].setting_value) || {};
-        console.log("[VERCEL LOG] Found settings/opay in MySQL settings table.");
+        console.log("[SERVER LOG] Found settings/opay in MySQL settings table.");
       }
     } catch (mysqlErr: any) {
-      console.warn("[VERCEL LOG] Could not fetch settings/opay from MySQL database:", mysqlErr.message || mysqlErr);
+      console.warn("[SERVER LOG] Could not fetch settings/opay from MySQL database:", mysqlErr.message || mysqlErr);
     }
 
     // B. Query Firestore if MySQL didn't yield results
@@ -71,34 +71,61 @@ async function getOpayConfig() {
         if (opaySnap.exists) {
           const fsSettings = opaySnap.data() || {};
           opaySettings = { ...fsSettings, ...opaySettings };
-          console.log("[VERCEL LOG] Found settings/opay Firestore document.");
+          console.log("[SERVER LOG] Found settings/opay Firestore document.");
         } else {
-          console.log("[VERCEL LOG] settings/opay Firestore document does not exist.");
+          console.log("[SERVER LOG] settings/opay Firestore document does not exist.");
         }
       } catch (err: any) {
-        console.warn("[VERCEL LOG] Could not fetch settings/opay from Firestore Administrative DB:", err.message || err);
+        console.warn("[SERVER LOG] Could not fetch settings/opay from Firestore Administrative DB:", err.message || err);
       }
     }
     
-    merchantId = merchantId || opaySettings?.merchantId;
-    publicKey = publicKey || opaySettings?.publicKey;
-    secretKey = secretKey || opaySettings?.secretKey;
-    environment = environment || opaySettings?.environment || "sandbox";
+    merchantId = merchantId || stripQuotes(opaySettings?.merchantId);
+    publicKey = publicKey || stripQuotes(opaySettings?.publicKey);
+    secretKey = secretKey || stripQuotes(opaySettings?.secretKey);
+    if (!environment && opaySettings?.environment) {
+      environment = stripQuotes(opaySettings.environment);
+    }
     
-    console.log("[VERCEL LOG] Final values after database configuration fallbacks evaluation:");
+    console.log("[SERVER LOG] Values after database configuration fallbacks evaluation:");
     console.log(` - merchantId: ${merchantId ? "RESOLVED" : "MISSING"}`);
     console.log(` - publicKey: ${publicKey ? "RESOLVED" : "MISSING"}`);
     console.log(` - secretKey: ${secretKey ? "RESOLVED" : "MISSING"}`);
-    console.log(` - environment: ${environment}`);
   }
 
+  // 3. Intelligent environment determination
+  // If keys start with live patterns (OPAYPUB_ or live hex strings) OR environment is explicitly live/production,
+  // ensure we use production/live. If keys start with test/sandbox patterns (OPAYPUB1 or OPAYPRV1) or environment is sandbox, use sandbox.
+  let isLive = false;
+  const envLower = (environment || "").toLowerCase().trim();
+
+  if (envLower === "live" || envLower === "production" || envLower === "prod") {
+    isLive = true;
+  } else if (envLower === "sandbox" || envLower === "test" || envLower === "dev" || envLower === "development") {
+    isLive = false;
+  } else {
+    // If OPAY_ENVIRONMENT is not explicitly configured, infer from keys:
+    // Standard test keys start with OPAYPUB1 or OPAYPRV1
+    // Live keys in OPay international / merchant portal typically start with OPAYPUB_ / OPAYPRV_ or are standard 32-char hashes.
+    if (publicKey.startsWith("OPAYPUB1") || secretKey.startsWith("OPAYPRV1")) {
+      isLive = false;
+    } else if (publicKey.length > 0 && secretKey.length > 0) {
+      isLive = true;
+    } else {
+      isLive = false;
+    }
+  }
+
+  const finalEnv = isLive ? "production" : "sandbox";
+  console.log(` - Final Resolved Environment: ${finalEnv} (isLive: ${isLive})`);
+
   if (!merchantId || !publicKey || !secretKey) {
-    console.error("=== [VERCEL LOG: FAILURE] Missing required OPay merchant credentials in both environment variables and Firestore settings. ===");
+    console.error("=== [SERVER LOG: FAILURE] Missing required OPay merchant credentials in environment variables, MySQL, and Firestore settings. ===");
     throw new Error("OPay credentials setup is incomplete. Merchant ID, Public Key, and Secret Key are required on the server.");
   }
 
-  console.log("=== [VERCEL LOG] OPAY CONFIGURATION RESOLVED SUCCESSFUL ===");
-  return { merchantId, publicKey, secretKey, environment };
+  console.log("=== [SERVER LOG] OPAY CONFIGURATION RESOLVED SUCCESSFUL ===");
+  return { merchantId, publicKey, secretKey, environment: finalEnv, isLive };
 }
 
 /**
@@ -119,15 +146,11 @@ async function initializeOpayPayment(paymentData: {
   ipAddress?: string;
   appUrl: string;
 }) {
-  const { merchantId, publicKey, secretKey, environment } = await getOpayConfig();
+  const { merchantId, publicKey, secretKey, environment, isLive } = await getOpayConfig();
   
-  // Auto-detect sandbox/test environment if keys start with standard OPay test patterns
-  const isSandbox = environment !== "production" || 
-                    publicKey.startsWith("OPAYPUB1") || 
-                    secretKey.startsWith("OPAYPRV1");
-  const opayBaseUrl = isSandbox
-    ? "https://testapi.opaycheckout.com/api/v1/international/cashier/create"
-    : "https://liveapi.opaycheckout.com/api/v1/international/cashier/create";
+  const opayBaseUrl = isLive
+    ? "https://liveapi.opaycheckout.com/api/v1/international/cashier/create"
+    : "https://testapi.opaycheckout.com/api/v1/international/cashier/create";
 
   let koboValue = Math.round(paymentData.amount * 100);
 
@@ -165,25 +188,26 @@ async function initializeOpayPayment(paymentData: {
     }
   };
 
-  console.log("======================================= [VERCEL LOGGER: OPAY PAYMENT] START =======================================");
-  console.log(`[VERCEL LOGGER: OPAY PAYMENT] Initializing Payment Request details:
+  console.log("======================================= [SERVER LOGGER: OPAY PAYMENT] START =======================================");
+  console.log(`[SERVER LOGGER: OPAY PAYMENT] Initializing Payment Request details:
    - Order ID (Reference): ${paymentData.orderId}
    - User ID: ${paymentData.userId}
-   - Booking Amount: ₦${paymentData.amount}
+   - Booking Amount: ₦${paymentData.amount} (${koboValue} Kobo)
    - Checkout Type: ${paymentData.type || "N/A"}
    - Buyer Mobile: ${paymentData.phone}
    - Buyer Email: ${paymentData.email || "N/A"}`);
 
-  console.log(`[VERCEL LOGGER: OPAY PAYMENT] Settings Config Integrity:
+  console.log(`[SERVER LOGGER: OPAY PAYMENT] Settings Config Integrity:
    - Target Merchant ID: ${merchantId}
-   - Public Key Exists: ${!!publicKey}
-   - Secret Key Exists: ${!!secretKey}
-   - API Environment: ${environment}
+   - Public Key Exists: ${!!publicKey} (length: ${publicKey?.length})
+   - Secret Key Exists: ${!!secretKey} (length: ${secretKey?.length})
+   - Mode: ${isLive ? "LIVE PRODUCTION" : "SANDBOX/TEST"}
+   - Environment: ${environment}
    - Request Endpoint Domain: ${opayBaseUrl}`);
 
   const signature = generateOpayApiSignature(requestData, secretKey);
-  console.log(`[VERCEL LOGGER: OPAY PAYMENT] Signature calculated: "${signature}" (Generated using HMAC-SHA512 via Secret Key)`);
-  console.log("[VERCEL LOGGER: OPAY PAYMENT] Full Outgoing Request Payload Sent To OPay:", JSON.stringify(requestData, null, 2));
+  console.log(`[SERVER LOGGER: OPAY PAYMENT] Signature calculated: "${signature}" (Generated using HMAC-SHA512 via Secret Key)`);
+  console.log("[SERVER LOGGER: OPAY PAYMENT] Full Outgoing Request Payload Sent To OPay:", JSON.stringify(requestData, null, 2));
 
   const response = await fetch(opayBaseUrl, {
     method: "POST",
@@ -196,36 +220,37 @@ async function initializeOpayPayment(paymentData: {
     body: JSON.stringify(requestData)
   });
 
-  console.log(`[VERCEL LOGGER: OPAY PAYMENT] HTTP Dispatch Response Status Received: ${response.status} (${response.statusText || "OK"})`);
+  console.log(`[SERVER LOGGER: OPAY PAYMENT] HTTP Dispatch Response Status Received: ${response.status} (${response.statusText || "OK"})`);
 
   const responseText = await response.text();
-  console.log("[VERCEL LOGGER: OPAY PAYMENT] Raw Response Payload from OPay Service Stringified:", responseText);
+  console.log("[SERVER LOGGER: OPAY PAYMENT] Raw Response Payload from OPay Service Stringified:", responseText);
 
-  let opayRes;
+  let opayRes: any;
   try {
     opayRes = JSON.parse(responseText);
   } catch (err: any) {
-    console.error(`=== [VERCEL LOGGER: FAILURE] Non-JSON Response parsed from OPay Server ===
+    console.error(`=== [SERVER LOGGER: FAILURE] Non-JSON Response parsed from OPay Server ===
 Raw Data: "${responseText}"
 Exception details:`, err);
-    throw new Error(`Non-JSON response from OPay cashier server: ${responseText}`);
+    throw new Error(`Non-JSON response from OPay cashier server (HTTP ${response.status}): ${responseText}`);
   }
 
-  console.log("[VERCEL LOGGER: OPAY PAYMENT] Successfully parsed response JSON:", JSON.stringify(opayRes, null, 2));
+  console.log("[SERVER LOGGER: OPAY PAYMENT] Successfully parsed response JSON:", JSON.stringify(opayRes, null, 2));
 
   if (opayRes.code !== "00000" && opayRes.code !== "0000") {
-    console.error(`=== [VERCEL LOGGER: API ERROR STATUS] Code: ${opayRes.code}, Message: ${opayRes.message || "No error explanation provided"} ===`);
-    throw new Error(opayRes.message || `OPay cashier creation failed: Code ${opayRes.code}`);
+    console.error(`=== [SERVER LOGGER: API ERROR STATUS] Code: ${opayRes.code}, Message: ${opayRes.message || "No error explanation provided"} ===`);
+    const errorMsg = opayRes.message || `OPay cashier creation failed (Code ${opayRes.code})`;
+    throw new Error(`${errorMsg} [OPay Gateway Code: ${opayRes.code}]`);
   }
 
   const cashierUrl = opayRes.data?.cashierUrl || opayRes.data?.url;
   if (!cashierUrl) {
-    console.error("=== [VERCEL LOGGER: SCHEMATIC MISMATCH] Parsed OPay success code but Cashier URL is missing in payload structure! ===");
-    throw new Error("Cashier redirect URL was not generated by OPay API.");
+    console.error("=== [SERVER LOGGER: SCHEMATIC MISMATCH] Parsed OPay success code but Cashier URL is missing in payload structure! ===");
+    throw new Error("Cashier redirect URL was not returned by OPay API.");
   }
 
-  console.log(`[VERCEL LOGGER: OPAY PAYMENT] Success! Checkout URL generated gracefully. Redirecting to: ${cashierUrl}`);
-  console.log("======================================= [VERCEL LOGGER: OPAY PAYMENT] END =======================================");
+  console.log(`[SERVER LOGGER: OPAY PAYMENT] Success! Checkout URL generated gracefully. Redirecting to: ${cashierUrl}`);
+  console.log("======================================= [SERVER LOGGER: OPAY PAYMENT] END =======================================");
 
   // 4. Store Payment document in Firestore as specified using try-catch to keep it resilient
   try {
@@ -305,15 +330,11 @@ Exception details:`, err);
  * validates against Firestore document, maps status, and updates records.
  */
 async function verifyOpayPayment(reference: string) {
-  const { merchantId, publicKey, secretKey, environment } = await getOpayConfig();
+  const { merchantId, publicKey, secretKey, environment, isLive } = await getOpayConfig();
 
-  // Auto-detect sandbox/test environment if keys start with standard OPay test patterns
-  const isSandbox = environment !== "production" || 
-                    publicKey.startsWith("OPAYPUB1") || 
-                    secretKey.startsWith("OPAYPRV1");
-  const opayStatusUrl = isSandbox
-    ? "https://testapi.opaycheckout.com/api/v1/international/cashier/status"
-    : "https://liveapi.opaycheckout.com/api/v1/international/cashier/status";
+  const opayStatusUrl = isLive
+    ? "https://liveapi.opaycheckout.com/api/v1/international/cashier/status"
+    : "https://testapi.opaycheckout.com/api/v1/international/cashier/status";
 
   const requestData = {
     reference,
@@ -322,7 +343,7 @@ async function verifyOpayPayment(reference: string) {
 
   const signature = generateOpayApiSignature(requestData, secretKey);
 
-  console.log(`[verifyOpayPayment] Querying payment status from OPay: ${reference}`);
+  console.log(`[verifyOpayPayment] Querying payment status from OPay (${isLive ? 'LIVE' : 'SANDBOX'}): ${reference}`);
 
   const response = await fetch(opayStatusUrl, {
     method: "POST",
@@ -336,15 +357,15 @@ async function verifyOpayPayment(reference: string) {
   });
 
   const responseText = await response.text();
-  let opayRes;
+  let opayRes: any;
   try {
     opayRes = JSON.parse(responseText);
   } catch {
-    throw new Error(`Non-JSON response from status check: ${responseText}`);
+    throw new Error(`Non-JSON response from status check (HTTP ${response.status}): ${responseText}`);
   }
 
   if (opayRes.code !== "00000" && opayRes.code !== "0000") {
-    throw new Error(opayRes.message || `OPay status check failure: ${opayRes.code}`);
+    throw new Error(opayRes.message || `OPay status check failure: Code ${opayRes.code}`);
   }
 
   const responseData = opayRes.data;
@@ -595,21 +616,26 @@ opayRouter.post("/create-payment", async (req: any, res: any) => {
 
 // Route: Debug OPay configuration and verify server variables
 opayRouter.get("/debug", async (req: any, res: any) => {
-  console.log("=== [VERCEL LOG] SYSTEM DIAGNOSTICS PATH ACTIVATED (/api/opay/debug) ===");
+  console.log("=== [SERVER LOG] SYSTEM DIAGNOSTICS PATH ACTIVATED (/api/opay/debug) ===");
   try {
     const cfg = await getOpayConfig();
     
-    // Check original env variables directly to show Vercel status
-    const envMerchantId = process.env.OPAY_MERCHANT_ID;
-    const envPublicKey = process.env.OPAY_PUBLIC_KEY;
-    const envSecretKey = process.env.OPAY_SECRET_KEY;
-    const envEnv = process.env.OPAY_ENVIRONMENT;
+    // Check original env variables directly
+    const envMerchantId = process.env.OPAY_MERCHANT_ID || process.env.VITE_OPAY_MERCHANT_ID;
+    const envPublicKey = process.env.OPAY_PUBLIC_KEY || process.env.VITE_OPAY_PUBLIC_KEY;
+    const envSecretKey = process.env.OPAY_SECRET_KEY || process.env.VITE_OPAY_SECRET_KEY;
+    const envEnv = process.env.OPAY_ENVIRONMENT || process.env.VITE_OPAY_ENVIRONMENT;
 
     const diagnostics = {
-      isVercel: !!process.env.VERCEL,
+      isLive: cfg.isLive,
+      resolvedEnvironment: cfg.environment,
+      targetGatewayEndpoint: cfg.isLive
+        ? "https://liveapi.opaycheckout.com/api/v1/international/cashier/create"
+        : "https://testapi.opaycheckout.com/api/v1/international/cashier/create",
       nodeEnv: process.env.NODE_ENV,
       resolvedConfig: {
         merchantId: cfg.merchantId,
+        merchantIdLength: cfg.merchantId ? cfg.merchantId.length : 0,
         publicKeyExists: !!cfg.publicKey,
         publicKeyLength: cfg.publicKey ? cfg.publicKey.length : 0,
         publicKeySample: cfg.publicKey ? `${cfg.publicKey.substring(0, 10)}...` : undefined,
@@ -624,20 +650,20 @@ opayRouter.get("/debug", async (req: any, res: any) => {
         OPAY_SECRET_KEY: envSecretKey ? `Present (len: ${envSecretKey.length})` : "NOT_FOUND",
         OPAY_ENVIRONMENT: envEnv || "NOT_SET"
       },
-      firestoreDiagnosticFallback: {
+      databaseFallback: {
         adminDbInitialized: !!dbAdmin,
-        status: !envMerchantId || !envPublicKey || !envSecretKey ? "Fallback evaluated" : "Not needed (keys present in env)"
+        status: !envMerchantId || !envPublicKey || !envSecretKey ? "Database fallback was evaluated" : "Using environment variables directly"
       }
     };
 
-    console.log("[VERCEL LOG] Diagnostics completed successfully:", JSON.stringify(diagnostics, null, 2));
+    console.log("[SERVER LOG] Diagnostics completed successfully:", JSON.stringify(diagnostics, null, 2));
     return res.json({
       success: true,
       message: "Diagnostics loaded successfully. Credentials status is verified.",
       diagnostics
     });
   } catch (e: any) {
-    console.error("=== [VERCEL LOG: DIAGNOSTICS FAILURE] ===", e);
+    console.error("=== [SERVER LOG: DIAGNOSTICS FAILURE] ===", e);
     return res.status(500).json({
       success: false,
       error: e.message || "An error occurred checking OPay config.",

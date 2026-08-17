@@ -168,7 +168,6 @@ export async function getDocs(queryOrRef: any): Promise<any> {
     else if (collectionName === "analytics_events") url = getApiUrl("/api/mysql/analytics");
     else if (collectionName === "assets") url = getApiUrl("/api/mysql/assets");
     else if (collectionName === "google_reviews" || collectionName === "reviews") url = getApiUrl("/api/reviews");
-    else if (collectionName === "instagram_posts") url = getApiUrl("/api/instagram/posts");
 
     if (!url) {
       // Check localStorage for transient collection items

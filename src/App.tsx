@@ -25,6 +25,7 @@ import AIChatbotWidget from "./components/AIChatbotWidget";
 import FAQView from "./components/FAQView";
 import { CartItem, ShippingLocation, LAGOS_AREAS, getApiUrl } from "./types";
 import { MenuItem, MENU_ITEMS, Category, CATEGORIES } from "./data/menu";
+import { resolveItemImage, mapTitleToImageUrl, setLiveAssetsCache } from "./utils/menu";
 import { getBranding, auth, db } from "./firebase";
 import { User, onAuthStateChanged, signOut } from "firebase/auth";
 import { doc, getDoc, setDoc, updateDoc, collection, query, onSnapshot } from "firebase/firestore";
@@ -101,13 +102,31 @@ useEffect(() => {
 const fetchMySQLData = async () => {
   if (!isMySQLActive) return;
   try {
-    const [mRes, cRes, sRes] = await Promise.all([
+    const [mRes, cRes, sRes, aRes] = await Promise.all([
       fetch(getApiUrl("/api/mysql/menus")),
       fetch(getApiUrl("/api/mysql/categories")),
       fetch(getApiUrl("/api/mysql/shipping-areas")),
+      fetch(getApiUrl("/api/mysql/assets")),
     ]);
 
-    if (mRes.ok) setAllMenuItems(await mRes.json());
+    let loadedAssets: any[] = [];
+    if (aRes.ok) {
+      try {
+        loadedAssets = await aRes.json();
+        if (Array.isArray(loadedAssets)) {
+          setLiveAssetsCache(loadedAssets);
+        }
+      } catch (_) {}
+    }
+
+    if (mRes.ok) {
+      const rawData: MenuItem[] = await mRes.json();
+      const enriched = rawData.map(item => ({
+        ...item,
+        image: resolveItemImage(item.image, item.name, item.category, loadedAssets)
+      }));
+      setAllMenuItems(enriched);
+    }
     if (cRes.ok) setAllCategories(await cRes.json());
     if (sRes.ok) setShippingLocations(await sRes.json());
   } catch (err) {
@@ -118,6 +137,24 @@ const fetchMySQLData = async () => {
 useEffect(() => {
   fetchMySQLData(); // run once, no interval
 }, [isMySQLActive]);
+
+  // Asset listener from Firestore (keeps image library in sync across sessions)
+  useEffect(() => {
+    try {
+      const q = query(collection(db, "assets"));
+      const unsubscribe = onSnapshot(q, (snapshot) => {
+        const assets: any[] = [];
+        snapshot.forEach((docSnap) => {
+          assets.push({ id: docSnap.id, ...docSnap.data() });
+        });
+        if (assets.length > 0) {
+          setLiveAssetsCache(assets);
+        }
+      }, () => {});
+      return () => unsubscribe();
+    } catch (_) {}
+  }, []);
+
   // Firebase listeners (only active if MySQL is not active)
   useEffect(() => {
     if (isMySQLActive) return;
@@ -127,13 +164,21 @@ useEffect(() => {
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const customMenus: MenuItem[] = [];
       snapshot.forEach((docSnap) => {
-        customMenus.push({ id: docSnap.id, ...docSnap.data() } as MenuItem);
+        const itemData = { id: docSnap.id, ...docSnap.data() } as MenuItem;
+        const enriched = {
+          ...itemData,
+          image: resolveItemImage(itemData.image, itemData.name, itemData.category)
+        };
+        customMenus.push(enriched);
       });
       const nonDeletedCustom = customMenus.filter(item => !(item as any).deleted);
       const deletedCustomIds = new Set(customMenus.filter(item => (item as any).deleted).map(item => item.id));
       
       const customIds = new Set(nonDeletedCustom.map(item => item.id));
-      const filteredStatic = MENU_ITEMS.filter(item => !customIds.has(item.id) && !deletedCustomIds.has(item.id));
+      const filteredStatic = MENU_ITEMS.map(item => ({
+        ...item,
+        image: resolveItemImage(item.image, item.name, item.category)
+      })).filter(item => !customIds.has(item.id) && !deletedCustomIds.has(item.id));
       setAllMenuItems([...filteredStatic, ...nonDeletedCustom]);
     }, (err) => {
       console.error("Menus loading snap error:", err);

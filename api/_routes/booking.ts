@@ -6,7 +6,7 @@ import path from "path";
 
 export const bookingRouter = express.Router();
 
-// Helper to get Firestore instance (similar to instagram.ts)
+// Helper to get Firestore instance
 async function getFirestoreInstance() {
   const configPath = path.join(process.cwd(), "firebase-applet-config.json");
   let databaseId = "ai-studio-7ee29b67-2013-4587-a753-b479a6e19155";

@@ -1822,13 +1822,47 @@ mysqlRouter.get("/auth/google/callback", async (req: any, res: any) => {
 mysqlRouter.get("/menus", async (req: any, res: any) => {
   try {
     const rows = await querySql("SELECT * FROM menus WHERE deleted = 0");
-    const items = rows.map((r: any) => ({
-      ...r,
-      tags: r.tags ? r.tags.split(",") : [],
-      specs: r.specs ? r.specs.split(",") : [],
-      price: parseFloat(r.price),
-      available: r.available === undefined ? true : (r.available === 1 || r.available === true)
-    }));
+    let assetMap = new Map<string, string>();
+    try {
+      const assetRows = await querySql("SELECT * FROM assets");
+      if (assetRows && Array.isArray(assetRows)) {
+        for (const a of assetRows) {
+          if (a.url) {
+            if (a.id) assetMap.set(String(a.id).toLowerCase().replace(/[^a-z0-9]/g, ""), a.url);
+            if (a.name) assetMap.set(String(a.name).toLowerCase().replace(/[^a-z0-9]/g, ""), a.url);
+          }
+        }
+      }
+    } catch (_) {}
+
+    const items = rows.map((r: any) => {
+      let finalImage = r.image || "";
+      const isFullUrl = finalImage.startsWith("http") || finalImage.startsWith("data:") || finalImage.startsWith("blob:") || finalImage.startsWith("/");
+      if (!isFullUrl && finalImage) {
+        const normImg = finalImage.toLowerCase().replace(/[^a-z0-9]/g, "");
+        if (assetMap.has(normImg)) {
+          finalImage = assetMap.get(normImg)!;
+        }
+      }
+      if (!finalImage || finalImage === "none" || finalImage === "null") {
+        const normName = (r.name || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+        const normId = (r.id || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+        if (assetMap.has(normName)) {
+          finalImage = assetMap.get(normName)!;
+        } else if (assetMap.has(normId)) {
+          finalImage = assetMap.get(normId)!;
+        }
+      }
+
+      return {
+        ...r,
+        image: finalImage,
+        tags: r.tags ? r.tags.split(",") : [],
+        specs: r.specs ? r.specs.split(",") : [],
+        price: parseFloat(r.price),
+        available: r.available === undefined ? true : (r.available === 1 || r.available === true)
+      };
+    });
     return res.json(items);
   } catch (err: any) {
     return res.status(500).json({ error: err.message || "Failed to load menus." });

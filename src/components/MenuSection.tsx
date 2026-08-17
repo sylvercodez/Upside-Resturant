@@ -404,10 +404,13 @@ export default function MenuSection({ onAddToCart, favorites, onToggleFavorite, 
           <div className="bg-white border border-neutral-200 w-full max-w-lg overflow-y-auto max-h-[90vh] text-black">
             {/* Header banner */}
             <div className="relative h-48 bg-black">
-              <img
+              <MenuImage
                 src={selectedItemForModal.image}
-                alt={selectedItemForModal.name}
+                name={selectedItemForModal.name}
+                category={selectedItemForModal.category}
                 className="w-full h-full object-cover"
+                containerClassName="w-full h-full"
+                size="lg"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black to-transparent" />
               <button
