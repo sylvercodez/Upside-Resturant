@@ -15,6 +15,7 @@ import DedicatedExperience from "./components/DedicatedExperience";
 import DedicatedCorporateEvents from "./components/DedicatedCorporateEvents";
 import DedicatedDashboard from "./components/DedicatedDashboard";
 import DedicatedAuth from "./components/DedicatedAuth";
+import DedicatedResetPassword from "./components/DedicatedResetPassword";
 import DedicatedTrack from "./components/DedicatedTrack";
 import DedicatedLegal from "./components/DedicatedLegal";
 import DedicatedRiderDashboard from "./components/DedicatedRiderDashboard";
@@ -296,6 +297,7 @@ useEffect(() => {
   const [currentPath, setCurrentPath] = useState<string>(() => {
     const path = window.location.pathname;
     const hash = window.location.hash;
+    if (hash.includes("reset-password") || path.includes("reset-password")) return "/reset-password";
     if (hash === "#/menu" || path === "/menu") return "/menu";
     if (hash === "#/corporate-events" || path === "/corporate-events" || hash === "#/events" || path === "/events") return "/corporate-events";
     if (hash === "#/experience" || path === "/experience") return "/experience";
@@ -320,17 +322,19 @@ useEffect(() => {
           ? "dashboard" 
           : (currentPath === "/auth" 
             ? "auth" 
-            : (currentPath === "/cart" 
-              ? "cart" 
-              : (currentPath === "/track" 
-                ? "track" 
-                : (currentPath === "/rider" 
-                  ? "rider" 
-                  : (currentPath === "/faq" 
-                    ? "faq" 
-                    : (currentPath === "/terms" || currentPath === "/privacy" 
-                      ? "legal" 
-                      : "landing")))))))));
+            : (currentPath === "/reset-password"
+              ? "reset-password"
+              : (currentPath === "/cart" 
+                ? "cart" 
+                : (currentPath === "/track" 
+                  ? "track" 
+                  : (currentPath === "/rider" 
+                    ? "rider" 
+                    : (currentPath === "/faq" 
+                      ? "faq" 
+                      : (currentPath === "/terms" || currentPath === "/privacy" 
+                        ? "legal" 
+                        : "landing"))))))))));
 
   const handleNavigate = (path: string) => {
     window.history.pushState(null, "", path);
@@ -355,7 +359,9 @@ useEffect(() => {
     const handlePopState = () => {
       const path = window.location.pathname;
       const hash = window.location.hash;
-      if (hash === "#/menu" || path === "/menu") {
+      if (hash.includes("reset-password") || path.includes("reset-password")) {
+        setCurrentPath("/reset-password");
+      } else if (hash === "#/menu" || path === "/menu") {
         setCurrentPath("/menu");
       } else if (hash === "#/corporate-events" || path === "/corporate-events" || hash === "#/events" || path === "/events") {
         setCurrentPath("/corporate-events");
@@ -725,7 +731,7 @@ useEffect(() => {
   return (
     <div className="bg-black min-h-screen text-white select-none selection:bg-amber-500 selection:text-black antialiased ">
       {/* Luxury Navigation Header */}
-      {activeView !== "rider" && activeView !== "dashboard" && (
+      {activeView !== "rider" && activeView !== "dashboard" && activeView !== "reset-password" && (
         <Header
           onOpenCart={() => handleNavigate("/cart")}
           onScrollToElement={handleScrollToElement}
@@ -851,6 +857,13 @@ useEffect(() => {
         />
       )}
 
+      {activeView === "reset-password" && (
+        <DedicatedResetPassword
+          onBackToLobby={() => handleNavigate("/")}
+          onNavigate={handleNavigate}
+        />
+      )}
+
       {activeView === "cart" && (
         <div className="bg-neutral-50 min-h-screen pt-28 pb-12 px-4 text-neutral-900 font-sans" id="dedicated-cart-page">
           <CartDrawer
@@ -896,7 +909,7 @@ useEffect(() => {
       )}
 
       {/* LUXURY COMPREHENSIVE FOOTER */}
-      {activeView !== "dashboard" && activeView !== "auth" && activeView !== "cart" && activeView !== "rider" && (
+      {activeView !== "dashboard" && activeView !== "auth" && activeView !== "reset-password" && activeView !== "cart" && activeView !== "rider" && (
         <Footer
           onScrollToElement={handleScrollToElement}
           onOpenReservations={() => handleScrollToElement("home-reservation-section")}
@@ -906,7 +919,7 @@ useEffect(() => {
       )}
 
       {/* MOBILE THUMB NAVIGATION CONTROLS */}
-      {activeView !== "rider" && (
+      {activeView !== "rider" && activeView !== "reset-password" && (
         <BottomNav
           onOpenCart={() => handleNavigate("/cart")}
           onOpenReservations={() => handleScrollToElement("home-reservation-section")}

@@ -953,6 +953,23 @@ await querySql(`
     expiresAt BIGINT NOT NULL
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 `);
+
+// password_resets table
+await querySql(`
+  CREATE TABLE IF NOT EXISTS password_resets (
+    id VARCHAR(255) PRIMARY KEY,
+    email VARCHAR(255) NOT NULL,
+    token VARCHAR(255) NOT NULL,
+    pin VARCHAR(20) DEFAULT NULL,
+    expiresAt BIGINT NOT NULL,
+    used TINYINT(1) DEFAULT 0,
+    createdAt VARCHAR(255)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+`);
+
+try {
+  await querySql("ALTER TABLE password_resets ADD COLUMN pin VARCHAR(20) DEFAULT NULL");
+} catch (_) {}
     // Create shipping_areas table
     await querySql(`
       CREATE TABLE IF NOT EXISTS shipping_areas (
@@ -2311,11 +2328,18 @@ mysqlRouter.post("/auth/send-password-reset", async (req: any, res: any) => {
 
     try {
       await querySql(
-        "INSERT INTO password_resets (id, email, token, expiresAt, used, createdAt) VALUES (?, ?, ?, ?, 0, ?)",
-        [resetId, targetEmail, resetToken, expiresAt, new Date().toISOString()]
+        "INSERT INTO password_resets (id, email, token, pin, expiresAt, used, createdAt) VALUES (?, ?, ?, ?, ?, 0, ?)",
+        [resetId, targetEmail, resetToken, securityPasscode, expiresAt, new Date().toISOString()]
       );
     } catch (e) {
-      console.warn("[Password Reset] Could not insert into password_resets table, fallback mode active:", e);
+      try {
+        await querySql(
+          "INSERT INTO password_resets (id, email, token, expiresAt, used, createdAt) VALUES (?, ?, ?, ?, 0, ?)",
+          [resetId, targetEmail, resetToken, expiresAt, new Date().toISOString()]
+        );
+      } catch (err2) {
+        console.warn("[Password Reset] Could not insert into password_resets table, fallback mode active:", err2);
+      }
     }
 
     const origin = (req.headers.origin || req.headers.referer || "https://ais-dev-sbzn5bjecas4gnypehx4a5-856555242900.europe-west2.run.app").replace(/\/$/, "");
@@ -2441,15 +2465,26 @@ mysqlRouter.post("/auth/send-password-reset", async (req: any, res: any) => {
   }
 });
 
-// Verify reset token validity
+// Verify reset token or pin validity
 mysqlRouter.post("/auth/verify-reset-token", async (req: any, res: any) => {
   try {
-    const { token, email } = req.body;
-    if (!token) return res.status(400).json({ error: "Token is required." });
+    const { token, pin, email } = req.body;
+    if (!token && !pin) {
+      return res.status(400).json({ valid: false, error: "Reset token or security PIN is required." });
+    }
 
-    const rows = await querySql("SELECT * FROM password_resets WHERE token = ? AND used = 0", [token]);
+    let rows: any[] = [];
+    if (token) {
+      rows = await querySql("SELECT * FROM password_resets WHERE token = ? AND used = 0", [token]);
+    } else if (pin && email) {
+      const cleanEmail = email.toLowerCase().trim();
+      rows = await querySql("SELECT * FROM password_resets WHERE pin = ? AND LOWER(email) = ? AND used = 0", [pin.trim(), cleanEmail]);
+    } else if (pin) {
+      rows = await querySql("SELECT * FROM password_resets WHERE pin = ? AND used = 0", [pin.trim()]);
+    }
+
     if (!rows || rows.length === 0) {
-      return res.status(400).json({ valid: false, error: "Password reset link is invalid or has already been used." });
+      return res.status(400).json({ valid: false, error: "Password reset credentials are invalid or have already been used." });
     }
 
     const record = rows[0];
@@ -2457,38 +2492,47 @@ mysqlRouter.post("/auth/verify-reset-token", async (req: any, res: any) => {
       return res.status(400).json({ valid: false, error: "Password reset link has expired. Please request a new one." });
     }
 
-    return res.json({ valid: true, email: record.email });
+    return res.json({ valid: true, email: record.email, token: record.token });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
 });
 
-// Complete reset with token
+// Complete reset with token or pin
 mysqlRouter.post("/auth/reset-password-with-token", async (req: any, res: any) => {
   try {
-    const { token, email, newPassword } = req.body;
-    if (!token || !newPassword) {
-      return res.status(400).json({ error: "Token and new password are required." });
+    const { token, pin, email, newPassword } = req.body;
+    if ((!token && !pin) || !newPassword) {
+      return res.status(400).json({ error: "Reset token/PIN and new password are required." });
     }
     if (newPassword.length < 6) {
       return res.status(400).json({ error: "Password must be at least 6 characters." });
     }
 
-    const rows = await querySql("SELECT * FROM password_resets WHERE token = ? AND used = 0", [token]);
+    let rows: any[] = [];
+    if (token) {
+      rows = await querySql("SELECT * FROM password_resets WHERE token = ? AND used = 0", [token]);
+    } else if (pin && email) {
+      const cleanEmail = email.toLowerCase().trim();
+      rows = await querySql("SELECT * FROM password_resets WHERE pin = ? AND LOWER(email) = ? AND used = 0", [pin.trim(), cleanEmail]);
+    } else if (pin) {
+      rows = await querySql("SELECT * FROM password_resets WHERE pin = ? AND used = 0", [pin.trim()]);
+    }
+
     if (!rows || rows.length === 0) {
-      return res.status(400).json({ error: "Invalid or already used reset token." });
+      return res.status(400).json({ error: "Invalid, expired, or already used reset credentials." });
     }
 
     const record = rows[0];
     if (Date.now() > Number(record.expiresAt)) {
-      return res.status(400).json({ error: "This password reset token has expired." });
+      return res.status(400).json({ error: "This password reset link has expired." });
     }
 
     const passHash = hashPassword(newPassword);
     const targetEmail = (email || record.email).toLowerCase().trim();
 
     await querySql("UPDATE users SET password_hash = ? WHERE LOWER(email) = ?", [passHash, targetEmail]);
-    await querySql("UPDATE password_resets SET used = 1 WHERE token = ?", [token]);
+    await querySql("UPDATE password_resets SET used = 1 WHERE id = ?", [record.id]);
 
     return res.json({ success: true, message: "Password updated successfully! You can now log in with your new credentials." });
   } catch (err: any) {

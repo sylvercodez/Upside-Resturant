@@ -8,10 +8,8 @@ export async function appCheckVerification(req: any, res: any, next: any) {
     const isExempt = 
       path === "/opay/webhook" ||
       path === "/opay/callback" ||
-      path === "/instagram/callback" ||
       path === "/api/opay/webhook" ||
-      path === "/api/opay/callback" ||
-      path === "/api/instagram/callback";
+      path === "/api/opay/callback";
 
     if (isExempt) {
       return next();

@@ -989,18 +989,29 @@ export default function DedicatedAuth({
                     </button>
 
                     {mode === "forgot" && (
-                      <div className="text-center pt-2">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setMode("signin");
-                            setError("");
-                            setSuccess("");
-                          }}
-                          className="text-[11px] font-mono uppercase tracking-wider text-amber-600 hover:underline hover:text-amber-500 transition-colors cursor-pointer"
-                        >
-                          Cancel and Return to Sign In
-                        </button>
+                      <div className="text-center pt-2 space-y-2">
+                        <div>
+                          <button
+                            type="button"
+                            onClick={() => onNavigate("/reset-password")}
+                            className="text-[11px] font-mono font-bold uppercase tracking-wider text-amber-600 hover:text-amber-700 underline transition-colors cursor-pointer"
+                          >
+                            Have a Reset Token or PIN? Reset Here &rarr;
+                          </button>
+                        </div>
+                        <div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setMode("signin");
+                              setError("");
+                              setSuccess("");
+                            }}
+                            className="text-[10px] font-mono uppercase tracking-wider text-neutral-500 hover:underline hover:text-neutral-700 transition-colors cursor-pointer"
+                          >
+                            Cancel and Return to Sign In
+                          </button>
+                        </div>
                       </div>
                     )}
                   </form>

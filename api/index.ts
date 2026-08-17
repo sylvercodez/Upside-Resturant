@@ -7,13 +7,12 @@ import { mapEnvVariables } from "./_utils/env.js";
 import { appCheckVerification } from "./_middleware/appCheck.js";
 import { otpRouter } from "./_routes/otp.js";
 import { opayRouter } from "./_routes/opay.js";
-import { instagramRouter, startInstagramCrawlerCron, getFirestoreInstance } from "./_routes/instagram.js";
 import { menuRouter } from "./_routes/menu.js";
 import { mysqlRouter } from "./_routes/mysql.js";
 import { deliveryRouter } from "./_routes/delivery.js";
 import { chatbotRouter } from "./_routes/chatbot.js";
 import { bookingRouter } from "./_routes/booking.js";
-import { reviewsRouter, startReviewsCrawlerCron } from "./_routes/reviews.js";
+import { reviewsRouter, startReviewsCrawlerCron, getFirestoreInstance } from "./_routes/reviews.js";
 
 // Ensure standard and VITE_ prefixed environment variables are correctly mapped
 mapEnvVariables();
@@ -79,7 +78,6 @@ app.use((req: any, res: any, next: any) => {
     path.startsWith("/otp/") ||
     path.startsWith("/opay/") ||
     path.startsWith("/seed-menu") ||
-    path.startsWith("/instagram/") ||
     path.startsWith("/mysql/") ||
     path.startsWith("/delivery/") ||
     path.startsWith("/smtp/") ||
@@ -126,7 +124,6 @@ app.use(appCheckVerification);
 // Mount modular sub-routers (with both /api prefix and raw prefix to guarantee match under all serverless configurations)
 app.use("/api/otp", otpRouter);
 app.use("/api/opay", opayRouter);
-app.use("/api/instagram", instagramRouter);
 app.use("/api/seed-menu", menuRouter);
 app.use("/api/mysql", mysqlRouter);
 app.use("/api/delivery", deliveryRouter);
@@ -136,7 +133,6 @@ app.use("/api/reviews", reviewsRouter);
 
 app.use("/otp", otpRouter);
 app.use("/opay", opayRouter);
-app.use("/instagram", instagramRouter);
 app.use("/seed-menu", menuRouter);
 app.use("/mysql", mysqlRouter);
 app.use("/delivery", deliveryRouter);
@@ -241,10 +237,9 @@ async function serveApp() {
     });
   }
 
-  // Start the background Instagram crawl check
+  // Start the background reviews crawler check
   try {
     getFirestoreInstance().then(db => {
-      startInstagramCrawlerCron(db);
       startReviewsCrawlerCron(db);
     }).catch(err => {
       console.error("[SERVER] Failed to auto-start background crawlers Firestore connection:", err.message);

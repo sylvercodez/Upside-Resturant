@@ -310,5 +310,41 @@ export async function signInWithPopup(auth: FirebaseAuthClient, provider?: any):
 }
 
 export async function sendPasswordResetEmail(auth: FirebaseAuthClient, email: string) {
+  try {
+    const res = await fetch(getApiUrl("/api/mysql/auth/send-password-reset"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email })
+    });
+    return res.ok;
+  } catch (e) {
+    return false;
+  }
+}
+
+export async function confirmPasswordReset(auth: FirebaseAuthClient, oobCode: string, newPassword: string) {
+  const res = await fetch(getApiUrl("/api/mysql/auth/reset-password-with-token"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token: oobCode, newPassword })
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || "Password reset failed");
+  }
   return true;
+}
+
+export async function verifyPasswordResetCode(auth: FirebaseAuthClient, code: string) {
+  const res = await fetch(getApiUrl("/api/mysql/auth/verify-reset-token"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token: code })
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || "Invalid reset code");
+  }
+  const data = await res.json();
+  return data.email || "guest@upside.com";
 }

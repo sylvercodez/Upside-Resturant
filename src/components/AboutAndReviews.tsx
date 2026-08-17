@@ -1,18 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { REVIEWS } from "../data/reviews";
-import { Award, Compass, Heart, Share2, Star, Mail, MapPin, Instagram, Sparkles, Gift, Play, Pause, Volume2, VolumeX, MessageCircle, Zap, QrCode, Smartphone, ArrowRight, RefreshCw, Check } from "lucide-react";
+import { Award, Compass, Heart, Share2, Star, Mail, MapPin, Sparkles, Gift, Play, Pause, Volume2, VolumeX, MessageCircle, Zap, QrCode, Smartphone, ArrowRight, RefreshCw, Check } from "lucide-react";
 import { collection, getDocs, query, orderBy, limit } from "firebase/firestore";
 import { db } from "../firebase";
 import { getApiUrl } from "../types";
-
-interface InstagramPost {
-  id: string;
-  caption?: string;
-  media_url: string;
-  permalink?: string;
-  media_type?: string;
-  timestamp?: string;
-}
 
 interface AboutAndReviewsProps {
   onReadMoreExperience: () => void;
@@ -24,8 +15,6 @@ export default function AboutAndReviews({ onReadMoreExperience, onViewMenu }: Ab
   const [loadingReviews, setLoadingReviews] = useState(false);
   const [activeReviewIndex, setActiveReviewIndex] = useState(0);
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
-  const [instagramFeed, setInstagramFeed] = useState<InstagramPost[]>([]);
-  const [isLiveFeed, setIsLiveFeed] = useState(false);
   const [isPlaying, setIsPlaying] = useState(true);
   const [isMuted, setIsMuted] = useState(true);
   const videoRef = React.useRef<HTMLVideoElement>(null);
@@ -120,61 +109,6 @@ export default function AboutAndReviews({ onReadMoreExperience, onViewMenu }: Ab
       setIsMuted(!isMuted);
     }
   };
-
-  useEffect(() => {
-    async function fetchInstagramFeed() {
-      try {
-        const postsRef = collection(db, "instagram_posts");
-        const q = query(postsRef, orderBy("createdAt", "desc"), limit(8));
-        const querySnapshot = await getDocs(q);
-        const posts: InstagramPost[] = [];
-        querySnapshot.forEach((doc) => {
-          const data = doc.data();
-          posts.push({
-            id: doc.id,
-            caption: data.caption || "",
-            media_url: data.media_url,
-            permalink: data.permalink || "https://www.instagram.com/upsidebymopheth/",
-            media_type: data.media_type || "IMAGE",
-            timestamp: data.timestamp || ""
-          });
-        });
-        if (posts.length > 0) {
-          setInstagramFeed(posts);
-          setIsLiveFeed(true);
-        }
-
-        // Trigger check-sync to keep the database fresh (checks if > 3 days since last sync)
-        const checkSyncRes = await fetch("/api/instagram/check-sync");
-        if (checkSyncRes.ok) {
-          const checkSyncData = await checkSyncRes.json();
-          if (checkSyncData.shouldCrawl) {
-            console.log("[Instagram Crawler] Feed is stale or unseeded, triggering automatic background crawl...");
-            const crawlRes = await fetch("/api/instagram/crawl", { method: "POST" });
-            if (crawlRes.ok) {
-              const crawlData = await crawlRes.json();
-              if (crawlData.posts && crawlData.posts.length > 0) {
-                console.log("[Instagram Crawler] Background crawl successful! Updating live feed.");
-                const updatedPosts = crawlData.posts.map((item: any) => ({
-                  id: item.id,
-                  caption: item.caption || "Upside Gourmet Moment",
-                  media_url: item.media_url,
-                  permalink: item.permalink || "https://www.instagram.com/upsidebymopheth/",
-                  media_type: item.media_type || "IMAGE",
-                  timestamp: item.timestamp || ""
-                }));
-                setInstagramFeed(updatedPosts.slice(0, 8));
-                setIsLiveFeed(true);
-              }
-            }
-          }
-        }
-      } catch (err) {
-        console.warn("Instagram dynamic feed offline or unseeded, using premium standard fallbacks:", err);
-      }
-    }
-    fetchInstagramFeed();
-  }, []);
 
   const handleShareReview = (text: string, index: number) => {
     navigator.clipboard.writeText(text);
@@ -519,67 +453,6 @@ export default function AboutAndReviews({ onReadMoreExperience, onViewMenu }: Ab
               />
             ))}
           </div>
-        </div>
-      </section>
-
-      {/* INSTAGRAM LIVE FEED SIMULATION (Lagos vibes) */}
-      <section className="max-w-[1800px] mx-auto px-4 md:px-8 space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
-          <div className="text-left space-y-1">
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] tracking-widest text-amber-600 font-mono uppercase block">
-                @UpsideLagos Sanctuary
-              </span>
-              {isLiveFeed && (
-                <span className="inline-flex items-center gap-1 text-[8px] font-mono font-bold uppercase text-emerald-500 bg-emerald-950/10 px-1.5 py-0.5 border border-emerald-900/30 animate-pulse">
-                  <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></span>
-                  Live Feed Synchronized
-                </span>
-              )}
-            </div>
-            <h3 className="text-2xl md:text-3xl text-neutral-950 font-serif font-light">
-              Instagram Moments
-            </h3>
-          </div>
-          <button
-            onClick={() => window.open("https://www.instagram.com/upsidebymopheth/", "_blank")}
-            className="text-xs font-mono text-neutral-800 hover:text-black hover:bg-neutral-50 transition-colors flex items-center gap-2 cursor-pointer border border-neutral-200 px-4 py-2 uppercase"
-          >
-            <Instagram className="w-4 h-4 text-amber-600" />
-            <span>Follow Our Feed</span>
-          </button>
-        </div>
-
-        {/* Instashow Grid of Dynamic Culinary Art */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {(instagramFeed.length > 0 ? instagramFeed : [
-            { id: "p1", caption: "Artisanal Brew", media_url: "https://images.unsplash.com/photo-1541167760496-1628856ab772?auto=format&fit=crop&q=80&w=650", permalink: "https://www.instagram.com/upsidebymopheth/" },
-            { id: "p2", caption: "Late Mixology", media_url: "https://images.unsplash.com/photo-1545438102-799c3991ffb2?auto=format&fit=crop&q=80&w=650", permalink: "https://www.instagram.com/upsidebymopheth/" },
-            { id: "p3", caption: "Fine Searing", media_url: "https://images.unsplash.com/photo-1600891964599-f61ba0e24092?auto=format&fit=crop&q=80&w=650", permalink: "https://www.instagram.com/upsidebymopheth/" },
-            { id: "p4", caption: "Ambient Lounge", media_url: "https://images.unsplash.com/photo-1511192336575-5a79af67a629?auto=format&fit=crop&q=80&w=650", permalink: "https://www.instagram.com/upsidebymopheth/" }
-          ]).map((inst) => (
-            <div
-              key={inst.id}
-              onClick={() => inst.permalink && window.open(inst.permalink, "_blank")}
-              className="group relative aspect-square overflow-hidden bg-neutral-100 border border-neutral-200 cursor-pointer"
-            >
-              <img
-                src={inst.media_url}
-                alt={inst.caption || "Instagram Post"}
-                className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
-                referrerPolicy="no-referrer"
-                loading="lazy"
-              />
-              <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-4 text-left">
-                <span className="text-[10px] text-amber-400 font-mono uppercase font-bold tracking-widest line-clamp-2">
-                  {inst.caption || "Dining Moments"}
-                </span>
-                <span className="text-[8px] text-neutral-300 font-mono mt-1 block">
-                  #UpsideLagos #LagosFineDining
-                </span>
-              </div>
-            </div>
-          ))}
         </div>
       </section>
 

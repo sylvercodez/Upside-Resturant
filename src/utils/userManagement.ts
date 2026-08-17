@@ -75,11 +75,10 @@ export const PERMISSION_CATEGORIES: PermissionCategory[] = [
   },
   {
     id: "crm",
-    title: "Customer Support & Social Media",
+    title: "Customer Support & Live Chat",
     icon: "💬",
     permissions: [
-      { id: "support_panel", name: "Support Desk & Live Chat", desc: "Live customer chat responses and support ticket resolution." },
-      { id: "instagram_panel", name: "Instagram Gallery Sync", desc: "Configure Instagram live feed sync and social media integration." }
+      { id: "support_panel", name: "Support Desk & Live Chat", desc: "Live customer chat responses and support ticket resolution." }
     ]
   },
   {
@@ -98,7 +97,7 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<string, string[]> = {
   admin: [
     "orders_pipeline", "whatsapp_orders", "menus_panel", "categories_panel",
     "images_panel", "shipping_panel", "riders_panel", "coupons_panel",
-    "analytics_panel", "support_panel", "instagram_panel", "users_panel",
+    "analytics_panel", "support_panel", "users_panel",
     "opay_panel", "mysql_panel"
   ],
   sales: [
@@ -114,7 +113,7 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<string, string[]> = {
     "shipping_panel", "riders_panel"
   ],
   developer: [
-    "mysql_panel", "opay_panel", "instagram_panel"
+    "mysql_panel", "opay_panel"
   ],
   user: []
 };

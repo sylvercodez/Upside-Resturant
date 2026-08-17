@@ -66,9 +66,8 @@ if (typeof window !== "undefined") {
       
       // Check if targeting our own server API endpoints
       const isLocalApi = urlString.includes("/api/") && 
-                         !urlString.includes("/api/opay/webhook") && 
-                         !urlString.includes("/api/instagram/callback");
-                         
+                         !urlString.includes("/api/opay/webhook");
+                          
       if (isLocalApi) {
         try {
           const token = await getAppCheckToken();
@@ -90,8 +89,7 @@ if (typeof window !== "undefined") {
         value: async function (input: RequestInfo | URL, init?: RequestInit) {
           const urlString = typeof input === "string" ? input : (input instanceof URL ? input.toString() : input.url);
           const isLocalApi = urlString.includes("/api/") && 
-                             !urlString.includes("/api/opay/webhook") && 
-                             !urlString.includes("/api/instagram/callback");
+                             !urlString.includes("/api/opay/webhook");
                              
           if (isLocalApi) {
             try {
