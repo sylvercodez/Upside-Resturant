@@ -3,20 +3,32 @@ import { doc, getDoc, onSnapshot } from "firebase/firestore";
 import { db } from "../firebase";
 
 export default function TawkSupportWidget() {
-  const [enabled, setEnabled] = useState(true);
-  const [propertyId, setPropertyId] = useState("6a466b60c5bc5d1d491794f3");
-  const [widgetId, setWidgetId] = useState("1jshh6ssq");
+  const [enabled, setEnabled] = useState(false);
+  const [propertyId, setPropertyId] = useState("");
+  const [widgetId, setWidgetId] = useState("");
 
   // Listen to live support config settings
   useEffect(() => {
     const docRef = doc(db, "settings", "support_config");
     
+    const isRealTawkId = (propId?: string, widId?: string) => {
+      if (!propId || !widId) return false;
+      const cleanProp = propId.trim();
+      const cleanWid = widId.trim();
+      // Ignore placeholder/mock IDs
+      if (cleanProp === "6a466b60c5bc5d1d491794f3" || cleanProp === "" || cleanWid === "") return false;
+      return cleanProp.length > 5 && cleanWid.length > 3;
+    };
+
     const unsubscribe = onSnapshot(docRef, (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
-        setEnabled(data.tawkEnabled ?? true);
-        setPropertyId(data.tawkPropertyId || "6a466b60c5bc5d1d491794f3");
-        setWidgetId(data.tawkWidgetId || "1jshh6ssq");
+        const isValid = (data.tawkEnabled === true) && isRealTawkId(data.tawkPropertyId, data.tawkWidgetId);
+        setEnabled(isValid);
+        if (isValid) {
+          setPropertyId(data.tawkPropertyId.trim());
+          setWidgetId(data.tawkWidgetId.trim());
+        }
       }
     }, (err) => {
       console.warn("Failed to subscribe to Tawk config, trying single fetch:", err);
@@ -24,49 +36,50 @@ export default function TawkSupportWidget() {
       getDoc(docRef).then((docSnap) => {
         if (docSnap.exists()) {
           const data = docSnap.data();
-          setEnabled(data.tawkEnabled ?? true);
-          setPropertyId(data.tawkPropertyId || "6a466b60c5bc5d1d491794f3");
-          setWidgetId(data.tawkWidgetId || "1jshh6ssq");
+          const isValid = (data.tawkEnabled === true) && isRealTawkId(data.tawkPropertyId, data.tawkWidgetId);
+          setEnabled(isValid);
+          if (isValid) {
+            setPropertyId(data.tawkPropertyId.trim());
+            setWidgetId(data.tawkWidgetId.trim());
+          }
         }
-      }).catch(e => console.error("Tawk config fetch failed completely:", e));
+      }).catch(() => {});
     });
 
     return () => unsubscribe();
   }, []);
 
-  // Instead of opening a new tab/window, we inject the live chat widget directly into the document body
-  // which lets customers chat normally directly inside the landing page.
+  // Injects the live chat widget directly into the document body only if valid real credentials exist
   useEffect(() => {
     if (!enabled || !propertyId || !widgetId) return;
 
-    // Standard Tawk.to script injection
-    const s1 = document.createElement("script");
-    s1.async = true;
-    s1.src = `https://embed.tawk.to/${propertyId}/${widgetId}`;
-    s1.charset = "UTF-8";
-    s1.setAttribute("crossorigin", "*");
-    document.body.appendChild(s1);
+    let s1: HTMLScriptElement | null = null;
+    try {
+      s1 = document.createElement("script");
+      s1.async = true;
+      s1.src = `https://embed.tawk.to/${propertyId}/${widgetId}`;
+      s1.charset = "UTF-8";
+      s1.setAttribute("crossorigin", "*");
+      s1.onerror = () => {
+        console.warn("[TawkSupportWidget] Third-party Tawk script failed to load, falling back to native support chat.");
+      };
+      document.body.appendChild(s1);
 
-    // Initial Tawk_API settings
-    const tawkApi = (window as any).Tawk_API || {};
-    tawkApi.onLoad = function() {
-      if ((window as any).Tawk_API && typeof (window as any).Tawk_API.hideWidget === "function") {
-        console.log("[TawkSupportWidget] onLoad: Hiding standard Tawk.to bubble...");
-        (window as any).Tawk_API.hideWidget();
-      }
-    };
-    tawkApi.onChatMinimized = function() {
-      if ((window as any).Tawk_API && typeof (window as any).Tawk_API.hideWidget === "function") {
-        console.log("[TawkSupportWidget] onChatMinimized: Hiding standard Tawk.to bubble...");
-        (window as any).Tawk_API.hideWidget();
-      }
-    };
-    (window as any).Tawk_API = tawkApi;
-
-    // If Tawk_API is already initialized/cached, hide it immediately
-    if ((window as any).Tawk_API && typeof (window as any).Tawk_API.hideWidget === "function") {
-      console.log("[TawkSupportWidget] Tawk already loaded: Hiding standard Tawk.to bubble...");
-      (window as any).Tawk_API.hideWidget();
+      // Initial Tawk_API settings
+      const tawkApi = (window as any).Tawk_API || {};
+      tawkApi.onLoad = function() {
+        if ((window as any).Tawk_API && typeof (window as any).Tawk_API.hideWidget === "function") {
+          (window as any).Tawk_API.hideWidget();
+        }
+      };
+      tawkApi.onChatMinimized = function() {
+        if ((window as any).Tawk_API && typeof (window as any).Tawk_API.hideWidget === "function") {
+          (window as any).Tawk_API.hideWidget();
+        }
+      };
+      (window as any).Tawk_API = tawkApi;
+    } catch (e) {
+      console.warn("[TawkSupportWidget] Script creation error suppressed:", e);
     }
 
     const handleOpenLiveSupport = () => {
@@ -75,11 +88,9 @@ export default function TawkSupportWidget() {
         typeof (window as any).Tawk_API.showWidget === "function" &&
         typeof (window as any).Tawk_API.maximize === "function"
       ) {
-        console.log("[TawkSupportWidget] Showing and maximizing standard inline live support widget...");
         (window as any).Tawk_API.showWidget();
         (window as any).Tawk_API.maximize();
       } else {
-        console.warn("[TawkSupportWidget] Tawk_API not loaded yet, falling back to direct link...");
         const directLink = `https://tawk.to/chat/${propertyId}/${widgetId}`;
         window.open(directLink, "_blank", "noopener,noreferrer");
       }
@@ -88,9 +99,11 @@ export default function TawkSupportWidget() {
     window.addEventListener("open-upside-live-support", handleOpenLiveSupport);
 
     return () => {
-      try {
-        document.body.removeChild(s1);
-      } catch (e) {}
+      if (s1 && s1.parentNode) {
+        try {
+          s1.parentNode.removeChild(s1);
+        } catch (_) {}
+      }
       window.removeEventListener("open-upside-live-support", handleOpenLiveSupport);
     };
   }, [enabled, propertyId, widgetId]);

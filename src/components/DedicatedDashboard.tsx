@@ -582,38 +582,41 @@ export default function DedicatedDashboard({
   // Load OPay settings config
   useEffect(() => {
     if (currentUser && (isSysAdmin || effectiveRole === "admin" || effectiveRole === "developer" || userRole === "admin" || userRole === "developer")) {
-      const unsub = onSnapshot(doc(db, "settings", "opay"), (docSnap) => {
-        if (docSnap.exists()) {
-          const data = docSnap.data();
-          const mId = data.merchantId || "";
-          const pKey = data.publicKey || "";
-          const sKey = data.secretKey || "";
-          const env = data.environment || "sandbox";
-
-          setOpayMerchantId(mId);
-          setOpayPublicKey(pKey);
-          setOpaySecretKey(sKey);
-          setOpayEnvironment(env);
-
-          // If valid credentials exist in the admin's Firestore document, automatically sync them to .env on load!
-          if (mId && pKey && sKey) {
-            fetch(getApiUrl("/api/opay/convert-to-env"), {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ merchantId: mId, publicKey: pKey, secretKey: sKey, environment: env })
-            }).then(() => {
-              console.log("[AUTO-CONVERT-TO-ENV] Loaded and synchronized OPay credentials with .env on backend process.");
-            }).catch(syncErr => {
-              console.warn("[AUTO-CONVERT-TO-ENV] Onload environment sync failed:", syncErr);
-            });
+      // 1. Fetch from server API (reads MySQL & .env)
+      fetch(getApiUrl("/api/opay/config"))
+        .then(res => res.json())
+        .then(data => {
+          if (data?.success && data?.config) {
+            if (data.config.merchantId) setOpayMerchantId(data.config.merchantId);
+            if (data.config.publicKey) setOpayPublicKey(data.config.publicKey);
+            if (data.config.secretKey) setOpaySecretKey(data.config.secretKey);
+            if (data.config.environment) setOpayEnvironment(data.config.environment);
           }
-        }
-      }, (err) => {
-        console.warn("Could not fetch OPay config doc:", err);
-      });
-      return () => unsub();
+        })
+        .catch(apiErr => console.warn("Could not fetch OPay config from API:", apiErr));
+
+      // 2. Also listen on Firestore if available
+      try {
+        const unsub = onSnapshot(doc(db, "settings", "opay"), (docSnap) => {
+          if (docSnap.exists()) {
+            const data = docSnap.data();
+            const mId = data.merchantId || "";
+            const pKey = data.publicKey || "";
+            const sKey = data.secretKey || "";
+            const env = data.environment || "sandbox";
+
+            if (mId) setOpayMerchantId(mId);
+            if (pKey) setOpayPublicKey(pKey);
+            if (sKey) setOpaySecretKey(sKey);
+            if (env) setOpayEnvironment(env);
+          }
+        }, (err) => {
+          console.warn("Could not fetch OPay config doc:", err);
+        });
+        return () => unsub();
+      } catch (_) {}
     }
-  }, [currentUser, userRole]);
+  }, [currentUser, userRole, isSysAdmin, effectiveRole]);
 
   const handleSaveOpayConfig = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -626,30 +629,35 @@ export default function DedicatedDashboard({
       const cleanPKey = opayPublicKey.trim();
       const cleanSKey = opaySecretKey.trim();
 
-      await setDoc(doc(db, "settings", "opay"), {
-        merchantId: cleanMId,
-        publicKey: cleanPKey,
-        secretKey: cleanSKey,
-        environment: opayEnvironment,
-        updatedAt: new Date().toISOString(),
-        updatedBy: currentUser?.email || "admin"
-      }, { merge: true });
+      // 1. Save to server environment & MySQL first
+      const envRes = await fetch(getApiUrl("/api/opay/convert-to-env"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          merchantId: cleanMId,
+          publicKey: cleanPKey,
+          secretKey: cleanSKey,
+          environment: opayEnvironment
+        })
+      });
 
-      // On successful database write, automatically replicate/convert these values to server env securely!
+      if (!envRes.ok) {
+        const errorData = await envRes.json().catch(() => ({}));
+        throw new Error(errorData.error || "Failed to save configuration on server.");
+      }
+
+      // 2. Try Firestore replication
       try {
-        await fetch(getApiUrl("/api/opay/convert-to-env"), {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            merchantId: cleanMId,
-            publicKey: cleanPKey,
-            secretKey: cleanSKey,
-            environment: opayEnvironment
-          })
-        });
-        console.log("[AUTO-CONVERT-TO-ENV] Successfully synchronized manual update with server-side environment!");
-      } catch (envSyncErr) {
-        console.warn("[AUTO-CONVERT-TO-ENV] Manual sync failed:", envSyncErr);
+        await setDoc(doc(db, "settings", "opay"), {
+          merchantId: cleanMId,
+          publicKey: cleanPKey,
+          secretKey: cleanSKey,
+          environment: opayEnvironment,
+          updatedAt: new Date().toISOString(),
+          updatedBy: currentUser?.email || "admin"
+        }, { merge: true });
+      } catch (fsErr) {
+        console.warn("Firestore settings/opay sync skipped:", fsErr);
       }
 
       setOpayActionSuccess("OPay payment credentials configured and saved successfully!");

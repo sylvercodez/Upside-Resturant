@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { X, Trash2, Ticket, ArrowRight, ShoppingCart, MessageSquare, Check, CreditCard, Sparkles, Minus, Plus, AlertCircle, HelpCircle, Store, MapPin, User, ChefHat, Coffee } from "lucide-react";
+import { X, Trash2, Ticket, ArrowRight, ShoppingCart, MessageSquare, Check, CreditCard, Sparkles, Minus, Plus, AlertCircle, HelpCircle, Store, MapPin, User, ChefHat, Coffee, Copy, CheckCircle2, Utensils, Navigation, ExternalLink, RefreshCw } from "lucide-react";
 import { CartItem, CheckoutDetails, PromoCode, AVAILABLE_PROMOS, LAGOS_AREAS, ShippingLocation, getApiUrl } from "../types";
 import { logCustomEvent } from "../utils/analytics";
 import { MENU_ITEMS, MenuItem } from "../data/menu";
@@ -32,6 +32,8 @@ interface CartDrawerProps {
   isPage?: boolean;
   shippingLocations?: ShippingLocation[];
   isMySQLActive?: boolean;
+  initialOpayRef?: string;
+  onNavigate?: (path: string) => void;
 }
 
 export default function CartDrawer({
@@ -47,7 +49,9 @@ export default function CartDrawer({
   menuItems,
   isPage = false,
   shippingLocations = [],
-  isMySQLActive = false
+  isMySQLActive = false,
+  initialOpayRef,
+  onNavigate
 }: CartDrawerProps) {
   const [activeTab, setActiveTab] = useState<"checkout">("checkout");
   const [promoInput, setPromoInput] = useState("");
@@ -124,6 +128,12 @@ export default function CartDrawer({
   const [savedEmail, setSavedEmail] = useState<string>("");
   const [savedPhone, setSavedPhone] = useState<string>("");
   const [savedArea, setSavedArea] = useState<string>("");
+  const [savedRef, setSavedRef] = useState<string>("");
+  const [savedVerificationCode, setSavedVerificationCode] = useState<string>("");
+  const [savedItems, setSavedItems] = useState<any[]>([]);
+  const [savedType, setSavedType] = useState<string>("delivery");
+  const [copiedRef, setCopiedRef] = useState(false);
+  const [copiedCode, setCopiedCode] = useState(false);
 
   const [pollingStatus, setPollingStatus] = useState<"not_polling" | "polling" | "passed" | "failed" | "cancelled" | "expired" | "timeout">("not_polling");
   const [pollingError, setPollingError] = useState("");
@@ -204,14 +214,25 @@ export default function CartDrawer({
           
           // Hydrate success state and synchronize database status securely on Frontend
           try {
-            let orderPayload: any = {};
+            let orderPayload: any = data.order || {};
             const savedOrderRaw = localStorage.getItem("upside_active_order");
             if (savedOrderRaw) {
               try {
-                orderPayload = JSON.parse(savedOrderRaw);
+                const parsed = JSON.parse(savedOrderRaw);
+                orderPayload = { ...parsed, ...orderPayload };
               } catch (_) {}
             }
+            if (orderPayload.customerName) setSavedCustomerName(orderPayload.customerName);
+            if (orderPayload.email) setSavedEmail(orderPayload.email);
+            if (orderPayload.phone) setSavedPhone(orderPayload.phone);
+            if (orderPayload.address) setSavedArea(orderPayload.address);
+            if (orderPayload.totalPrice) setSavedTotalPaid(orderPayload.totalPrice);
+            if (orderPayload.items) setSavedItems(Array.isArray(orderPayload.items) ? orderPayload.items : []);
+            if (orderPayload.type) setSavedType(orderPayload.type);
+            setSavedRef(ref || orderPayload.id || "");
+
             const verificationCode = orderPayload?.verificationCode || generateAlphanumericCode();
+            setSavedVerificationCode(verificationCode);
             const cleanOrder = {
               id: ref,
               userId: orderPayload?.userId || auth.currentUser?.uid || "guest",
@@ -229,6 +250,9 @@ export default function CartDrawer({
               verificationCode,
               updatedAt: new Date().toISOString()
             };
+            try {
+              localStorage.setItem("upside_active_order", JSON.stringify(cleanOrder));
+            } catch (_) {}
              // Ensure full record is securely written on OPay verification success
             if (isMySQLActive) {
               await fetch(getApiUrl(`/api/mysql/orders/${ref}`), {
@@ -353,7 +377,7 @@ export default function CartDrawer({
   // Auto detect redirect success query reference on mount
   React.useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const opayRef = params.get("opay_ref");
+    const opayRef = initialOpayRef || params.get("opay_ref");
     if (opayRef) {
       console.log("[CART DRAWER] Initializing checkout success screen from callback parameter:", opayRef);
       setOppRef(opayRef);
@@ -368,7 +392,7 @@ export default function CartDrawer({
         console.warn("Could not sweep OPay address query parameters:", historyErr);
       }
     }
-  }, []);
+  }, [initialOpayRef]);
 
   // Listen for step transitions to populate custom saved stats instantly
   React.useEffect(() => {
@@ -377,11 +401,15 @@ export default function CartDrawer({
         const savedOrderRaw = localStorage.getItem("upside_active_order");
         if (savedOrderRaw) {
           const parsed = JSON.parse(savedOrderRaw);
+          if (parsed.id) setSavedRef(parsed.id);
+          if (parsed.verificationCode) setSavedVerificationCode(parsed.verificationCode);
           if (parsed.totalPrice) setSavedTotalPaid(parsed.totalPrice);
           if (parsed.customerName) setSavedCustomerName(parsed.customerName);
           if (parsed.email) setSavedEmail(parsed.email);
           if (parsed.phone) setSavedPhone(parsed.phone);
           if (parsed.address) setSavedArea(parsed.address);
+          if (parsed.items) setSavedItems(Array.isArray(parsed.items) ? parsed.items : []);
+          if (parsed.type) setSavedType(parsed.type);
         }
       } catch (err) {
         console.warn("Failed loading storage states during checkout completion:", err);
@@ -1816,20 +1844,82 @@ export default function CartDrawer({
 
           {/* ================= STEP 4: TRANSACTION SUCCESS RECEIPT ================= */}
           {checkoutStep === "success" && (
-            <div className="text-center py-16 space-y-6 max-w-md mx-auto" id="checkout-completed-screen">
-              <div className="w-16 h-16 bg-neutral-50 border border-amber-500 text-amber-600 flex items-center justify-center rounded-none mx-auto animate-bounce shadow-sm">
-                <Check className="w-8 h-8 stroke-[1.5]" />
+            <div className="text-center py-10 space-y-6 max-w-lg mx-auto" id="checkout-completed-screen">
+              <div className="w-16 h-16 bg-emerald-50 border-2 border-emerald-500 text-emerald-600 flex items-center justify-center mx-auto shadow-sm">
+                <CheckCircle2 className="w-8 h-8 stroke-[2]" />
               </div>
 
-              <div className="space-y-2">
-                <h4 className="text-base font-serif italic text-amber-600 font-medium">Your order is confirmed.</h4>
-                <h3 className="text-xl font-sans text-neutral-900 tracking-widest uppercase font-bold">ORDER RECEIVED</h3>
-                <p className="text-xs text-neutral-600 font-mono leading-relaxed">
-                  Thank you. Your order has been received and is now being processed by our kitchen team at Upside Lekki.
+              <div className="space-y-1.5">
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-100/70 border border-emerald-200 text-emerald-800 text-[10px] font-mono font-bold uppercase tracking-wider rounded">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-ping" />
+                  <span>Payment Verified • OPay Gateway</span>
+                </div>
+                <h3 className="text-xl font-sans text-neutral-900 tracking-wider uppercase font-extrabold">
+                  Order Confirmed
+                </h3>
+                <p className="text-xs text-neutral-600 font-sans leading-relaxed max-w-sm mx-auto">
+                  Thank you! Your order has been placed and is now actively being prepped by the kitchen team at Upside Lekki.
                 </p>
               </div>
 
-              {/* WordPress Detailed Receipt Table */}
+              {/* Quick Access ID & Verification Codes */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-left">
+                <div className="bg-neutral-50 border border-neutral-200 p-3.5 space-y-1">
+                  <span className="text-[10px] font-mono tracking-wider text-neutral-400 uppercase font-bold block">
+                    Order Reference ID
+                  </span>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-mono text-xs font-extrabold text-neutral-900 truncate">
+                      {savedRef || oppRef || initialOpayRef || "UPSIDE_ORDER"}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const val = savedRef || oppRef || initialOpayRef || "";
+                        if (val) {
+                          navigator.clipboard.writeText(val);
+                          setCopiedRef(true);
+                          setTimeout(() => setCopiedRef(false), 2000);
+                        }
+                      }}
+                      className="p-1 text-neutral-500 hover:text-neutral-900 border border-neutral-200 hover:border-neutral-400 bg-white transition cursor-pointer text-[10px] font-mono flex items-center gap-1 shrink-0"
+                      title="Copy Reference ID"
+                    >
+                      {copiedRef ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                      <span>{copiedRef ? "Copied" : "Copy"}</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div className="bg-amber-50/70 border border-amber-200 p-3.5 space-y-1">
+                  <span className="text-[10px] font-mono tracking-wider text-amber-700 uppercase font-bold block">
+                    Verification Code
+                  </span>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-mono text-xs font-black text-amber-900 tracking-widest">
+                      {savedVerificationCode || "WJA8ZV"}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const val = savedVerificationCode || "WJA8ZV";
+                        if (val) {
+                          navigator.clipboard.writeText(val);
+                          setCopiedCode(true);
+                          setTimeout(() => setCopiedCode(false), 2000);
+                        }
+                      }}
+                      className="p-1 text-amber-800 hover:text-amber-950 border border-amber-300 hover:border-amber-400 bg-white transition cursor-pointer text-[10px] font-mono flex items-center gap-1 shrink-0"
+                      title="Copy Verification Code"
+                    >
+                      {copiedCode ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                      <span>{copiedCode ? "Copied" : "Copy"}</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Detailed Receipt Table */}
               <div className="bg-neutral-50 border border-neutral-200 p-5 font-mono text-left space-y-3 shadow-inner" id="order-completed-receipt">
                 <div className="flex justify-between text-[11px] text-neutral-500 border-b border-neutral-200 pb-2">
                   <span>Merchant:</span>
@@ -1837,61 +1927,99 @@ export default function CartDrawer({
                 </div>
                 <div className="flex justify-between text-[11px] text-neutral-500">
                   <span>Guest Name:</span>
-                  <span className="text-black font-semibold">{savedCustomerName || formData.customerName || "Guest"}</span>
+                  <span className="text-black font-semibold">{savedCustomerName || formData.customerName || "Guest Customer"}</span>
                 </div>
                 {(savedEmail || formData.email) && (
                   <div className="flex justify-between text-[11px] text-neutral-500">
-                    <span>Private Email:</span>
+                    <span>Email:</span>
                     <span className="text-black font-semibold">{savedEmail || formData.email}</span>
                   </div>
                 )}
                 {(savedPhone || formData.phone) && (
                   <div className="flex justify-between text-[11px] text-neutral-500">
-                    <span>Line Contact:</span>
+                    <span>Contact:</span>
                     <span className="text-black font-semibold">{savedPhone || formData.phone}</span>
                   </div>
                 )}
                 {(savedArea || formData.area) && (
                   <div className="flex justify-between text-[11px] text-neutral-500">
-                    <span>Delivery Address/Area:</span>
+                    <span>Destination:</span>
                     <span className="text-black font-semibold">{savedArea || formData.area}</span>
                   </div>
                 )}
                 <div className="flex justify-between text-[11px] text-neutral-500">
-                  <span>Prep Tracker:</span>
-                  <span className="text-amber-600 animate-pulse font-bold uppercase">● Prepping Meals</span>
+                  <span>Payment Gateway:</span>
+                  <span className="text-emerald-700 font-bold flex items-center gap-1">
+                    <CheckCircle2 className="w-3 h-3 text-emerald-600 inline" /> OPay (Paid & Verified)
+                  </span>
                 </div>
                 <div className="flex justify-between text-[11px] text-neutral-500">
-                  <span>Delivery Gateway:</span>
-                  <span className="text-black font-semibold">Standard Delivery</span>
+                  <span>Kitchen Prep:</span>
+                  <span className="text-amber-600 font-bold uppercase flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping inline-block" />
+                    Prepping Meals
+                  </span>
                 </div>
-                <div className="flex justify-between text-[11px] text-neutral-500 border-t border-neutral-200 pt-2 font-bold text-black animate-pulse">
+
+                {/* Items Breakdown if hydrated */}
+                {savedItems && savedItems.length > 0 && (
+                  <div className="border-t border-neutral-200 pt-2.5 mt-2 space-y-1.5">
+                    <span className="text-[10px] text-neutral-400 font-mono uppercase tracking-wider block">Items Summary:</span>
+                    {savedItems.map((it: any, idx: number) => (
+                      <div key={idx} className="flex justify-between text-[11px] text-neutral-700">
+                        <span>{it.quantity || 1}x {it.name}</span>
+                        <span>₦{((it.price || 0) * (it.quantity || 1)).toLocaleString()}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="flex justify-between text-xs text-neutral-500 border-t border-neutral-200 pt-2.5 font-bold text-black">
                   <span>Grand Total Paid:</span>
-                  <span className="text-amber-600">₦{(savedTotalPaid !== null ? savedTotalPaid : finalTotal).toLocaleString()}</span>
+                  <span className="text-amber-600 text-sm">₦{(savedTotalPaid !== null ? savedTotalPaid : finalTotal).toLocaleString()}</span>
                 </div>
               </div>
 
-              <button
-                onClick={() => {
-                  setActiveTab("tracker");
-                }}
-                className="px-8 py-4 bg-amber-600 text-white font-bold text-xs tracking-widest font-mono uppercase hover:bg-amber-700 transition-colors cursor-pointer w-full text-center shadow-md mb-3 flex items-center justify-center gap-2 animate-pulse"
-                id="cart-track-live-btn"
-              >
-                <span>🚀 Track Your Live Food Prep</span>
-              </button>
+              {/* Action Buttons */}
+              <div className="space-y-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const activeId = savedRef || oppRef || initialOpayRef || "";
+                    if (onNavigate) {
+                      onNavigate(activeId ? `/track?orderId=${activeId}` : "/track");
+                    } else if ((window as any).navigateUpside) {
+                      (window as any).navigateUpside(activeId ? `/track?orderId=${activeId}` : "/track");
+                    } else {
+                      window.location.href = activeId ? `/#/track?orderId=${activeId}` : "/#/track";
+                    }
+                    onClose();
+                  }}
+                  className="px-8 py-4 bg-amber-600 text-white font-bold text-xs tracking-widest font-mono uppercase hover:bg-amber-700 transition-colors cursor-pointer w-full text-center shadow-md flex items-center justify-center gap-2"
+                  id="cart-track-live-btn"
+                >
+                  <Navigation className="w-4 h-4" />
+                  <span>🚀 Track Live Order & Kitchen Prep</span>
+                </button>
 
-              <button
-                onClick={() => {
-                  onClearCart();
-                  onClose();
-                  setCheckoutStep("cart");
-                }}
-                className="px-8 py-4 bg-black text-white font-bold text-xs tracking-widest font-mono uppercase hover:bg-neutral-900 transition-colors cursor-pointer w-full text-center shadow-md"
-                id="cart-reset-action-btn"
-              >
-                Return to Main Page
-              </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClearCart();
+                    onClose();
+                    setCheckoutStep("cart");
+                    if (onNavigate) {
+                      onNavigate("/menu");
+                    } else if ((window as any).navigateUpside) {
+                      (window as any).navigateUpside("/menu");
+                    }
+                  }}
+                  className="px-8 py-3.5 bg-neutral-900 text-white font-bold text-xs tracking-widest font-mono uppercase hover:bg-neutral-800 transition-colors cursor-pointer w-full text-center shadow-sm"
+                  id="cart-reset-action-btn"
+                >
+                  Return to Upside Menu
+                </button>
+              </div>
             </div>
           )}
           </>

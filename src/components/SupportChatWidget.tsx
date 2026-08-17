@@ -20,18 +20,18 @@ export default function SupportChatWidget({ currentUser }: SupportChatWidgetProp
   const [isOpen, setIsOpen] = useState(false);
   const [hasSession, setHasSession] = useState(false);
   const [chatId, setChatId] = useState<string | null>(null);
-  const [tawkEnabled, setTawkEnabled] = useState(true);
+  const [tawkEnabled, setTawkEnabled] = useState(false);
 
   // Subscribe to live tawk support state to prevent widget collision
   useEffect(() => {
     const docRef = doc(db, "settings", "support_config");
     const unsubscribe = onSnapshot(docRef, (docSnap) => {
       if (docSnap.exists()) {
-        setTawkEnabled(docSnap.data().tawkEnabled ?? true);
+        const data = docSnap.data();
+        const isReal = data.tawkPropertyId && data.tawkPropertyId !== "6a466b60c5bc5d1d491794f3" && data.tawkPropertyId.length > 5;
+        setTawkEnabled((data.tawkEnabled === true) && isReal);
       }
-    }, (err) => {
-      console.warn("Failed to subscribe to support_config inside support widget:", err);
-    });
+    }, () => {});
     return () => unsubscribe();
   }, []);
 

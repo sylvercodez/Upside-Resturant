@@ -339,9 +339,20 @@ useEffect(() => {
     }
   };
 
+  const [opayReturnRef, setOpayReturnRef] = useState<string>(() => {
+    try {
+      const sp = new URLSearchParams(window.location.search);
+      return sp.get("opay_ref") || "";
+    } catch {
+      return "";
+    }
+  });
+
   const [currentPath, setCurrentPath] = useState<string>(() => {
     const path = window.location.pathname;
     const hash = window.location.hash;
+    const search = window.location.search;
+    if (search.includes("opay_ref") || hash.includes("opay_ref")) return "/cart";
     if (hash.includes("reset-password") || path.includes("reset-password")) return "/reset-password";
     if (hash === "#/menu" || path === "/menu") return "/menu";
     if (hash === "#/corporate-events" || path === "/corporate-events" || hash === "#/events" || path === "/events") return "/corporate-events";
@@ -357,27 +368,32 @@ useEffect(() => {
     return "/";
   });
 
-  const activeView = currentPath === "/menu" 
+  const normalizedPath = (() => {
+    const raw = currentPath.split("?")[0].split("#")[0];
+    return raw || "/";
+  })();
+
+  const activeView = normalizedPath === "/menu" 
     ? "menu" 
-    : (currentPath === "/corporate-events" 
+    : (normalizedPath === "/corporate-events" 
       ? "corporate-events" 
-      : (currentPath === "/experience" 
+      : (normalizedPath === "/experience" 
         ? "experience" 
-        : (currentPath === "/dashboard" 
+        : (normalizedPath === "/dashboard" 
           ? "dashboard" 
-          : (currentPath === "/auth" 
+          : (normalizedPath === "/auth" 
             ? "auth" 
-            : (currentPath === "/reset-password"
+            : (normalizedPath === "/reset-password"
               ? "reset-password"
-              : (currentPath === "/cart" 
+              : (normalizedPath === "/cart" 
                 ? "cart" 
-                : (currentPath === "/track" 
+                : (normalizedPath === "/track" 
                   ? "track" 
-                  : (currentPath === "/rider" 
+                  : (normalizedPath === "/rider" 
                     ? "rider" 
-                    : (currentPath === "/faq" 
+                    : (normalizedPath === "/faq" 
                       ? "faq" 
-                      : (currentPath === "/terms" || currentPath === "/privacy" 
+                      : (normalizedPath === "/terms" || normalizedPath === "/privacy" 
                         ? "legal" 
                         : "landing"))))))))));
 
@@ -514,10 +530,12 @@ useEffect(() => {
       const opayRef = params.get("opay_ref");
       if (opayRef) {
         console.log("[UPSIDE FLOW] Caught return OPay URL reference parameter:", opayRef);
+        setOpayReturnRef(opayRef);
         // Clean sweep cart items
         setCartItems([]);
         // Slide open the cart drawer to exhibit order success summary directly
         setIsCartOpen(true);
+        setCurrentPath("/cart");
       }
     } catch (err) {
       console.warn("OPay redirect catcher crash inside App:", err);
@@ -913,7 +931,9 @@ useEffect(() => {
         <div className="bg-neutral-50 min-h-screen pt-28 pb-12 px-4 text-neutral-900 font-sans" id="dedicated-cart-page">
           <CartDrawer
             isOpen={true}
+            initialOpayRef={opayReturnRef}
             onClose={() => handleNavigate("/")}
+            onNavigate={handleNavigate}
             cartItems={cartItems}
             onUpdateQuantity={handleUpdateQuantity}
             onRemoveItem={handleRemoveItem}
@@ -932,6 +952,7 @@ useEffect(() => {
       {activeView === "track" && (
         <DedicatedTrack
           onBackToLobby={() => handleNavigate("/")}
+          initialOrderId={new URLSearchParams(window.location.search).get("orderId") || new URLSearchParams(window.location.search).get("id") || opayReturnRef}
         />
       )}
 

@@ -7,22 +7,28 @@ import OrderTracker from "./OrderTracker";
 
 interface DedicatedTrackProps {
   onBackToLobby: () => void;
+  initialOrderId?: string | null;
 }
 
-export default function DedicatedTrack({ onBackToLobby }: DedicatedTrackProps) {
-  const [orderInput, setOrderInput] = useState("");
-  const [activeOrderId, setActiveOrderId] = useState<string | null>(null);
+export default function DedicatedTrack({ onBackToLobby, initialOrderId }: DedicatedTrackProps) {
+  const [orderInput, setOrderInput] = useState(initialOrderId || "");
+  const [activeOrderId, setActiveOrderId] = useState<string | null>(initialOrderId || null);
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
 
   React.useEffect(() => {
+    if (initialOrderId) {
+      setOrderInput(initialOrderId);
+      setActiveOrderId(initialOrderId);
+      return;
+    }
     const params = new URLSearchParams(window.location.search);
-    const orderIdParam = params.get("orderId") || params.get("id");
+    const orderIdParam = params.get("orderId") || params.get("id") || params.get("opay_ref");
     if (orderIdParam) {
       setOrderInput(orderIdParam);
       setActiveOrderId(orderIdParam);
     }
-  }, []);
+  }, [initialOrderId]);
 
   const handleTrack = async (e: React.FormEvent) => {
     e.preventDefault();

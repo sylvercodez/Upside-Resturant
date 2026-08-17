@@ -106,3 +106,20 @@ body {
   animation: fadeIn 0.2s ease-out forwards;
 }
 
+/* Minimal subtle custom scrollbar for sticky sidebars */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #d4d4d4;
+  border-radius: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #a3a3a3;
+}
+
+

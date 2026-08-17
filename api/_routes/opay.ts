@@ -57,7 +57,8 @@ async function getOpayConfig() {
     try {
       const rows = await querySql("SELECT setting_value FROM settings WHERE setting_key = ?", ["opay"]);
       if (rows && rows.length > 0) {
-        opaySettings = JSON.parse(rows[0].setting_value) || {};
+        const parsed = typeof rows[0].setting_value === "string" ? JSON.parse(rows[0].setting_value) : rows[0].setting_value;
+        opaySettings = parsed || {};
         console.log("[SERVER LOG] Found settings/opay in MySQL settings table.");
       }
     } catch (mysqlErr: any) {
@@ -65,7 +66,7 @@ async function getOpayConfig() {
     }
 
     // B. Query Firestore if MySQL didn't yield results
-    if ((!opaySettings.merchantId || !opaySettings.publicKey || !opaySettings.secretKey) && dbAdmin) {
+    if ((!opaySettings.merchantId && !opaySettings.OPAY_MERCHANT_ID) && dbAdmin) {
       try {
         const opaySnap = await dbAdmin.collection("settings").doc("opay").get();
         if (opaySnap.exists) {
@@ -80,11 +81,11 @@ async function getOpayConfig() {
       }
     }
     
-    merchantId = merchantId || stripQuotes(opaySettings?.merchantId);
-    publicKey = publicKey || stripQuotes(opaySettings?.publicKey);
-    secretKey = secretKey || stripQuotes(opaySettings?.secretKey);
-    if (!environment && opaySettings?.environment) {
-      environment = stripQuotes(opaySettings.environment);
+    merchantId = merchantId || stripQuotes(opaySettings?.merchantId || opaySettings?.OPAY_MERCHANT_ID);
+    publicKey = publicKey || stripQuotes(opaySettings?.publicKey || opaySettings?.OPAY_PUBLIC_KEY);
+    secretKey = secretKey || stripQuotes(opaySettings?.secretKey || opaySettings?.OPAY_SECRET_KEY);
+    if (!environment && (opaySettings?.environment || opaySettings?.OPAY_ENVIRONMENT)) {
+      environment = stripQuotes(opaySettings.environment || opaySettings.OPAY_ENVIRONMENT);
     }
     
     console.log("[SERVER LOG] Values after database configuration fallbacks evaluation:");
@@ -330,100 +331,116 @@ Exception details:`, err);
  * validates against Firestore document, maps status, and updates records.
  */
 async function verifyOpayPayment(reference: string) {
-  const { merchantId, publicKey, secretKey, environment, isLive } = await getOpayConfig();
-
-  const opayStatusUrl = isLive
-    ? "https://liveapi.opaycheckout.com/api/v1/international/cashier/status"
-    : "https://testapi.opaycheckout.com/api/v1/international/cashier/status";
-
-  const requestData = {
-    reference,
-    country: "NG"
-  };
-
-  const signature = generateOpayApiSignature(requestData, secretKey);
-
-  console.log(`[verifyOpayPayment] Querying payment status from OPay (${isLive ? 'LIVE' : 'SANDBOX'}): ${reference}`);
-
-  const response = await fetch(opayStatusUrl, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${publicKey}`,
-      "MerchantId": merchantId,
-      "Signature": signature
-    },
-    body: JSON.stringify(requestData)
-  });
-
-  const responseText = await response.text();
-  let opayRes: any;
-  try {
-    opayRes = JSON.parse(responseText);
-  } catch {
-    throw new Error(`Non-JSON response from status check (HTTP ${response.status}): ${responseText}`);
-  }
-
-  if (opayRes.code !== "00000" && opayRes.code !== "0000") {
-    throw new Error(opayRes.message || `OPay status check failure: Code ${opayRes.code}`);
-  }
-
-  const responseData = opayRes.data;
-
-  if (!responseData) {
-    throw new Error("Unable to parse transaction details from OPay.");
-  }
-
-  const opayStatus = responseData.status || responseData.orderStatus || "PENDING";
-  
-  // Status mapping:
-  // SUCCESS → PAID
-  // FAIL → FAILED
-  // CANCEL → CANCELLED
-  // CLOSE → EXPIRED
-  // PENDING → PENDING
   let mappedStatus = "PENDING";
-  if (opayStatus === "SUCCESS") mappedStatus = "PAID";
-  else if (opayStatus === "FAIL") mappedStatus = "FAILED";
-  else if (opayStatus === "CANCEL") mappedStatus = "CANCELLED";
-  else if (opayStatus === "CLOSE") mappedStatus = "EXPIRED";
-  else if (opayStatus === "PENDING") mappedStatus = "PENDING";
+  let opayStatus = "PENDING";
+  let existingOrder: any = null;
 
-  console.log(`[verifyOpayPayment] Mapped status for ${reference}: OPay Status [${opayStatus}] -> Mapped [${mappedStatus}]`);
-
-  // Update payment record in payments collection
+  // 1. Check if MySQL already has the order record and if it's already marked as paid
   try {
-    if (dbAdmin) {
-      await dbAdmin.collection("payments").doc(reference).update({
-        paymentStatus: mappedStatus,
-        updatedAt: new Date().toISOString()
-      });
-      console.log(`[verifyOpayPayment] Successfully verified and updated payment status for Ref: ${reference} -> ${mappedStatus}`);
-    } else {
-      console.warn(`[verifyOpayPayment] Administrative db is offline. Skipping payment update for Ref: ${reference}`);
+    const orderRows = await querySql("SELECT * FROM orders WHERE id = ?", [reference]);
+    if (orderRows && orderRows.length > 0) {
+      existingOrder = {
+        ...orderRows[0],
+        items: typeof orderRows[0].items === "string" ? JSON.parse(orderRows[0].items || "[]") : orderRows[0].items
+      };
+      const pStatus = (orderRows[0].paymentStatus || "").toUpperCase();
+      if (pStatus === "PAID" || pStatus === "PAYMENT_SUCCESSFUL" || pStatus === "SUCCESS") {
+        console.log(`[verifyOpayPayment] Order ${reference} is already marked as PAID in MySQL.`);
+        return {
+          reference,
+          opayStatus: "SUCCESS",
+          paymentStatus: "PAID",
+          order: existingOrder
+        };
+      }
     }
-  } catch (firestoreErr: any) {
-    console.error(`[verifyOpayPayment] Firestore payment document update failed:`, firestoreErr.message || firestoreErr);
+  } catch (mysqlErr: any) {
+    console.warn("[verifyOpayPayment] MySQL order lookup error:", mysqlErr.message || mysqlErr);
   }
 
-  // Update payment and order in MySQL as well
+  // 2. Query OPay international status check API
   try {
-    // 1. Update payments table in MySQL
-    await querySql(
-      "UPDATE payments SET paymentStatus = ?, updatedAt = ? WHERE reference = ?",
-      [mappedStatus === "PAID" ? "paid" : mappedStatus.toLowerCase(), new Date().toISOString(), reference]
-    );
-    console.log(`[verifyOpayPayment] Successfully updated MySQL payments status for Ref: ${reference} -> ${mappedStatus}`);
+    const { merchantId, publicKey, secretKey, environment, isLive } = await getOpayConfig();
 
-    // 2. Update orders table in MySQL
-    if (mappedStatus === "PAID") {
-      // First, get payment details to handle auto-creation if order doesn't exist
-      const rows = await querySql("SELECT * FROM payments WHERE reference = ?", [reference]);
-      const mysqlPayment = rows && rows.length > 0 ? rows[0] : null;
+    const opayStatusUrl = isLive
+      ? "https://liveapi.opaycheckout.com/api/v1/international/cashier/status"
+      : "https://testapi.opaycheckout.com/api/v1/international/cashier/status";
 
+    const requestData = {
+      reference,
+      country: "NG"
+    };
+
+    const signature = generateOpayApiSignature(requestData, secretKey);
+
+    console.log(`[verifyOpayPayment] Querying payment status from OPay (${isLive ? 'LIVE' : 'SANDBOX'}): ${reference}`);
+
+    const response = await fetch(opayStatusUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${publicKey}`,
+        "MerchantId": merchantId,
+        "Signature": signature
+      },
+      body: JSON.stringify(requestData)
+    });
+
+    const responseText = await response.text();
+    let opayRes: any;
+    try {
+      opayRes = JSON.parse(responseText);
+    } catch {
+      console.warn(`[verifyOpayPayment] Non-JSON response from status check (HTTP ${response.status}): ${responseText}`);
+    }
+
+    if (opayRes && (opayRes.code === "00000" || opayRes.code === "0000" || opayRes.code === "0")) {
+      const responseData = opayRes.data || {};
+      opayStatus = responseData.status || responseData.orderStatus || "SUCCESS";
+
+      if (opayStatus === "SUCCESS") mappedStatus = "PAID";
+      else if (opayStatus === "FAIL") mappedStatus = "FAILED";
+      else if (opayStatus === "CANCEL") mappedStatus = "CANCELLED";
+      else if (opayStatus === "CLOSE") mappedStatus = "EXPIRED";
+      else if (opayStatus === "PENDING") mappedStatus = "PENDING";
+    } else {
+      console.warn(`[verifyOpayPayment] OPay status response returned non-zero code:`, opayRes);
+    }
+  } catch (apiErr: any) {
+    console.warn(`[verifyOpayPayment] Could not query OPay status gateway API directly:`, apiErr.message || apiErr);
+  }
+
+  // 3. If OPay confirmed payment (or status was resolved to PAID):
+  if (mappedStatus === "PAID") {
+    // Update MySQL payments table
+    try {
+      await querySql(
+        "UPDATE payments SET paymentStatus = ?, updatedAt = ? WHERE reference = ?",
+        ["paid", new Date().toISOString(), reference]
+      );
+    } catch (mysqlPayErr: any) {
+      console.warn("[verifyOpayPayment] Failed to update MySQL payment to paid:", mysqlPayErr.message);
+    }
+
+    // Update MySQL orders table
+    try {
       const orderRows = await querySql("SELECT * FROM orders WHERE id = ?", [reference]);
-      if (!orderRows || orderRows.length === 0) {
-        // If order doesn't exist, create it
+      if (orderRows && orderRows.length > 0) {
+        await querySql(
+          "UPDATE orders SET paymentStatus = 'paid', status = 'Prepping', updatedAt = ? WHERE id = ?",
+          [new Date().toISOString(), reference]
+        );
+        const updated = await querySql("SELECT * FROM orders WHERE id = ?", [reference]);
+        if (updated && updated.length > 0) {
+          existingOrder = {
+            ...updated[0],
+            items: typeof updated[0].items === "string" ? JSON.parse(updated[0].items || "[]") : updated[0].items
+          };
+        }
+      } else {
+        // Retrieve payment details to create missing order row
+        const pRows = await querySql("SELECT * FROM payments WHERE reference = ?", [reference]);
+        const pData = pRows && pRows.length > 0 ? pRows[0] : null;
         await querySql(
           `INSERT INTO orders (id, userId, customerName, email, phone, totalPrice, items, address, status, paymentStatus, updatedAt) 
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -433,7 +450,7 @@ async function verifyOpayPayment(reference: string) {
             "Vanguard Guest",
             "guest@example.com",
             "",
-            mysqlPayment ? mysqlPayment.amount : 0,
+            pData ? pData.amount : 0,
             "[]",
             "Boutique Self-Pickup",
             "Prepping",
@@ -441,115 +458,138 @@ async function verifyOpayPayment(reference: string) {
             new Date().toISOString()
           ]
         );
-        console.log(`[verifyOpayPayment] Created new successful MySQL order record for Ref: ${reference}`);
-      } else {
-        await querySql(
-          "UPDATE orders SET paymentStatus = ?, status = 'Prepping', updatedAt = ? WHERE id = ?",
-          ["paid", new Date().toISOString(), reference]
-        );
-        console.log(`[verifyOpayPayment] Successfully updated status of existing MySQL order Ref: ${reference} to paid`);
       }
-    } else if (mappedStatus === "FAILED" || mappedStatus === "CANCELLED" || mappedStatus === "EXPIRED") {
+    } catch (mysqlOrderErr: any) {
+      console.warn("[verifyOpayPayment] Failed to update MySQL order to paid:", mysqlOrderErr.message);
+    }
+
+    // Update Firestore if available
+    if (dbAdmin) {
+      try {
+        await dbAdmin.collection("payments").doc(reference).set({
+          paymentStatus: "PAID",
+          updatedAt: new Date().toISOString()
+        }, { merge: true });
+        await dbAdmin.collection("orders").doc(reference).set({
+          orderStatus: "paid",
+          paymentStatus: "paid",
+          status: "Prepping",
+          updatedAt: new Date().toISOString()
+        }, { merge: true });
+      } catch (fsErr: any) {
+        console.warn("[verifyOpayPayment] Firestore sync warning:", fsErr.message);
+      }
+    }
+
+    // Trigger order notification email
+    try {
+      const localPort = process.env.PORT || 3000;
+      fetch(`http://localhost:${localPort}/api/delivery/notify/order-placed`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          orderId: reference,
+          email: existingOrder?.email || "guest@example.com",
+          customerName: existingOrder?.customerName || "Vanguard Guest",
+          verificationCode: existingOrder?.verificationCode || "",
+          totalPrice: existingOrder?.totalPrice || 0,
+          items: existingOrder?.items || [],
+          address: existingOrder?.address || "Boutique Self-Pickup",
+          phone: existingOrder?.phone || "",
+          paymentStatus: "paid"
+        })
+      }).catch(() => {});
+    } catch (_) {}
+  } else if (mappedStatus === "FAILED" || mappedStatus === "CANCELLED" || mappedStatus === "EXPIRED") {
+    try {
       await querySql(
         "UPDATE orders SET paymentStatus = ?, updatedAt = ? WHERE id = ?",
         [mappedStatus.toLowerCase(), new Date().toISOString(), reference]
       );
-      console.log(`[verifyOpayPayment] Successfully updated MySQL order status to ${mappedStatus.toLowerCase()} for Ref: ${reference}`);
-    }
-  } catch (mysqlErr: any) {
-    console.warn("[verifyOpayPayment] Warning: Failed to update payment/order state in MySQL database:", mysqlErr.message || mysqlErr);
+      await querySql(
+        "UPDATE payments SET paymentStatus = ?, updatedAt = ? WHERE reference = ?",
+        [mappedStatus.toLowerCase(), new Date().toISOString(), reference]
+      );
+    } catch (_) {}
   }
 
-  // Update order status in orders collection
-  if (mappedStatus === "PAID") {
+  // Ensure we have order details from MySQL if not yet loaded
+  if (!existingOrder) {
     try {
-      if (dbAdmin) {
-        const paymentSnap = await dbAdmin.collection("payments").doc(reference).get();
-        if (paymentSnap.exists) {
-          const paymentData = paymentSnap.data() || {};
-          const orderDoc = await dbAdmin.collection("orders").doc(reference).get();
-          if (!orderDoc.exists) {
-            await dbAdmin.collection("orders").doc(reference).set({
-              id: reference,
-              userId: paymentData.userId || "guest",
-              customerName: paymentData.customerName || "Vanguard Guest",
-              email: paymentData.email || "guest@example.com",
-              phone: paymentData.phone || "",
-              totalPrice: paymentData.amount || 0,
-              items: paymentData.items || [],
-              address: paymentData.address || "Boutique Self-Pickup",
-              status: "Prepping",
-              timestamp: Date.now(),
-              type: paymentData.type || "delivery"
-            });
-            console.log(`[verifyOpayPayment] Created new successful order document for Ref: ${reference}`);
-          } else {
-            await dbAdmin.collection("orders").doc(reference).update({
-              orderStatus: "paid",
-              paymentStatus: "paid",
-              updatedAt: new Date().toISOString()
-            });
-            console.log(`[verifyOpayPayment] Successfully updated status of existing order Ref: ${reference} to paid`);
-          }
-
-          // Trigger order paid notification to chefs and admins
-          const localPort = process.env.PORT || 3000;
-          fetch(`http://localhost:${localPort}/api/delivery/notify/order-placed`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              orderId: reference,
-              email: paymentData.email || "guest@example.com",
-              customerName: paymentData.customerName || "Vanguard Guest",
-              verificationCode: paymentData.verificationCode || "",
-              totalPrice: paymentData.amount || 0,
-              items: paymentData.items || [],
-              address: paymentData.address || "Boutique Self-Pickup",
-              phone: paymentData.phone || "",
-              paymentStatus: "paid"
-            })
-          }).then(async (notifRes) => {
-            const txt = await notifRes.text();
-            console.log(`[OPay Payment Verification Notification] Sent paid notification for Ref: ${reference}. Response: ${txt}`);
-          }).catch(err => console.error("[OPay Payment Verification Notification Err] Could not dispatch payment notification:", err.message));
-        }
+      const rows = await querySql("SELECT * FROM orders WHERE id = ?", [reference]);
+      if (rows && rows.length > 0) {
+        existingOrder = {
+          ...rows[0],
+          items: typeof rows[0].items === "string" ? JSON.parse(rows[0].items || "[]") : rows[0].items
+        };
       }
-    } catch (firestoreErr: any) {
-      console.error(`[verifyOpayPayment] Firestore order create/update failed (status: PAID):`, firestoreErr.message || firestoreErr);
-    }
-  } else if (mappedStatus === "FAILED" || mappedStatus === "CANCELLED" || mappedStatus === "EXPIRED") {
-    try {
-      if (dbAdmin) {
-        const orderDoc = await dbAdmin.collection("orders").doc(reference).get();
-        if (orderDoc.exists) {
-          await dbAdmin.collection("orders").doc(reference).update({
-            paymentStatus: mappedStatus.toLowerCase(),
-            updatedAt: new Date().toISOString()
-          });
-          console.log(`[verifyOpayPayment] Successfully updated order status to ${mappedStatus.toLowerCase()} for Ref: ${reference}`);
-        }
-      }
-    } catch (firestoreErr: any) {
-      console.error(`[verifyOpayPayment] Firestore order update failed (status: ${mappedStatus}):`, firestoreErr.message || firestoreErr);
-    }
+    } catch (_) {}
   }
 
   return {
     reference,
     opayStatus,
-    paymentStatus: mappedStatus
+    paymentStatus: mappedStatus,
+    order: existingOrder
   };
 }
 
 // REST EXPRESS ROUTE HANDLERS WRAPPING CLOUD FUNCTIONS
 
-// Route: Convert OPay Dashboard configurations to environment values and save to .env
+// Route: Get OPay configuration (safe for admin dashboard)
+opayRouter.get("/config", async (req: any, res: any) => {
+  try {
+    let merchantId = "";
+    let publicKey = "";
+    let secretKey = "";
+    let environment = "sandbox";
+
+    // 1. Check MySQL settings table
+    try {
+      const rows = await querySql("SELECT setting_value FROM settings WHERE setting_key = ?", ["opay"]);
+      if (rows && rows.length > 0) {
+        const parsed = typeof rows[0].setting_value === "string" ? JSON.parse(rows[0].setting_value) : rows[0].setting_value;
+        merchantId = parsed.merchantId || parsed.OPAY_MERCHANT_ID || "";
+        publicKey = parsed.publicKey || parsed.OPAY_PUBLIC_KEY || "";
+        secretKey = parsed.secretKey || parsed.OPAY_SECRET_KEY || "";
+        environment = parsed.environment || parsed.OPAY_ENVIRONMENT || "sandbox";
+      }
+    } catch (_) {}
+
+    // 2. Fall back to process.env
+    if (!merchantId && process.env.OPAY_MERCHANT_ID) {
+      merchantId = process.env.OPAY_MERCHANT_ID;
+      publicKey = process.env.OPAY_PUBLIC_KEY || "";
+      secretKey = process.env.OPAY_SECRET_KEY || "";
+      environment = process.env.OPAY_ENVIRONMENT || "sandbox";
+    }
+
+    return res.json({
+      success: true,
+      config: {
+        merchantId,
+        publicKey,
+        secretKey,
+        environment
+      }
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || "Failed to load OPay config." });
+  }
+});
+
+// Route: Convert OPay Dashboard configurations to environment values and save to .env and MySQL
 opayRouter.post("/convert-to-env", async (req: any, res: any) => {
   try {
     const { merchantId, publicKey, secretKey, environment } = req.body;
     if (!merchantId || !publicKey || !secretKey) {
       return res.status(400).json({ error: "Missing required variables: merchantId, publicKey, secretKey are required." });
     }
+
+    const cleanMId = merchantId.trim();
+    const cleanPKey = publicKey.trim();
+    const cleanSKey = secretKey.trim();
+    const cleanEnv = (environment || "sandbox").trim();
 
     const envPath = path.join(process.cwd(), ".env");
     let envContent = "";
@@ -558,25 +598,43 @@ opayRouter.post("/convert-to-env", async (req: any, res: any) => {
     }
 
     const keysMap: Record<string, string> = {
-      OPAY_MERCHANT_ID: merchantId.trim(),
-      OPAY_PUBLIC_KEY: publicKey.trim(),
-      OPAY_SECRET_KEY: secretKey.trim(),
-      OPAY_ENVIRONMENT: (environment || "sandbox").trim()
+      OPAY_MERCHANT_ID: cleanMId,
+      OPAY_PUBLIC_KEY: cleanPKey,
+      OPAY_SECRET_KEY: cleanSKey,
+      OPAY_ENVIRONMENT: cleanEnv,
+      merchantId: cleanMId,
+      publicKey: cleanPKey,
+      secretKey: cleanSKey,
+      environment: cleanEnv
     };
 
     let envLines = envContent ? envContent.split("\n") : [];
     for (const [key, val] of Object.entries(keysMap)) {
-      let index = envLines.findIndex(line => line.startsWith(`${key}=`) || line.startsWith(`# ${key}=`) || line.startsWith(`${key} =`));
-      if (index >= 0) {
-        envLines[index] = `${key}=${val}`;
-      } else {
-        envLines.push(`${key}=${val}`);
+      if (key.startsWith("OPAY_")) {
+        let index = envLines.findIndex(line => line.startsWith(`${key}=`) || line.startsWith(`# ${key}=`) || line.startsWith(`${key} =`));
+        if (index >= 0) {
+          envLines[index] = `${key}=${val}`;
+        } else {
+          envLines.push(`${key}=${val}`);
+        }
+        process.env[key] = val; // Apply to running memory process immediately
       }
-      process.env[key] = val; // Apply to running memory process immediately
     }
 
     fs.writeFileSync(envPath, envLines.join("\n"), "utf-8");
-    console.log("[CONVERT-TO-ENV] Successfully configured .env credentials and updated node process memory!");
+
+    // Save to MySQL settings table for durability
+    try {
+      await querySql(
+        "INSERT INTO settings (setting_key, setting_value, updatedAt) VALUES ('opay', ?, ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value), updatedAt = VALUES(updatedAt)",
+        [JSON.stringify(keysMap), new Date().toISOString()]
+      );
+      console.log("[CONVERT-TO-ENV] Saved OPay settings to MySQL database table.");
+    } catch (mysqlErr: any) {
+      console.warn("[CONVERT-TO-ENV] Could not save to MySQL settings table:", mysqlErr.message || mysqlErr);
+    }
+
+    console.log("[CONVERT-TO-ENV] Successfully configured .env credentials, MySQL, and updated node process memory!");
     return res.json({ success: true, message: "OPay dashboard credentials converted and saved to local server environment successfully!" });
   } catch (err: any) {
     console.error("[OPay Route] Convert to env error:", err);
@@ -726,8 +784,9 @@ const handleOpayWebhook = async (req: any, res: any) => {
       }
     }
 
-    const reference = payloadData.reference || payloadData.orderId;
-    const opayStatus = payloadData.status || payloadData.orderStatus;
+    const innerData = payloadData.data || payloadData.payload || payloadData;
+    const reference = innerData.reference || innerData.orderId || innerData.orderNo || payloadData.reference || payloadData.orderId;
+    const opayStatus = innerData.status || innerData.orderStatus || payloadData.status || payloadData.orderStatus;
 
     if (!reference || !opayStatus) {
       return res.status(400).json({ status: "fail", message: "Reference and status attributes are mandatory" });

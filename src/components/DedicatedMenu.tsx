@@ -373,18 +373,21 @@ export default function DedicatedMenu({
         {/* Category Selection Sidebar + Ultimate Items Showcase Grid Layout */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
           
-          {/* LEFT COLUMN: Categories Navigation Tab Deck */}
-          <div className="lg:col-span-3 relative w-full" id="menu-categories-wrapper">
+          {/* LEFT COLUMN: Categories Navigation Tab Deck (Static & Sticky on Scroll) */}
+          <div className="lg:col-span-3 sticky top-[135px] md:top-[155px] z-20 self-start w-full" id="menu-categories-wrapper">
             {/* Soft right-fade mask overlay on mobile screen to signal scrollability */}
             <div className="absolute right-0 top-0 bottom-0 w-12 bg-gradient-to-l from-white to-transparent pointer-events-none z-10 lg:hidden" />
             
             <div 
-              className="bg-neutral-50 p-3 lg:p-4 border border-neutral-200 flex flex-row lg:flex-col overflow-x-auto lg:overflow-x-visible lg:space-y-2 gap-2 scrollbar-none w-full lg:sticky lg:top-24 pb-4 lg:pb-4" 
+              className="bg-neutral-50 p-3 lg:p-4 border border-neutral-200 shadow-sm flex flex-row lg:flex-col overflow-x-auto lg:overflow-y-auto lg:max-h-[calc(100vh-180px)] lg:space-y-2 gap-2 scrollbar-none w-full custom-scrollbar" 
               id="menu-categories-track"
             >
-              <h4 className="hidden lg:flex text-xs uppercase font-mono tracking-wider text-amber-600 font-semibold mb-4 items-center gap-2 border-b border-neutral-200 pb-2">
-                <Filter className="w-3.5 h-3.5" />
-                <span>Categories</span>
+              <h4 className="hidden lg:flex text-xs uppercase font-mono tracking-wider text-amber-600 font-semibold mb-3 items-center justify-between border-b border-neutral-200 pb-2.5">
+                <span className="flex items-center gap-2">
+                  <Filter className="w-3.5 h-3.5" />
+                  <span>Categories</span>
+                </span>
+                <span className="text-[10px] text-neutral-400 lowercase font-normal">{displayCategories.length} options</span>
               </h4>
               
               <button
